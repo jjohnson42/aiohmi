@@ -262,15 +262,21 @@ class Command(object):
                                 cache=True):
         return self._do_web_request(url, payload, method, cache), url
 
-    def _do_web_request(self, url, payload=None, method=None, cache=True):
+    def _do_web_request(self, url, payload=None, method=None, cache=True, etag=None):
         res = None
         if cache and payload is None and method is None:
             res = self._get_cache(url)
         if res:
             return res
         wc = self.wc.dupe()
-        res = wc.grab_json_response_with_status(url, payload,
-                                                method=method)
+        if etag:
+            wc.stdheaders['If-Match'] = etag
+        try:
+            res = wc.grab_json_response_with_status(url, payload,
+                                                    method=method)
+        finally:
+            if 'If-Match' in wc.stdheaders:
+                del wc.stdheaders['If-Match']
         if res[1] < 200 or res[1] >= 300:
             raise exc.PyghmiException(res[0])
         if payload is None and method is None:
@@ -750,8 +756,8 @@ class Command(object):
 
     def get_event_log(self, clear=False):
         bmcinfo = self._do_web_request(self._bmcurl)
-        lurl = bmcinfo.get('LogServices', {}).get('@odata.id', None)
-        if not lurl:
+        lsurl = bmcinfo.get('LogServices', {}).get('@odata.id', None)
+        if not lsurl:
             return
         currtime = bmcinfo.get('DateTime', None)
         correction = timedelta(0)
@@ -763,14 +769,35 @@ class Command(object):
                 correction = now - currtime
             except TypeError:
                 correction = now - currtime.replace(tzinfo=tz.tzoffset('', 0))
-        lurls = self._do_web_request(lurl).get('Members', [])
+        lurls = self._do_web_request(lsurl).get('Members', [])
         for lurl in lurls:
             lurl = lurl['@odata.id']
-            loginfo = self._do_web_request(lurl)
-            entries = loginfo.get('Entries', {}).get('@odata.id', None)
-            if not entries:
+            loginfo = self._do_web_request(lurl, cache=(not clear))
+            logtag = loginfo.get('@odata.etag', None)
+            entriesurl = loginfo.get('Entries', {}).get('@odata.id', None)
+            if not entriesurl:
                 continue
-            entries = self._do_web_request(entries)
+            entries = self._do_web_request(entriesurl, cache=False)
+            if clear:
+                # The clear is against the log service etag, not entries
+                # so we have to fetch service etag after we fetch entries
+                # until we can verify that the etag is consistent to prove
+                # that the clear is atomic
+                newloginfo = self._do_web_request(lurl, cache=False)
+                clearurl = newloginfo.get('Actions', {}).get(
+                    '#LogService.ClearLog', {}).get('target', '')
+                while clearurl:
+                    while logtag != newloginfo.get('@odata.etag', None):
+                        logtag = newloginfo.get('@odata.etag', None)
+                        entries = self._do_web_request(entriesurl, cache=False)
+                        newloginfo = self._do_web_request(lurl, cache=False)
+                    try:
+                        self._do_web_request(clearurl, method='POST', etag=logtag)
+                        clearurl = False
+                    except exc.PyghmiException as e:
+                        if 'EtagPreconditionalFailed' not in str(e):
+                            raise
+                        newloginfo = self._do_web_request(lurl, cache=False)
             for log in entries.get('Members', []):
                 record = {}
                 entime = _parse_time(log.get('Created', '')) + correction
