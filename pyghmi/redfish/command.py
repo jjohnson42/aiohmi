@@ -764,7 +764,6 @@ class Command(object):
         if currtime:
             currtime = _parse_time(currtime)
             now = datetime.now(tz.tzoffset('', 0))
-            correction
             try:
                 correction = now - currtime
             except TypeError:
@@ -801,6 +800,7 @@ class Command(object):
             for log in entries.get('Members', []):
                 record = {}
                 entime = _parse_time(log.get('Created', '')) + correction
+                entime = entime.astimezone(tz.gettz())
                 record['timestamp'] = entime.strftime('%Y-%m-%dT%H:%M:%S')
                 record['message'] = log.get('Message', None)
                 record['severity'] = _healthmap.get(
