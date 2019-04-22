@@ -331,6 +331,8 @@ class LenovoFirmwareConfig(object):
                             else:
                                 current = instance.text
                             default = onedata.get('default', None)
+                            if default == '':
+                                default = None
                     if (setting.find('cmd_data') is not None or
                             setting.find('boolean_data') is not None):
                         protect = True  # Hide currently unsupported settings
