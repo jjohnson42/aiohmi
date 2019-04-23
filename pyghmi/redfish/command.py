@@ -1,6 +1,7 @@
 # vim: tabstop=4 shiftwidth=4 softtabstop=4
+# coding=utf8
 
-# Copyright 2018 Lenovo
+# Copyright 2019 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +28,12 @@ import pyghmi.exceptions as exc
 import pyghmi.constants as const
 import pyghmi.util.webclient as webclient
 import pyghmi.redfish.oem.lookup as oem
+import re
 from dateutil import tz
+
+
+numregex = re.compile('([0-9]+)')
+
 
 powerstates = {
     'on': 'On',
@@ -132,15 +138,41 @@ def _cidr_to_mask(cidr):
             '!I', (2**32 - 1) ^ (2**(32 - cidr) - 1)))
 
 
+def naturalize_string(key):
+    """Analyzes string in a human way to enable natural sort
+
+    :param nodename: The node name to analyze
+    :returns: A structure that can be consumed by 'sorted'
+    """
+    return [int(text) if text.isdigit() else text.lower()
+            for text in re.split(numregex, key)]
+
+
+def natural_sort(iterable):
+    """Return a sort using natural sort if possible
+
+    :param iterable:
+    :return:
+    """
+    try:
+        return sorted(iterable, key=naturalize_string)
+    except TypeError:
+        # The natural sort attempt failed, fallback to ascii sort
+        return sorted(iterable)
+
+
 class SensorReading(object):
-    def __init__(self, healthinfo):
-        self.name = healthinfo['Name']
-        self.health = _healthmap[healthinfo['Status']['Health']]
-        self.states = [healthinfo['Status']['Health']]
-        self.value = None
+    def __init__(self, healthinfo, sensor=None, value=None, units=None):
+        if sensor:
+            self.name = sensor['name']
+        else:
+            self.name = healthinfo['Name']
+            self.health = _healthmap[healthinfo['Status']['Health']]
+            self.states = [healthinfo['Status']['Health']]
+        self.value = value
         self.state_ids = None
         self.imprecision = None
-        self.units = None
+        self.units = units
 
 
 class Command(object):
@@ -169,6 +201,7 @@ class Command(object):
         self.wc.set_header('Content-Type', 'application/json')
         systems = overview['Systems']['@odata.id']
         members = self.wc.grab_json_response(systems)
+        self._varsensormap = {}
         systems = members['Members']
         if sysurl:
             for system in systems:
@@ -242,10 +275,10 @@ class Command(object):
             return {'powerstate': reqpowerstate}
         return {'pendingpowerstate': reqpowerstate}
 
-    def _get_cache(self, url):
+    def _get_cache(self, url, cache=30):
         now = os.times()[4]
         cachent = self._urlcache.get(url, None)
-        if cachent and cachent['vintage'] > now - 30:
+        if cachent and cachent['vintage'] > now - cache:
             return cachent['contents']
         return None
 
@@ -265,7 +298,7 @@ class Command(object):
     def _do_web_request(self, url, payload=None, method=None, cache=True, etag=None):
         res = None
         if cache and payload is None and method is None:
-            res = self._get_cache(url)
+            res = self._get_cache(url, cache)
         if res:
             return res
         wc = self.wc.dupe()
@@ -378,6 +411,35 @@ class Command(object):
             raise exc.UnsupportedFunctionality('Ability to set BIOS settings '
                                                'not detected on this platform')
         return self._varsetbiosurl
+
+    @property
+    def _sensormap(self):
+        if not self._varsensormap:
+            for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
+                chassisurl = chassis['@odata.id']
+                chassisinfo = self._do_web_request(chassisurl)
+                powurl = chassisinfo.get('Power', {}).get('@odata.id', '')
+                if powurl:
+                    powinf = self._do_web_request(powurl)
+                    for voltage in powinf.get('Voltages', []):
+                        if 'Name' in voltage:
+                            self._varsensormap[voltage['Name']] = {
+                                'name': voltage['Name'], 'url': powurl,
+                                'type': 'Voltage'}
+                thermurl = chassisinfo.get('Thermal', {}).get('@odata.id', '')
+                if thermurl:
+                    therminf = self._do_web_request(thermurl)
+                    for fan in therminf.get('Fans', []):
+                        if 'Name' in fan:
+                            self._varsensormap[fan['Name']] = {
+                                'name': fan['Name'], 'type': 'Fan',
+                                'url': thermurl}
+                    for temp in therminf.get('Temperatures', []):
+                        if 'Name' in temp:
+                            self._varsensormap[temp['Name']] = {
+                                'name': temp['Name'], 'type': 'Temperature',
+                                'url': thermurl}
+        return self._varsensormap
 
     @property
     def _bmcurl(self):
@@ -806,6 +868,37 @@ class Command(object):
                 record['severity'] = _healthmap.get(
                     entries.get('Severity', 'Warning'), const.Health.Critical)
                 yield record
+
+    def get_sensor_descriptions(self):
+        for sensor in natural_sort(self._sensormap):
+            yield self._sensormap[sensor]
+
+    def get_sensor_reading(self, sensorname):
+        if sensorname not in self._sensormap:
+            raise Exception('Sensor not found')
+        sensor = self._sensormap[sensorname]
+        reading = self._do_web_request(sensor['url'], cache=1)
+        return self._extract_reading(sensor, reading)
+
+    def get_sensor_data(self):
+        for sensor in natural_sort(self._sensormap):
+            yield self.get_sensor_reading(sensor)
+
+    def _extract_reading(self, sensor, reading):
+        output = {}
+        if sensor['type'] == 'Fan':
+            for fan in reading['Fans']:
+                if fan['Name'] == sensor['name']:
+                    return SensorReading(None, sensor, value=fan['Reading'], units=fan['ReadingUnits'])
+        elif sensor['type'] == 'Temperature':
+            for temp in reading['Temperatures']:
+                if temp['Name'] == sensor['name'] and 'ReadingCelsius' in temp:
+                    return SensorReading(None, sensor, value=temp['ReadingCelsius'], units='°C')
+        elif sensor['type'] == 'Voltage':
+            for volt in reading['Voltages']:
+                if volt['Name'] == sensor['name'] and 'ReadingVolts' in volt:
+                    return SensorReading(None, sensor, value=volt['ReadingVolts'], units='V')
+
 
 if __name__ == '__main__':
     import os
