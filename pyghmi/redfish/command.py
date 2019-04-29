@@ -537,11 +537,75 @@ class Command(object):
                         summary['badreadings'].append(SensorReading(funinfo))
         return summary
 
+    def _get_biosreg(self, url):
+        addon = {}
+        valtodisplay = {}
+        displaytoval = {}
+        reg = self._do_web_request(url)
+        reg = reg['RegistryEntries']
+        for attr in reg['Attributes']:
+            vals = attr.get('Value', [])
+            if vals:
+                valtodisplay[attr['AttributeName']] = {}
+                displaytoval[attr['AttributeName']] = {}
+                for val in vals:
+                    valtodisplay[
+                        attr['AttributeName']][val['ValueName']] = val[
+                            'ValueDisplayName']
+                    displaytoval[
+                        attr['AttributeName']][val['ValueDisplayName']] = val[
+                            'ValueName']
+            defaultval = attr.get('DefaultValue', None)
+            defaultval = valtodisplay.get(attr['AttributeName'], {}).get(
+                defaultval, defaultval)
+            if attr['Type'] == 'Integer' and defaultval:
+                defaultval = int(defaultval)
+            addon[attr['AttributeName']] = {
+                'default': defaultval,
+                'help': attr.get('HelpText', None),
+                'sortid': attr.get('DisplayOrder', None),
+                'possible': [x['ValueDisplayName'] for x in vals],
+            }
+        return addon, valtodisplay, displaytoval
+
     def get_system_configuration(self, hideadvanced=True):
-        biosinfo = self._do_web_request(self._biosurl)
+        biosinfo = self._do_web_request(self._biosurl, cache=False)
+        extrainfo = {}
+        valtodisplay = {}
+        if 'AttributeRegistry' in biosinfo:
+            overview = self._do_web_request('/redfish/v1/')
+            reglist = overview['Registries']['@odata.id']
+            reglist = self._do_web_request(reglist)
+            regurl = None
+            for cand in reglist.get('Members', []):
+                cand = cand.get('@odata.id', '')
+                candname = cand.split('/')[-1]
+                if candname == biosinfo['AttributeRegistry']:
+                    regurl = cand
+                    break
+            if not regurl:
+                # Workaround a vendor bug where they link to a non-existant name
+                for cand in reglist.get('Members', []):
+                    cand = cand.get('@odata.id', '')
+                    candname = cand.split('/')[-1]
+                    candname = candname.split('.')[0]
+                    if candname == biosinfo[
+                            'AttributeRegistry'].split('.')[0]:
+                        regurl = cand
+                        break
+            if regurl:
+                reginfo = self._do_web_request(regurl)
+                for reg in reginfo.get('Location', []):
+                    if reg.get('Language', 'en').startswith('en'):
+                        reguri = reg['Uri']
+                        extrainfo, valtodisplay, _ = self._get_biosreg(reguri)
         currsettings = {}
         for setting in biosinfo.get('Attributes', {}):
-            currsettings[setting] = {'value': biosinfo['Attributes'][setting]}
+            val = biosinfo['Attributes'][setting]
+            val = valtodisplay.get(setting, {}).get(val, val)
+            val = {'value': val}
+            val.update(**extrainfo.get(setting, {}))
+            currsettings[setting] = val
         return currsettings
 
     def clear_system_configuration(self):
