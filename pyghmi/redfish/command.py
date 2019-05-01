@@ -312,7 +312,15 @@ class Command(object):
             if 'If-Match' in wc.stdheaders:
                 del wc.stdheaders['If-Match']
         if res[1] < 200 or res[1] >= 300:
-            raise exc.PyghmiException(res[0])
+            try:
+                info = json.loads(res[0])
+                errmsg = [
+                    x['Message'] for x in info.get('error', {}).get(
+                        '@Message.ExtendedInfo', {})]
+                errmsg = ','.join(errmsg)
+                raise exc.RedfishError(errmsg)
+            except (ValueError, KeyError):
+                raise exc.PyghmiException(res[0])
         if payload is None and method is None:
             self._urlcache[url] = {'contents': res[0],
                                    'vintage': os.times()[4]}
