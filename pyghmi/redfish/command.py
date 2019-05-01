@@ -19,6 +19,7 @@
 # for redfish compliant endpoints
 
 from datetime import datetime, timedelta
+from fnmatch import fnmatch
 import json
 import os
 import socket
@@ -620,6 +621,28 @@ class Command(object):
         self._do_web_request(rb, {'Action': 'Bios.ResetBios'})
 
     def set_system_configuration(self, changeset):
+        currsettings = self.get_system_configuration()
+        for change in list(changeset):
+            if change not in currsettings:
+                found = False
+                for attr in currsettings:
+                    if fnmatch(attr.lower(), change.lower()):
+                        found = True
+                        changeset[attr] = changeset[change]
+                if found:
+                    del changeset[change]
+        for change in changeset:
+            changeval = changeset[change]
+            if (currsettings.get(change, {}).get('possible', [])
+                    and changeval not in currsettings[change]['possible']):
+                normval = changeval.lower()
+                normval = re.sub(r'\s+', ' ', normval)
+                if not normval.endswith('*'):
+                    normval += '*'
+                for cand in currsettings[change]['possible']:
+                    if fnmatch(cand.lower(), normval):
+                        changeset[change] = cand
+                        break
         redfishsettings = {'Attributes': changeset}
         self._do_web_request(self._setbiosurl, redfishsettings, 'PATCH')
 
