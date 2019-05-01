@@ -601,10 +601,18 @@ class Command(object):
                         reguri = reg['Uri']
                         extrainfo, valtodisplay, _ = self._get_biosreg(reguri)
         currsettings = {}
+        pendingsettings = self._do_web_request(self._setbiosurl)
+        pendingsettings = pendingsettings.get('Attributes', {})
         for setting in biosinfo.get('Attributes', {}):
             val = biosinfo['Attributes'][setting]
+            currval = val
+            if setting in pendingsettings:
+                val = pendingsettings[setting]
             val = valtodisplay.get(setting, {}).get(val, val)
+            currval = valtodisplay.get(setting, {}).get(currval, currval)
             val = {'value': val}
+            if currval != val['value']:
+                val['active'] = currval
             val.update(**extrainfo.get(setting, {}))
             currsettings[setting] = val
         return currsettings
