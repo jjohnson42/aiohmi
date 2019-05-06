@@ -176,6 +176,80 @@ class SensorReading(object):
         self.units = units
 
 
+class AttrDependencyHandler(object):
+    def __init__(self, dependencies, currsettings, pendingsettings):
+        self.dependencymap = {}
+        for dep in dependencies.get('Dependencies', [[]]):
+            if dep['Type'] != 'Map':
+                continue
+            if 'Dependency' not in dep:
+                continue
+            if dep['DependencyFor'] in self.dependencymap:
+                self.dependencymap[
+                    dep['DependencyFor']].append(dep['Dependency'])
+            else:
+                self.dependencymap[
+                    dep['DependencyFor']] = [dep['Dependency']]
+        self.curr = currsettings
+        self.pend = pendingsettings
+        self.reg = dependencies['Attributes']
+
+    def get_overrides(self, setting):
+        overrides = {}
+        blameattrs = []
+        if setting not in self.dependencymap:
+            return {}, []
+        for depinfo in self.dependencymap[setting]:
+            lastoper = None
+            lastcond = None
+            for mapfrom in depinfo.get('MapFrom', []):
+                if lastcond is not None and not lastoper:
+                    break  # MapTerm required to make sense of this, give up
+                currattr = mapfrom['MapFromAttribute']
+                blameattrs.append(currattr)
+                currprop = mapfrom['MapFromProperty']
+                if currprop == 'CurrentValue':
+                    if currattr in self.pend:
+                        currval = self.pend[currattr]
+                    else:
+                        currval = self.curr[currattr]
+                else:
+                    currval = self.reg[currattr][currprop]
+                lastcond = self.process(currval, mapfrom, lastcond, lastoper)
+                lastoper = mapfrom.get('MapTerms', None)
+            if lastcond:
+                if setting not in overrides:
+                    overrides[setting] = {}
+                if depinfo['MapToAttribute'] not in overrides[setting]:
+                    overrides[depinfo['MapToAttribute']] = {}
+                overrides[depinfo['MapToAttribute']][
+                    depinfo['MapToProperty']] = depinfo['MapToValue']
+        return overrides, blameattrs
+
+    def process(self, currval, mapfrom, lastcond, lastoper):
+        newcond = None
+        mfc = mapfrom['MapFromCondition']
+        if mfc == 'EQU':
+            newcond = currval == mapfrom['MapFromValue']
+        if mfc == 'NEQ':
+            newcond = currval != mapfrom['MapFromValue']
+        if mfc == 'GEQ':
+            newcond = float(currval) >= float(mapfrom['MapFromValue'])
+        if mfc == 'GTR':
+            newcond = float(currval) > float(mapfrom['MapFromValue'])
+        if mfc == 'LEQ':
+            newcond = float(currval) <= float(mapfrom['MapFromValue'])
+        if mfc == 'LSS':
+            newcond = float(currval) < float(mapfrom['MapFromValue'])
+        if lastcond is not None:
+            if lastoper == 'AND':
+                return lastcond and newcond
+            elif lastoper == 'OR':
+                return lastcond or newcond
+            return None
+        return newcond
+
+
 class Command(object):
 
     def __init__(self, bmc, userid, password, verifycallback, sysurl=None,
@@ -575,12 +649,13 @@ class Command(object):
                 'sortid': attr.get('DisplayOrder', None),
                 'possible': [x['ValueDisplayName'] for x in vals],
             }
-        return addon, valtodisplay, displaytoval
+        return addon, valtodisplay, displaytoval, reg
 
     def get_system_configuration(self, hideadvanced=True):
         biosinfo = self._do_web_request(self._biosurl, cache=False)
         extrainfo = {}
         valtodisplay = {}
+        self.attrdeps = []
         if 'AttributeRegistry' in biosinfo:
             overview = self._do_web_request('/redfish/v1/')
             reglist = overview['Registries']['@odata.id']
@@ -607,7 +682,8 @@ class Command(object):
                 for reg in reginfo.get('Location', []):
                     if reg.get('Language', 'en').startswith('en'):
                         reguri = reg['Uri']
-                        extrainfo, valtodisplay, _ = self._get_biosreg(reguri)
+                        reginfo =  self._get_biosreg(reguri)
+                        extrainfo, valtodisplay, _, self.attrdeps = reginfo
         currsettings = {}
         pendingsettings = self._do_web_request(self._setbiosurl)
         pendingsettings = pendingsettings.get('Attributes', {})
@@ -638,6 +714,11 @@ class Command(object):
 
     def set_system_configuration(self, changeset):
         currsettings = self.get_system_configuration()
+        rawsettings = self._do_web_request(self._biosurl, cache=False)
+        rawsettings = rawsettings.get('Attributes', {})
+        pendingsettings = self._do_web_request(self._setbiosurl)
+        pendingsettings = pendingsettings.get('Attributes', {})
+        dephandler = AttrDependencyHandler(self.attrdeps, rawsettings, pendingsettings)
         for change in list(changeset):
             if change not in currsettings:
                 found = False
@@ -649,6 +730,19 @@ class Command(object):
                     del changeset[change]
         for change in changeset:
             changeval = changeset[change]
+            overrides, blameattrs = dephandler.get_overrides(change)
+            meta = {}
+            for attr in self.attrdeps['Attributes']:
+                if attr['AttributeName'] == change:
+                    meta = dict(attr)
+                    break
+            meta.update(**overrides.get(change, {}))
+            if meta.get('ReadOnly', False) or meta.get('GrayOut', False):
+                errstr = '{0} is read only'.format(change)
+                if blameattrs:
+                    errstr += ' due to one of the following settings: ' \
+                        '{0}'.format(','.join(sorted(blameattrs)))
+                raise exc.InvalidParameterValue(errstr)
             if (currsettings.get(change, {}).get('possible', [])
                     and changeval not in currsettings[change]['possible']):
                 normval = changeval.lower()
@@ -659,6 +753,12 @@ class Command(object):
                     if fnmatch(cand.lower(), normval):
                         changeset[change] = cand
                         break
+                else:
+                    raise exc.InvalidParameterValue(
+                                '{0} is not a valid value for {1} '
+                                '({2})'.format(
+                                    changeval, change,
+                                    ','.join(currsettings[change]['possible'])))
         redfishsettings = {'Attributes': changeset}
         self._do_web_request(self._setbiosurl, redfishsettings, 'PATCH')
 
@@ -988,7 +1088,6 @@ class Command(object):
             yield self.get_sensor_reading(sensor)
 
     def _extract_reading(self, sensor, reading):
-        output = {}
         if sensor['type'] == 'Fan':
             for fan in reading['Fans']:
                 if fan['Name'] == sensor['name']:
