@@ -275,7 +275,12 @@ class Command(object):
         self.wc.set_basic_credentials(userid, password)
         self.wc.set_header('Content-Type', 'application/json')
         systems = overview['Systems']['@odata.id']
-        members = self.wc.grab_json_response(systems)
+        res = self.wc.grab_json_response_with_status(systems)
+        if res[1] == 401:
+            raise exc.PyghmiException('Access Denied')
+        elif res[1] < 200 or res[1] >= 300:
+            raise exc.PyghmiException(repr(res[0]))
+        members = res[0]
         self._varsensormap = {}
         systems = members['Members']
         if sysurl:
