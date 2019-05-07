@@ -1028,6 +1028,7 @@ class Command(object):
         correction = timedelta(0)
         if currtime:
             currtime = _parse_time(currtime)
+        if currtime:
             now = datetime.now(tz.tzoffset('', 0))
             try:
                 correction = now - currtime
