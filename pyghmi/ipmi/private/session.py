@@ -423,7 +423,8 @@ class Session(object):
                 port=623,
                 kg=None,
                 onlogon=None,
-                privlevel=4):
+                privlevel=None,
+                keepalive=True):
         trueself = None
         forbidsock = []
         for res in socket.getaddrinfo(bmc, port, 0, socket.SOCK_DGRAM):
@@ -471,7 +472,8 @@ class Session(object):
                  port=623,
                  kg=None,
                  onlogon=None,
-                 privlevel=4):
+                 privlevel=None,
+                 keepalive=True):
         if hasattr(self, 'initialized'):
             # new found an existing session, do not corrupt it
             if onlogon is None:
@@ -486,7 +488,13 @@ class Session(object):
         self.broken = False
         self.socket = None
         self.logged = 0
-        self.privlevel = privlevel
+        if privlevel is not None:
+            self.privlevel = privlevel
+            self.autopriv = False
+        else:
+            self.privlevel = 4
+            self.autopriv = True
+        self.autokeepalive = keepalive
         self.maxtimeout = 3  # be aggressive about giving up on initial packet
         self.incommand = False
         self.nameonly = 16  # default to name only lookups in RAKP exchange
@@ -1239,8 +1247,11 @@ class Session(object):
                 if self.incommand:
                     # if currently in command, no cause to keepalive
                     return
-                self.raw_command(netfn=6, command=1,
-                                 callback=self._keepalive_wrapper(None))
+                if self.autokeepalive:
+                    self.raw_command(netfn=6, command=1,
+                                    callback=self._keepalive_wrapper(None))
+                else:
+                    self.logout()
         except exc.IpmiException:
             self._mark_broken()
 
@@ -1449,9 +1460,9 @@ class Session(object):
         if data[0] != self.rmcptag:  # ignore mismatched tags for retry logic
             return -9
         if data[1] != 0:  # if not successful, consider next move
-            if data[1] in (9, 0xd) and self.privlevel == 4:
+            if data[1] in (9, 0xd) and self.privlevel == 4 and self.autopriv:
                 # Here the situation is likely that the peer didn't want
-                # us to use Operator.  Degrade to operator and try again
+                # us to use admin.  Degrade to operator and try again
                 self.privlevel = 3
                 self.login()
                 return

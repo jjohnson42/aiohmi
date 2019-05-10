@@ -130,10 +130,15 @@ class Command(object):
     :param onlogon: function to run when logon completes in an asynchronous
                     fashion.  This will result in a greenthread behavior.
     :param kg: Optional parameter to use if BMC has a particular Kg configured
+    :param verifycallback:  For OEM extensions that use HTTPS, this function
+                            will be used to evaluate the certificate.
+    :param keepalive:  If False, then an idle connection will logout rather than keepalive
+                       unless held open by console or ongoing activity.
     """
 
     def __init__(self, bmc=None, userid=None, password=None, port=623,
-                 onlogon=None, kg=None, privlevel=4, verifycallback=None):
+                 onlogon=None, kg=None, privlevel=None, verifycallback=None,
+                 keepalive=True):
         # TODO(jbjohnso): accept tuples and lists of each parameter for mass
         # operations without pushing the async complexities up the stack
         self.onlogon = onlogon
@@ -154,7 +159,8 @@ class Command(object):
                                                 onlogon=self.logged,
                                                 port=port,
                                                 kg=kg,
-                                                privlevel=privlevel)
+                                                privlevel=privlevel,
+                                                keepalive=keepalive)
             # induce one iteration of the loop, now that we would be
             # prepared for it in theory
             session.Session.wait_for_rsp(0)
