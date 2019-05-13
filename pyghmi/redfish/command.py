@@ -863,6 +863,22 @@ class Command(object):
         for adp in self._get_adp_inventory(True, withids):
             yield adp
 
+    def get_inventory_of_component(self, component):
+        if component.lower() == 'system':
+            sysinfo = {
+            'UUID': self.sysinfo.get('UUID', ''),
+            'Serial Number': self.sysinfo.get('SerialNumber', ''),
+            'Manufacturer': self.sysinfo.get('Manufacturer', ''),
+            'Product Name': self.sysinfo.get('Model', ''),
+            'Model': self.sysinfo.get(
+                'SKU', self.sysinfo.get('PartNumber', '')),
+            }
+            return sysinfo
+        else:
+            for invpair in self.get_inventory():
+                if invpair[0].lower() == component.lower():
+                    return invpair[1]
+
     def get_inventory(self, withids=False):
         sysinfo = {
             'UUID': self.sysinfo.get('UUID', ''),
