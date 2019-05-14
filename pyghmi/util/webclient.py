@@ -17,6 +17,7 @@
 # 2.6 as is found in commonly used enterprise linux distributions.
 
 import base64
+import gzip
 import json
 import pyghmi.exceptions as pygexc
 import socket
@@ -195,6 +196,8 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
             webclient.request(method, url, referer=referer, headers=headers)
         rsp = webclient.getresponse()
         body = rsp.read()
+        if rsp.getheader('Content-Encoding', None) == 'gzip':
+            body = gzip.GzipFile(fileobj=StringIO.StringIO(body)).read()
         if rsp.status >= 200 and rsp.status < 300:
             return json.loads(body) if body else {}, rsp.status
         return body, rsp.status

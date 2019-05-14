@@ -670,6 +670,8 @@ class Command(object):
             for cand in reglist.get('Members', []):
                 cand = cand.get('@odata.id', '')
                 candname = cand.split('/')[-1]
+                if candname == '':  # implementation uses trailing slash
+                    candname = cand.split('/')[-2]
                 if candname == biosinfo['AttributeRegistry']:
                     regurl = cand
                     break
