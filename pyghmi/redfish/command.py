@@ -590,7 +590,8 @@ class Command(object):
         return {'identifystate': self._idstatemap[ledstate]}
 
     def get_health(self, verbose=True):
-        health = self.sysinfo.get('Status', {}).get('HealthRollup', None)
+        health = self.sysinfo.get('Status', {})
+        health = health.get('HealthRollup', health.get('Health', 'Unknown'))
         health = _healthmap[health]
         summary = {'badreadings': [], 'health': health}
         if health > 0 and verbose:
@@ -909,6 +910,17 @@ class Command(object):
         if not urls:
             urls = self._get_adp_urls()
             if not urls:
+                # No PCIe device inventory, but *maybe* ethernet inventory...
+                aidx = 1
+                for nicinfo in self._get_eth_urls():
+                    nicinfo = self._do_web_request(nicinfo)
+                    nicname = nicinfo.get('Name', None)
+                    nicinfo = nicinfo.get('MACAddress', None)
+                    if not nicname:
+                        nicname = 'NIC'
+                    if nicinfo:
+                        yield (nicname, {'MAC Address {0}'.format(aidx): nicinfo})
+                        aidx += 1
                 return
         for inf in self._do_bulk_requests(urls):
             adpinfo, url = inf
@@ -951,6 +963,17 @@ class Command(object):
                         yieldinf['MAC Address {0}'.format(nicidx)] = macaddr
                         nicidx += 1
             yield aname, yieldinf
+
+    def _get_eth_urls(self):
+        ethurls = self.sysinfo.get('EthernetInterfaces', {})
+        ethurls = ethurls.get('@odata.id', None)
+        if ethurls:
+            ethurls = self._do_web_request(ethurls)
+            ethurls = ethurls.get('Members', [])
+            urls = [x['@odata.id'] for x in ethurls]
+        else:
+            urls = []
+        return urls
 
     def _get_adp_urls(self):
         adpurls = self.sysinfo.get('PCIeDevices', [])
