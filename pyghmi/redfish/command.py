@@ -271,6 +271,8 @@ class Command(object):
         self._gpool = pool
         self.wc.set_header('Accept', 'application/json')
         self.wc.set_header('User-Agent', 'pyghmi')
+        self.wc.set_header('Accept-Encoding', 'gzip')
+        self.wc.set_header('OData-Version', '4.0')
         overview = self.wc.grab_json_response('/redfish/v1/')
         self.wc.set_basic_credentials(userid, password)
         self.wc.set_header('Content-Type', 'application/json')
