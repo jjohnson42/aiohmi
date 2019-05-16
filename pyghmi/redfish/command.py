@@ -396,8 +396,8 @@ class Command(object):
             try:
                 info = json.loads(res[0])
                 errmsg = [
-                    x['Message'] for x in info.get('error', {}).get(
-                        '@Message.ExtendedInfo', {})]
+                    x.get('Message', x['MessageId']) for x in info.get(
+                        'error', {}).get('@Message.ExtendedInfo', {})]
                 errmsg = ','.join(errmsg)
                 raise exc.RedfishError(errmsg)
             except (ValueError, KeyError):
