@@ -477,6 +477,11 @@ class Command(object):
             if uefiboot is not None:
                 uefiboot = 'UEFI' if uefiboot else 'Legacy'
                 payload['BootSourceOverrideMode'] = uefiboot
+                try:
+                    self._do_web_request(self.sysurl, payload, method='PATCH')
+                    return {'bootdev': reqbootdev}
+                except Exception:
+                    del payload['BootSourceOverrideMode']
         self._do_web_request(self.sysurl, payload, method='PATCH')
         return {'bootdev': reqbootdev}
 
