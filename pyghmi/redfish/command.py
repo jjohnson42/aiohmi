@@ -906,7 +906,8 @@ class Command(object):
         adpurls = self._get_adp_urls()
         cpurls = self._get_cpu_urls()
         memurls = self._get_mem_urls()
-        allurls = adpurls + cpurls + memurls
+        diskurls = self._get_disk_urls()
+        allurls = adpurls + cpurls + memurls + diskurls
         list(self._do_bulk_requests(allurls))
         for cpu in self._get_cpu_inventory(withids=withids, urls=cpurls):
             yield cpu
@@ -914,6 +915,25 @@ class Command(object):
             yield mem
         for adp in self._get_adp_inventory(withids=withids, urls=adpurls):
             yield adp
+        for disk in self._get_disk_inventory(withids=withids, urls=diskurls):
+            yield disk
+
+    def _get_disk_inventory(self, onlyname=False, withids=False, urls=None):
+        if not urls:
+            urls = self._get_disk_urls()
+        for inf in self._do_bulk_requests(urls):
+            inf, _ = inf
+            ddata = {
+                'Model': inf.get('Model', None),
+                'Serial Number': inf.get('SerialNumber', None),
+                'Description': inf.get('Name'),
+            }
+            loc = inf.get('PhysicalLocation', {}).get('Info', None)
+            if loc:
+                dname = 'Disk {0}'.format(loc)
+            else:
+                dname = inf.get('Id', 'Disk')
+            yield (dname, ddata)
 
     def _get_adp_inventory(self, onlyname=False, withids=False, urls=None):
         if not urls:
@@ -1019,6 +1039,18 @@ class Command(object):
                 continue
             cpuinfo = {'Model': currcpuinfo.get('Model', None)}
             yield (name, cpuinfo)
+
+    def _get_disk_urls(self):
+        storurl = self.sysinfo.get('Storage', {}).get('@odata.id', None)
+        urls = []
+        if storurl:
+            storurl = self._do_web_request(storurl)
+            for url in storurl.get('Members', []):
+                url = url['@odata.id']
+                ctldata = self._do_web_request(url)
+                for durl in ctldata.get('Drives', []):
+                    urls.append(durl['@odata.id'])
+        return urls
 
     def _get_cpu_urls(self):
         cpurl = self.sysinfo.get('Processors', {}).get('@odata.id', None)
