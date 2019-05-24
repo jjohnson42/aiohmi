@@ -28,6 +28,7 @@ import time
 import pyghmi.exceptions as exc
 import pyghmi.constants as const
 import pyghmi.util.webclient as webclient
+from pyghmi.util.parse import parse_time
 import pyghmi.redfish.oem.lookup as oem
 import re
 from dateutil import tz
@@ -78,49 +79,6 @@ _healthmap = {
     'Warning': const.Health.Warning,
     'OK': const.Health.Ok,
 }
-
-
-def _parse_time(timeval):
-    if timeval is None:
-        return None
-    try:
-        retval = datetime.strptime(timeval, '%Y-%m-%dT%H:%M:%SZ')
-        return retval.replace(tzinfo=tz.tzutc())
-    except ValueError:
-        pass
-    try:
-        positive = None
-        offset = None
-        if '+' in timeval:
-            timeval, offset = timeval.split('+', 1)
-            positive = 1
-        elif len(timeval.split('-')) > 3:
-            timeval, offset = timeval.rsplit('-', 1)
-            positive = -1
-        if positive:
-            hrs, mins = offset.split(':', 1)
-            secs = int(hrs) * 60 + int(mins)
-            secs = secs * 60 * positive
-            ms = None
-            if '.' in timeval:
-                timeval, ms = timeval.split('.', 1)
-                ms = int(ms)
-                ms = timedelta(0, 0, 0, ms)
-            retval = datetime.strptime(timeval, '%Y-%m-%dT%H:%M:%S')
-            if ms:
-                retval += ms
-            return retval.replace(tzinfo=tz.tzoffset('', secs))
-    except ValueError:
-        pass
-    try:
-        return datetime.strptime(timeval, '%Y-%m-%dT%H:%M:%S')
-    except ValueError:
-        pass
-    try:
-        return datetime.strptime(timeval, '%Y-%m-%d')
-    except ValueError:
-        pass
-    return None
 
 
 def _mask_to_cidr(mask):
@@ -275,6 +233,8 @@ class Command(object):
         self.wc.set_header('OData-Version', '4.0')
         overview = self.wc.grab_json_response('/redfish/v1/')
         self.wc.set_basic_credentials(userid, password)
+        self.username = userid
+        self.password = password
         self.wc.set_header('Content-Type', 'application/json')
         systems = overview['Systems']['@odata.id']
         res = self.wc.grab_json_response_with_status(systems)
@@ -401,7 +361,7 @@ class Command(object):
                 errmsg = ','.join(errmsg)
                 raise exc.RedfishError(errmsg)
             except (ValueError, KeyError):
-                raise exc.PyghmiException(res[0])
+                raise exc.PyghmiException(str(url) + ":" + res[0])
         if payload is None and method is None:
             self._urlcache[url] = {'contents': res[0],
                                    'vintage': os.times()[4]}
@@ -827,6 +787,11 @@ class Command(object):
         return netcfg['HostName']
 
     def get_firmware(self, components=()):
+        try:
+            for firminfo in self.oem.get_firmware_inventory(components):
+                yield firminfo
+        except exc.BypassGenericBehavior:
+            return
         fwlist = self._do_web_request(self._fwinventory)
         fwurls = [x['@odata.id'] for x in fwlist.get('Members', [])]
         self._fwnamemap = {}
@@ -850,7 +815,7 @@ class Command(object):
         currinf['name'] = fwname
         currinf['id'] = fwi.get('Id', None)
         currinf['version'] = fwi.get('Version', 'Unknown')
-        currinf['date'] = _parse_time(fwi.get('ReleaseDate', ''))
+        currinf['date'] = parse_time(fwi.get('ReleaseDate', ''))
         if not (currinf['version'] or currinf['date']):
             return None, None
         # TODO: OEM extended data with buildid
@@ -1017,6 +982,7 @@ class Command(object):
         if not self._oem:
             self._oem = oem.get_oem_handler(
                 self.sysinfo, self.sysurl, self.wc, self._urlcache)
+            self._oem.set_credentials(self.username, self.password)
         return self._oem
 
     def get_description(self):
@@ -1150,7 +1116,7 @@ class Command(object):
                         newloginfo = self._do_web_request(lurl, cache=False)
             for log in entries.get('Members', []):
                 record = {}
-                entime = _parse_time(log.get('Created', '')) + correction
+                entime = parse_time(log.get('Created', '')) + correction
                 entime = entime.astimezone(tz.gettz())
                 record['timestamp'] = entime.strftime('%Y-%m-%dT%H:%M:%S')
                 record['message'] = log.get('Message', None)
