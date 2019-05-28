@@ -1078,7 +1078,7 @@ class Command(object):
         currtime = bmcinfo.get('DateTime', None)
         correction = timedelta(0)
         if currtime:
-            currtime = _parse_time(currtime)
+            currtime = parse_time(currtime)
         if currtime:
             now = datetime.now(tz.tzoffset('', 0))
             try:
