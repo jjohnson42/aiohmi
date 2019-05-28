@@ -56,4 +56,8 @@ def parse_time(timeval):
         return datetime.strptime(timeval, '%Y-%m-%d')
     except ValueError:
         pass
+    try:
+        return datetime.strptime(timeval, '%m/%d/%Y')
+    except ValueError:
+        pass
     return None
