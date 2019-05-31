@@ -27,6 +27,7 @@ import struct
 import time
 import pyghmi.exceptions as exc
 import pyghmi.constants as const
+import pyghmi.media as media
 import pyghmi.util.webclient as webclient
 from pyghmi.util.parse import parse_time
 import pyghmi.redfish.oem.lookup as oem
@@ -1153,6 +1154,17 @@ class Command(object):
                 if volt['Name'] == sensor['name'] and 'ReadingVolts' in volt:
                     return SensorReading(None, sensor, value=volt['ReadingVolts'], units='V')
 
+    def list_media(self):
+        bmcinfo = self._do_web_request(self._bmcurl)
+        vmcoll = bmcinfo.get('VirtualMedia', {}).get('@odata.id', None)
+        if vmcoll:
+            vmlist = self._do_web_request(vmcoll)
+            vmurls = [x['@odata.id'] for x in vmlist.get('Members', [])]
+            for vminfo in self._do_bulk_requests(vmurls):
+                vminfo = vminfo[0]
+                if vminfo['Image']:
+                    imageurl = vminfo['Image'].replace('/' + vminfo['ImageName'], '')
+                    yield media.Media(vminfo['ImageName'], imageurl)
 
 if __name__ == '__main__':
     import os
