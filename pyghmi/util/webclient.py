@@ -17,6 +17,7 @@
 # 2.6 as is found in commonly used enterprise linux distributions.
 
 import base64
+import copy
 import gzip
 import json
 import pyghmi.exceptions as pygexc
@@ -121,7 +122,7 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         if clone:
             self._certverify = clone._certverify
             self.cookies = clone.cookies
-            self.stdheaders = clone.stdheaders
+            self.stdheaders = copy.deepcopy(clone.stdheaders)
         else:
             self._certverify = verifycallback
             self.cookies = {}
