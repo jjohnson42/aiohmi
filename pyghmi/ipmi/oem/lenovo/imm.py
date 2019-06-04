@@ -19,6 +19,7 @@ from datetime import datetime
 import errno
 import fnmatch
 import json
+import math
 import os.path
 import pyghmi.constants as pygconst
 import pyghmi.exceptions as pygexc
@@ -1101,8 +1102,10 @@ class XCCClient(IMMClient):
                     nameappend += 1
             else:
                 name = vol.name
-            stripesize = props['stripsize'] if vol.stripesize is None \
-                else vol.stripesize
+            if vol.stripsize:
+                stripsize = int(math.log(vol.stripsize * 2, 2))
+            else:
+                stripsize = props['stripsize']
             strsize = 'remainder' if vol.size is None else str(vol.size)
             if strsize in ('all', '100%'):
                 volsize = params['capacity']
@@ -1122,7 +1125,7 @@ class XCCClient(IMMClient):
                 raise pygexc.InvalidParameterValue(
                     'Requested sizes exceed available capacity')
             vols.append('{0};{1};{2};{3};{4};{5};{6};{7};{8};|'.format(
-                name, volsize, stripesize, props['cpwb'], props['cpra'],
+                name, volsize, stripsize, props['cpwb'], props['cpra'],
                 props['cpio'], props['ap'], props['dcp'], props['initstate']))
         url = '/api/function'
         arglist = '{0},{1},{2},{3},{4},{5},'.format(

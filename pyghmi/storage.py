@@ -17,7 +17,7 @@
 
 class Disk(object):
     def __init__(self, name, description=None, id=None, status=None,
-                 serial=None, fru=None, stripesize=None):
+                 serial=None, fru=None, stripsize=None):
         """
 
         :param name: A name descripbing the disk in human readable terms
@@ -33,7 +33,7 @@ class Disk(object):
         self.status = status
         self.serial = serial
         self.fru = fru
-        self.stripesize = stripesize
+        self.stripsize = stripsize
 
 
 class Array(object):
@@ -63,14 +63,14 @@ class Array(object):
 
 class Volume(object):
     def __init__(self, name=None, size=None, status=None, id=None,
-                 stripesize=None):
+                 stripsize=None):
         """
 
         :param name: Name of the volume
         :param size: Size of the volume in MB
         :param status: Controller indicated status of the volume
         :param id: Controller idintefier of a given volume
-        :param stripesize: The stripesize of the volume
+        :param stripsize: The stripsize of the volume in kibibytes
         """
         self.name = name
         if isinstance(size, int):
@@ -87,7 +87,7 @@ class Volume(object):
                 self.size = size
         self.status = status
         self.id = id
-        self.stripesize = stripesize
+        self.stripsize = stripsize
 
 
 class ConfigSpec(object):
