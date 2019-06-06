@@ -31,6 +31,7 @@ import pyghmi.media as media
 import pyghmi.util.webclient as webclient
 from pyghmi.util.parse import parse_time
 import pyghmi.redfish.oem.lookup as oem
+# import pyghmi.storage as storage
 import re
 from dateutil import tz
 
@@ -1165,6 +1166,37 @@ class Command(object):
                 if vminfo['Image']:
                     imageurl = vminfo['Image'].replace('/' + vminfo['ImageName'], '')
                     yield media.Media(vminfo['ImageName'], imageurl)
+
+    def get_storage_configuration(self):
+        """"Get storage configuration data
+
+        Retrieves the storage configuration from the target.  Data is given
+        about disks, pools, and volumes.  When referencing something, use the
+        relevant 'cfgpath' attribute to describe it.  It is not guaranteed that
+        cfgpath will be consistent version to version, so a lookup is suggested
+        in end user applications.
+
+        :return: A pyghmi.storage.ConfigSpec object describing current config
+        """
+        return self.oem.get_storage_configuration()
+
+    def remove_storage_configuration(self, cfgspec):
+        """Remove specified storage configuration from controller.
+
+        :param cfgspec: A pyghmi.storage.ConfigSpec describing what to remove
+        :return:
+        """
+        return self.oem.remove_storage_configuration(cfgspec)
+
+    def apply_storage_configuration(self, cfgspec=None):
+        """Evaluate a configuration for validity
+
+        This will check if configuration is currently available and, if given,
+        whether the specified cfgspec can be applied.
+        :param cfgspec: A pyghmi.storage.ConfigSpec describing desired oonfig
+        :return:
+        """
+        return self.oem.apply_storage_configuration(cfgspec)
 
 if __name__ == '__main__':
     import os

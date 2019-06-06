@@ -32,13 +32,25 @@ class OEMHandler(object):
 
     def get_description(self):
         return {}
-    
+
     def get_firmware_inventory(self, components):
         return []
 
     def set_credentials(self, username, password):
         self.username = username
         self.password = password
+
+    def get_storage_configuration(self):
+        raise exc.UnsupportedFunctionality(
+            'Remote storage configuration not supported on this platform')
+
+    def remove_storage_configuration(self, cfgspec):
+        raise exc.UnsupportedFunctionality(
+            'Remote storage configuration not supported on this platform')
+
+    def apply_storage_configuration(self, cfgspec):
+        raise exc.UnsupportedFunctionality(
+            'Remote storage configuration not supported on this platform')
 
     def _do_web_request(self, url, payload=None, method=None, cache=True):
         res = None
