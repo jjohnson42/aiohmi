@@ -268,7 +268,8 @@ class LenovoFirmwareConfig(object):
             if len(data) != 0:
                 break
             self.connection.ipmi_session.pause(2)
-
+        if not data:
+            raise Exception("BMC failed to return configuration information")
         xml = etree.fromstring(data)
         sortid = 0
         for config in xml.iter("config"):

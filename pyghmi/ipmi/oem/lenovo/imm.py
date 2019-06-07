@@ -171,7 +171,10 @@ class IMMClient(object):
     def get_system_configuration(self, hideadvanced=True):
         if not self.fwc:
             self.fwc = config.LenovoFirmwareConfig(self.ipmicmd)
-        self.fwo = self.fwc.get_fw_options()
+        try:
+            self.fwo = self.fwc.get_fw_options()
+        except Exception:
+            raise Exception(self.bmcname + ' failed to retrieve UEFI configuration')
         self.fwovintage = util._monotonic_time()
         retcfg = {}
         for opt in self.fwo:
