@@ -1170,12 +1170,12 @@ class XCCClient(IMMClient):
         return controller
 
     def get_oem_sensor_names(self, ipmicmd):
-        oemsensornames = super(XCCClient, self)
+        oemsensornames = super(XCCClient, self).get_oem_sensor_names(ipmicmd)
         therminfo = self.grab_cacheable_json('/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
         if therminfo:
             for name in sorted(therminfo['items'][0]):
                 if 'DIMM' in name and 'Temp' in name:
-                    oemsensornames = oemsensornames + name
+                    oemsensornames = oemsensornames + (name,)
         return oemsensornames
 
     def get_oem_sensor_descriptions(self, ipmicmd):
