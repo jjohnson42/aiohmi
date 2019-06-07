@@ -16,7 +16,7 @@ import pyghmi.redfish.oem.generic as generic
 from pyghmi.util.parse import parse_time
 import errno
 import json
-improt math
+import math
 import socket
 import time
 import pyghmi.ipmi.private.util as util
