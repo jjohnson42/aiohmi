@@ -1,4 +1,5 @@
 # vim: tabstop=4 shiftwidth=4 softtabstop=4
+# coding=utf8
 
 # Copyright 2016-2018 Lenovo
 #
@@ -348,10 +349,18 @@ class IMMClient(object):
         if returnit:
             return retdata
 
-    def get_cached_data(self, attribute):
+
+    def grab_cacheable_json(self, url, age=30):
+        data = self.get_cached_data(url, age)
+        if not data:
+            data = self.wc.grab_json_response(url)
+            self.datacache[url] = (data, util._monotonic_time())
+        return data
+
+    def get_cached_data(self, attribute, age=30):
         try:
             kv = self.datacache[attribute]
-            if kv[1] > util._monotonic_time() - 30:
+            if kv[1] > util._monotonic_time() - age:
                 return kv[0]
         except KeyError:
             return None
@@ -1156,6 +1165,38 @@ class XCCClient(IMMClient):
                     'Cannot span arrays across controllers')
             drives.append(drive)
         return controller
+
+    def get_oem_sensor_names(self, ipmicmd):
+        oemsensornames = super(XCCClient, self)
+        therminfo = self.grab_cacheable_json('/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
+        if therminfo:
+            for name in sorted(therminfo['items'][0]):
+                if 'DIMM' in name and 'Temp' in name:
+                    oemsensornames = oemsensornames + name
+        return oemsensornames
+
+    def get_oem_sensor_descriptions(self, ipmicmd):
+        oemdesc = [{'name': x, 'type': 'Energy'
+                 } for x in super(XCCClient, self).get_oem_sensor_names(ipmicmd)]
+        therminfo = self.grab_cacheable_json('/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
+        if therminfo:
+            for name in sorted(therminfo['items'][0]):
+                if 'DIMM' in name and 'Temp' in name:
+                    oemdesc.append({'name': name, 'type': 'Temperature'})
+        return oemdesc
+
+    def get_oem_sensor_reading(self, name, ipmicmd):
+        if 'Energy' in name:
+            return super(XCCClient, self).get_oem_sensor_reading(name, ipmicmd)
+        therminfo = self.grab_cacheable_json('/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
+        temp = therminfo.get('items', [{}])[0].get(name, None)
+        if temp is None:
+            raise pygexc.UnsupportedFunctionality('No sunch sensor ' + name)
+        return sdr.SensorReading({'name': name, 'imprecision': None,
+                                  'value': temp, 'states': [],
+                                  'state_ids': [],
+                                  'health': pygconst.Health.Ok,
+                                  'type': 'Temperature'}, '°C')
 
     def get_storage_configuration(self, logout=True):
         rsp = self.wc.grab_json_response(
