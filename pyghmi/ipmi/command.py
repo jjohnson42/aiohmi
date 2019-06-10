@@ -1982,7 +1982,7 @@ class Command(object):
 
         :param filename: The filename to use, the basename of the parameter
                          will be given to the bmc.
-        :param filename: Optional callback for progress updates
+        :param progress: Optional callback for progress updates
         """
         self.oem_init()
         return self._oem.upload_media(filename, progress)

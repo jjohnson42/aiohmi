@@ -22,6 +22,8 @@ import time
 import pyghmi.ipmi.private.util as util
 import pyghmi.exceptions as pygexc
 import pyghmi.storage as storage
+import pyghmi.util.webclient as webclient
+import random
 
 
 class OEMHandler(generic.OEMHandler):
@@ -79,7 +81,7 @@ class OEMHandler(generic.OEMHandler):
                         except ValueError:
                             pass
                     yield ('{0} {1}'.format(aname, fname), bdata)
-    
+
     def _get_disk_firmware_single(self, diskent, prefix=''):
         bdata = {}
         if not prefix and diskent.get('location', '').startswith('M.2'):
@@ -177,6 +179,15 @@ class OEMHandler(generic.OEMHandler):
             raise Exception(
                 'Unexpected return to set disk state: {0}'.format(
                     rsp.get('return', -1)))
+
+    def _refresh_token(self):
+        self._refresh_token_wc(self.wc)
+
+    def _refresh_token_wc(self, wc):
+        wc.grab_json_response('/api/providers/identity')
+        if '_csrf_token' in wc.cookies:
+            wc.set_header('X-XSRF-TOKEN', self.wc.cookies['_csrf_token'])
+            wc.vintage = util._monotonic_time()
 
     def _make_available(self, disk, realcfg):
         # 8 if jbod, 4 if hotspare.., leave alone if already...
@@ -414,3 +425,48 @@ class OEMHandler(generic.OEMHandler):
             if '_csrf_token' in wc.cookies:
                 wc.set_header('X-XSRF-TOKEN', wc.cookies['_csrf_token'])
             return wc
+
+    def upload_media(self, filename, progress=None):
+        xid = random.randint(0, 1000000000)
+        self._refresh_token()
+        uploadthread = webclient.FileUploader(
+            self.wc, '/upload?X-Progress-ID={0}'.format(xid), filename, None)
+        uploadthread.start()
+        while uploadthread.isAlive():
+            uploadthread.join(3)
+            rsp = self.wc.grab_json_response(
+                '/upload/progress?X-Progress-ID={0}'.format(xid))
+            if progress and rsp['state'] == 'uploading':
+                progress({'phase': 'upload',
+                          'progress': 100.0 * rsp['received'] / rsp['size']})
+            self._refresh_token()
+        rsp = json.loads(uploadthread.rsp)
+        if progress:
+            progress({'phase': 'upload',
+                      'progress': 100.0})
+        thepath = rsp['items'][0]['path']
+        thename = rsp['items'][0]['name']
+        writeable = 1 if filename.lower().endswith('.img') else 0
+        addfile = {"Url": thepath, "Protocol": 6, "Write": writeable,
+                   "Credential": ":", "Option": "", "Domain": "",
+                   "WebUploadName": thename}
+        rsp = self.wc.grab_json_response('/api/providers/rp_rdoc_addfile',
+                                         addfile)
+        self._refresh_token()
+        if rsp.get('return', -1) != 0:
+            errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
+            raise Exception('Unrecognized return: ' + errmsg)
+        rsp = self.wc.grab_json_response('/api/providers/rp_rdoc_getfiles')
+        if 'items' not in rsp or len(rsp['items']) == 0:
+            raise Exception(
+                'Image upload was not accepted, it may be too large')
+        self._refresh_token()
+        rsp = self.wc.grab_json_response('/api/providers/rp_rdoc_mountall',
+                                         {})
+        self._refresh_token()
+        if rsp.get('return', -1) != 0:
+            errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
+            raise Exception('Unrecognized return: ' + errmsg)
+        if progress:
+            progress({'phase': 'complete'})
+        #self.weblogout()

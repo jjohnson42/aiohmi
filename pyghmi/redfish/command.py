@@ -1198,6 +1198,19 @@ class Command(object):
         """
         return self.oem.apply_storage_configuration(cfgspec)
 
+    def upload_media(self, filename, progress=None):
+        """Upload a file to be hosted on the target BMC
+
+        This will upload the specified data to
+        the BMC so that it will make it available to the system as an emulated
+        USB device.
+
+        :param filename: The filename to use, the basename of the parameter
+                         will be given to the bmc.
+        :param progress: Optional callback for progress updates
+        """
+        return self.oem.upload_media(filename, progress)
+
 if __name__ == '__main__':
     import os
     import sys

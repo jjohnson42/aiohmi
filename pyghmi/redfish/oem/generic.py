@@ -52,6 +52,10 @@ class OEMHandler(object):
         raise exc.UnsupportedFunctionality(
             'Remote storage configuration not supported on this platform')
 
+    def upload_media(self, filename, progress=None):
+        raise exc.UnsupportedFunctionality(
+            'Remote media upload not supported on this platform')
+
     def _do_web_request(self, url, payload=None, method=None, cache=True):
         res = None
         if cache and payload is None and method is None:
