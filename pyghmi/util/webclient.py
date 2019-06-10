@@ -258,7 +258,10 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         if rsp.status != 200:
             raise Exception('Unexpected response in file upload: ' +
                             rsp.read())
-        return rsp.read()
+        body = rsp.read()
+        if rsp.getheader('Content-Encoding', None) == 'gzip':
+            body = gzip.GzipFile(fileobj=StringIO.StringIO(body)).read()
+        return body
 
     def get_upload_progress(self):
         return float(self._upbuffer.tell()) / float(self.ulsize)
