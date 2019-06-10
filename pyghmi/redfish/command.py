@@ -1198,6 +1198,40 @@ class Command(object):
         """
         return self.oem.apply_storage_configuration(cfgspec)
 
+    def attach_remote_media(self, url, username=None, password=None):
+        """Attach remote media by url
+
+        Given a url, attach remote media (cd/usb image) to the target system.
+
+        :param url:  URL to indicate where to find image (protocol support
+                     varies by BMC)
+        :param username: Username for endpoint to use when accessing the URL.
+                         If applicable, 'domain' would be indicated by '@' or
+                         '\' syntax.
+        :param password: Password for endpoint to use when accessing the URL.
+        """
+        # At the moment, there isn't a viable way to identify the correct resource
+        # ahead of time.  As such it's OEM specific until the standard provides a better
+        # way.
+        bmcinfo = self._do_web_request(self._bmcurl)
+        vmcoll = bmcinfo.get('VirtualMedia', {}).get('@odata.id', None)
+        vmurls = None
+        if vmcoll:
+            vmlist = self._do_web_request(vmcoll)
+            vmurls = [x['@odata.id'] for x in vmlist.get('Members', [])]
+        return self.oem.attach_remote_media(url, username, password, vmurls)
+
+    def detach_remote_media(self):
+        bmcinfo = self._do_web_request(self._bmcurl)
+        vmcoll = bmcinfo.get('VirtualMedia', {}).get('@odata.id', None)
+        if vmcoll:
+            vmlist = self._do_web_request(vmcoll)
+            vmurls = [x['@odata.id'] for x in vmlist.get('Members', [])]
+            for vminfo in self._do_bulk_requests(vmurls):
+                vminfo, currl = vminfo
+                if vminfo['Image']:
+                    self._do_web_request(currl, {'Image': None}, method='PATCH')
+
     def upload_media(self, filename, progress=None):
         """Upload a file to be hosted on the target BMC
 

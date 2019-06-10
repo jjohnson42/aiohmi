@@ -426,6 +426,16 @@ class OEMHandler(generic.OEMHandler):
                 wc.set_header('X-XSRF-TOKEN', wc.cookies['_csrf_token'])
             return wc
 
+    def attach_remote_media(self, url, user, password, vmurls):
+        for vmurl in vmurls:
+            if 'EXT' not in vmurl:
+                continue
+            vminfo = self._do_web_request(vmurl, cache=False)
+            if vminfo['ConnectedVia'] != 'NotConnected':
+                continue
+            self._do_web_request(vmurl, {'Image': url, 'Inserted': True}, 'PATCH')
+            break
+
     def upload_media(self, filename, progress=None):
         xid = random.randint(0, 1000000000)
         self._refresh_token()
