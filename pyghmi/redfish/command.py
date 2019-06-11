@@ -1245,6 +1245,18 @@ class Command(object):
         """
         return self.oem.upload_media(filename, progress)
 
+    def update_firmware(self, file, data=None, progress=None, bank=None):
+        """Send file to BMC to perform firmware update
+
+         :param filename:  The filename to upload to the target BMC
+         :param data:  The payload of the firmware.  Default is to read from
+                       specified filename.
+         :param progress:  A callback that will be given a dict describing
+                           update process.  Provide if
+         :param bank: Indicate a target 'bank' of firmware if supported
+        """
+        return self.oem.update_firmware(file, data, progress, bank)
+
 if __name__ == '__main__':
     import os
     import sys

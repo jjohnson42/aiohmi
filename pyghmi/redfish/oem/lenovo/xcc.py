@@ -17,6 +17,7 @@ from pyghmi.util.parse import parse_time
 import errno
 import json
 import math
+import os
 import socket
 import time
 import pyghmi.ipmi.private.util as util
@@ -31,6 +32,7 @@ class OEMHandler(generic.OEMHandler):
     def __init__(self, sysinfo, sysurl, webclient, cache):
         super(OEMHandler, self).__init__(sysinfo, sysurl, webclient, cache)
         self._wc = None
+        self.updating = False
 
     def get_description(self):
         description = self._do_web_request('/DeviceDescription.json')
@@ -480,3 +482,198 @@ class OEMHandler(generic.OEMHandler):
         if progress:
             progress({'phase': 'complete'})
         #self.weblogout()
+
+    def update_firmware(self, filename, data=None, progress=None, bank=None):
+        result = None
+        if self.updating:
+            raise pygexc.TemporaryError('Cannot run multiple updates to same '
+                                        'target concurrently')
+        self.updating = True
+        try:
+            result = self.update_firmware_backend(filename, data, progress,
+                                                  bank)
+        except Exception:
+            self.updating = False
+            self._refresh_token()
+            self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
+                {'UPD_WebCancel': 1}))
+            self.weblogout()
+            raise
+        self.updating = False
+        #self.weblogout()
+        return result
+
+    def update_firmware_backend(self, filename, data=None, progress=None,
+                                bank=None):
+        #self.weblogout()
+        self._refresh_token()
+        rsv = self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
+            {'UPD_WebReserve': 1}))
+        if rsv['return'] == 103:
+            raise Exception('Update already in progress')
+        if rsv['return'] != 0:
+            raise Exception('Unexpected return to reservation: ' + repr(rsv))
+        xid = random.randint(0, 1000000000)
+        uploadthread = webclient.FileUploader(
+            self.wc, '/upload?X-Progress-ID={0}'.format(xid), filename, data)
+        uploadthread.start()
+        uploadstate = None
+        while uploadthread.isAlive():
+            uploadthread.join(3)
+            rsp = self.wc.grab_json_response(
+                '/upload/progress?X-Progress-ID={0}'.format(xid))
+            if rsp['state'] == 'uploading':
+                progress({'phase': 'upload',
+                          'progress': 100.0 * rsp['received'] / rsp['size']})
+            elif rsp['state'] != 'done':
+                if rsp.get('status', None) == 413 or uploadthread.rspstatus == 413:
+                    raise Exception('File is larger than supported')
+                raise Exception('Unexpected result:' + repr(rsp))
+            uploadstate = rsp['state']
+            self._refresh_token()
+        while uploadstate != 'done':
+            rsp = self.wc.grab_json_response(
+                '/upload/progress?X-Progress-ID={0}'.format(xid))
+            uploadstate = rsp['state']
+            self._refresh_token()
+        rsp = json.loads(uploadthread.rsp)
+        if rsp['items'][0]['name'] != os.path.basename(filename):
+            raise Exception('Unexpected response: ' + repr(rsp))
+        progress({'phase': 'validating',
+                  'progress': 0.0})
+        time.sleep(3)
+        # aggressive timing can cause the next call to occasionally
+        # return 25 and fail
+        self._refresh_token()
+        rsp = self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
+            {'UPD_WebSetFileName': rsp['items'][0]['path']}))
+        if rsp.get('return', 0) in (25, 108):
+            raise Exception('Temporary error validating update, try again')
+        if rsp.get('return', -1) != 0:
+            errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
+            raise Exception('Unexpected return to set filename: ' + errmsg)
+        self._refresh_token()
+        progress({'phase': 'validating',
+                  'progress': 25.0})
+        rsp = self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
+            {'UPD_WebVerifyUploadFile': 1}))
+        if rsp.get('return', 0) == 115:
+            raise Exception('Update image not intended for this system')
+        elif rsp.get('return', -1) == 108:
+            raise Exception('Temporary error validating update, try again')
+        elif rsp.get('return', -1) != 0:
+            errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
+            raise Exception('Unexpected return to verify: ' + errmsg)
+        verifystatus = 0
+        verifyuploadfilersp = None
+        while verifystatus != 1:
+            self._refresh_token()
+            rsp, status = self.wc.grab_json_response_with_status(
+                '/api/providers/fwupdate',
+                json.dumps({'UPD_WebVerifyUploadFileStatus': 1}))
+            if not rsp or status != 200  or rsp.get('return', -1) == 2:
+                # The XCC firmware predates the FileStatus api
+                verifyuploadfilersp = rsp
+                break
+            if rsp.get('return', -1) != 0:
+                errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
+                raise Exception(
+                    'Unexpected return to verifystate: {0}'.format(errmsg))
+            verifystatus = rsp['status']
+            if verifystatus == 2:
+                raise Exception('Failed to verify firmware image')
+            if verifystatus != 1:
+                time.sleep(1)
+            if verifystatus not in (0, 1, 255):
+                errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
+                raise Exception(
+                    'Unexpected reply to verifystate: ' + errmsg)
+        progress({'phase': 'validating',
+                  'progress': 99.0})
+        self._refresh_token()
+        rsp = self.wc.grab_json_response('/api/dataset/imm_firmware_success')
+        if len(rsp['items']) != 1:
+            raise Exception('Unexpected result: ' + repr(rsp))
+        firmtype = rsp['items'][0]['firmware_type']
+        if not firmtype:
+            raise Exception('Unknown firmware description returned: ' + repr(
+                rsp['items'][0]) + ' last verify return was: ' + repr(
+                    verifyuploadfilersp) + ' with code {0}'.format(status))
+        if firmtype not in (
+                'TDM', 'WINDOWS DRIV', 'LINUX DRIVER', 'UEFI', 'IMM'):
+            # adapter firmware
+            webid = rsp['items'][0]['webfile_build_id']
+            locations = webid[webid.find('[')+1:webid.find(']')]
+            locations = locations.split(':')
+            validselectors = set([])
+            for loc in locations:
+                validselectors.add(loc.replace('#', '-'))
+            self._refresh_token()
+            rsp = self.wc.grab_json_response(
+                '/api/function/adapter_update?params=pci_GetAdapterListAndFW')
+            foundselectors = []
+            for adpitem in rsp['items']:
+                selector = '{0}-{1}'.format(adpitem['location'],
+                                            adpitem['slotNo'])
+                if selector in validselectors:
+                    foundselectors.append(selector)
+                    if len(foundselectors) == len(validselectors):
+                        break
+            else:
+                raise Exception('Could not find matching adapter for update')
+            self._refresh_token()
+            rsp = self.wc.grab_json_response('/api/function', json.dumps(
+                {'pci_SetOOBFWSlots': '|'.join(foundselectors)}))
+            if rsp.get('return', -1) != 0:
+                errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
+                raise Exception(
+                    'Unexpected result from PCI select: ' + errmsg)
+            self.set_property('/v2/ibmc/uefi/force-inventory', 1)
+        else:
+            self._refresh_token()
+            rsp = self.wc.grab_json_response(
+                '/api/dataset/imm_firmware_update')
+            if rsp['items'][0]['upgrades'][0]['id'] != 1:
+                raise Exception('Unexpected answer: ' + repr(rsp))
+        self._refresh_token()
+        progress({'phase': 'apply',
+                  'progress': 0.0})
+        if bank in ('primary', None):
+            rsp = self.wc.grab_json_response(
+                '/api/providers/fwupdate', json.dumps(
+                    {'UPD_WebStartDefaultAction': 1}))
+        elif bank == 'backup':
+            rsp = self.wc.grab_json_response(
+                '/api/providers/fwupdate', json.dumps(
+                    {'UPD_WebStartOptionalAction': 2}))
+
+        if rsp.get('return', -1) != 0:
+            errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
+            raise Exception('Unexpected result starting update: ' +
+                            errmsg)
+        complete = False
+        while not complete:
+            time.sleep(3)
+            rsp = self.wc.grab_json_response(
+                '/api/dataset/imm_firmware_progress')
+            progress({'phase': 'apply',
+                      'progress': rsp['items'][0]['action_percent_complete']})
+            if rsp['items'][0]['action_state'] == 'Idle':
+                complete = True
+                break
+            if rsp['items'][0]['action_state'] == 'Complete OK':
+                complete = True
+                if rsp['items'][0]['action_status'] != 0:
+                    raise Exception('Unexpected failure: ' + repr(rsp))
+                break
+            if (rsp['items'][0]['action_state'] == 'In Progress' and
+                    rsp['items'][0]['action_status'] == 2):
+                raise Exception('Unexpected failure: ' + repr(rsp))
+            if rsp['items'][0]['action_state'] != 'In Progress':
+                raise Exception(
+                    'Unknown condition waiting for '
+                    'firmware update: ' + repr(rsp))
+        if bank == 'backup':
+            return 'complete'
+        return 'pending'
+

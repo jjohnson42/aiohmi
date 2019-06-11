@@ -56,6 +56,10 @@ class OEMHandler(object):
         raise exc.UnsupportedFunctionality(
             'Remote media upload not supported on this platform')
 
+    def update_firmware(self, filename, data=None, progress=None, bank=None):
+        raise exc.UnsupportedFunctionality(
+            'Firmware update not supported on this platform')
+
     def _do_web_request(self, url, payload=None, method=None, cache=True):
         res = None
         if cache and payload is None and method is None:
