@@ -1260,6 +1260,13 @@ class Command(object):
     def get_diagnostic_data(self, savefile, progress=None):
         return self.oem.get_diagnostic_data(savefile, progress)
 
+    def get_licenses(self):
+        return self.oem.get_licenses()
+
+    def apply_license(self, filename, progress=None):
+        return self.oem.apply_license(filename, progress)
+
+
 if __name__ == '__main__':
     import os
     import sys

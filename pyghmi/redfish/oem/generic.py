@@ -88,3 +88,9 @@ class OEMHandler(object):
         """
         raise exc.UnsupportedFunctionality(
             'Do not know how to get diagnostic data for this platform')
+
+    def get_licenses(self):
+        raise exc.UnsupportedFunctionality()
+
+    def apply_license(self, filename, progress=None):
+        raise exc.UnsupportedFunctionality()
