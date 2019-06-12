@@ -210,6 +210,9 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         if isinstance(file, str) or isinstance(file, unicode):
             file = open(file, 'wb')
         webclient = self.dupe()
+        dlheaders = self.stdheaders.copy()
+        if 'Accept-Encoding' in dlheaders:
+            del dlheaders['Accept-Encoding']
         webclient.request('GET', url)
         rsp = webclient.getresponse()
         self._currdl = rsp

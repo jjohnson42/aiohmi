@@ -1257,6 +1257,9 @@ class Command(object):
         """
         return self.oem.update_firmware(file, data, progress, bank)
 
+    def get_diagnostic_data(self, savefile, progress=None):
+        return self.oem.get_diagnostic_data(savefile, progress)
+
 if __name__ == '__main__':
     import os
     import sys
