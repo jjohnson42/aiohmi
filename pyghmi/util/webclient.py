@@ -109,6 +109,7 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
                  **kwargs):
         if 'timeout' not in kwargs:
             kwargs['timeout'] = 60
+        self._currdl = None
         self.lastjsonerror = None
         self.broken = False
         self.thehost = host

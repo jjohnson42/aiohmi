@@ -264,6 +264,38 @@ class SMMClient(object):
         self.ipmicmd.xraw_command(netfn=0x32, command=0xa4,
                                   data=[int(bay), 2])
 
+    def get_diagnostic_data(self, savefile, progress=None):
+        rsp = self.ipmicmd.xraw_command(netfn=0x32, command=0xb1, data=[0])
+        if bytearray(rsp['data'])[0] != 0:
+            raise Exception("Service data generation already in progress")
+        rsp = self.ipmicmd.xraw_command(netfn=0x34, command=0x12, data=[0])
+        if bytearray(rsp['data'])[0] != 0:
+            raise Exception("Service data generation already in progress")
+        rsp['data'] = b'\x01'
+        initpct = 1.0
+        if progress:
+                progress({'phase': 'initializing', 'progress': initpct})
+        while bytearray(rsp['data'])[0] != 0:
+            ipmisession.Session.pause(3)
+            initpct += 3.0
+            if initpct > 99.0:
+                initpct = 99.0
+            rsp = self.ipmicmd.xraw_command(netfn=0x34, command=0x12, data=[1])
+            if progress:
+                progress({'phase': 'initializing', 'progress': initpct})
+        if self.wc is None:
+            raise Exception("Failed to connect to web api")
+        url = '/preview/smm-ffdc.tgz?ST1={0}'.format(self.st1)
+        fd = webclient.FileDownloader(self.wc, url, savefile)
+        fd.start()
+        while fd.isAlive():
+            fd.join(1)
+            if progress and self.wc.get_download_progress():
+                progress({'phase': 'download',
+                          'progress': 100 * self.wc.get_download_progress()})
+        if progress:
+            progress({'phase': 'complete'})
+
     def process_fru(self, fru):
         # TODO(jjohnson2): can also get EIOM, SMM, and riser data if warranted
         fru['Serial Number'] = self.ipmicmd.xraw_command(

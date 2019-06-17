@@ -621,6 +621,8 @@ class OEMHandler(generic.OEMHandler):
     def get_diagnostic_data(self, savefile, progress):
         if self.has_xcc:
             return self.immhandler.get_diagnostic_data(savefile, progress)
+        if self.is_fpc:
+            return self.smmhandler.get_diagnostic_data(savefile, progress)
 
     def get_oem_capping_enabled(self):
         if self.has_tsm:
