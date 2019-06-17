@@ -213,7 +213,7 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         dlheaders = self.stdheaders.copy()
         if 'Accept-Encoding' in dlheaders:
             del dlheaders['Accept-Encoding']
-        webclient.request('GET', url)
+        webclient.request('GET', url, headers=dlheaders)
         rsp = webclient.getresponse()
         self._currdl = rsp
         self._dlfile = file
