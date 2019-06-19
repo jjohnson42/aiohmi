@@ -1999,6 +1999,10 @@ class Command(object):
         self.oem_init()
         return self._oem.get_licenses()
 
+    def delete_license(self, name):
+        self.oem_init()
+        return self._oem.delete_license(name)
+
     def save_licenses(self, directory):
         self.oem_init()
         return self._oem.save_licenses(directory)

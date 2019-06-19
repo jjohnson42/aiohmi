@@ -1426,6 +1426,9 @@ class Command(object):
     def get_licenses(self):
         return self.oem.get_licenses()
 
+    def delete_license(self, name):
+        return self.oem.delete_license(name)
+
     def save_licenses(self, directory):
         return self.oem.save_licenses(directory)
 

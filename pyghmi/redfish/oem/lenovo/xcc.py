@@ -710,6 +710,15 @@ class OEMHandler(generic.OEMHandler):
             if lic['status'] == 0:
                 yield {'name': lic['feature']}
 
+    def delete_license(self, name):
+        licdata = self.wc.grab_json_response('/api/providers/imm_fod')
+        for lic in licdata.get('items', [{}])[0].get('keys', []):
+            if lic.get('feature', None) == name:
+                licid = ','.join((str(lic['type']), str(lic['id'])))
+                self.wc.grab_json_response(
+                    '/api/providers/imm_fod', {'FOD_LicenseKeyDelete': licid})
+                break
+
     def save_licenses(self, directory):
         licdata = self.wc.grab_json_response('/api/providers/imm_fod')
         for lic in licdata.get('items', [{}])[0].get('keys', []):

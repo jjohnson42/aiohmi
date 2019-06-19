@@ -1815,6 +1815,15 @@ class XCCClient(IMMClient):
                     self._refresh_token()
                 yield savefile
 
+    def delete_license(self, name):
+        licdata = self.wc.grab_json_response('/api/providers/imm_fod')
+        for lic in licdata.get('items', [{}])[0].get('keys', []):
+            if lic.get('feature', None) == name:
+                licid = ','.join((str(lic['type']), str(lic['id'])))
+                self.wc.grab_json_response(
+                    '/api/providers/imm_fod', {'FOD_LicenseKeyDelete': licid})
+                break
+
     def apply_license(self, filename, progress=None):
         uploadthread = webclient.FileUploader(self.wc, '/upload', filename)
         uploadthread.start()
