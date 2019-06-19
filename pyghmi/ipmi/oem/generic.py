@@ -356,5 +356,8 @@ class OEMHandler(object):
     def get_licenses(self):
         raise exc.UnsupportedFunctionality()
 
+    def save_licenses(self, directory):
+        raise exc.UnsupportedFunctionality()
+
     def apply_license(self, filename, progress=None):
         raise exc.UnsupportedFunctionality()

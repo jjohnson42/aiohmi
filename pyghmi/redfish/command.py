@@ -1426,6 +1426,9 @@ class Command(object):
     def get_licenses(self):
         return self.oem.get_licenses()
 
+    def save_licenses(self, directory):
+        return self.oem.save_licenses(directory)
+
     def apply_license(self, filename, progress=None):
         return self.oem.apply_license(filename, progress)
 

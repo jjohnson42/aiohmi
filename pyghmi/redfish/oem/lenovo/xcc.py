@@ -710,6 +710,23 @@ class OEMHandler(generic.OEMHandler):
             if lic['status'] == 0:
                 yield {'name': lic['feature']}
 
+    def save_licenses(self, directory):
+        licdata = self.wc.grab_json_response('/api/providers/imm_fod')
+        for lic in licdata.get('items', [{}])[0].get('keys', []):
+            licid = ','.join((str(lic['type']), str(lic['id'])))
+            rsp = self.wc.grab_json_response(
+                '/api/providers/imm_fod', {'FOD_LicenseKeyExport': licid})
+            filename = rsp.get('FileName', None)
+            if filename:
+                url = '/download/' + filename
+                savefile = os.path.join(directory, filename)
+                fd = webclient.FileDownloader(self.wc, url, savefile)
+                fd.start()
+                while fd.isAlive():
+                    fd.join(1)
+                    self._refresh_token()
+                yield savefile
+
     def apply_license(self, filename, progress=None):
         uploadthread = webclient.FileUploader(self.wc, '/upload', filename)
         uploadthread.start()
