@@ -1242,14 +1242,16 @@ class Command(object):
             return
         currtime = bmcinfo.get('DateTime', None)
         correction = timedelta(0)
+        utz = tz.tzoffset('', 0)
+        ltz = tz.gettz()
         if currtime:
             currtime = parse_time(currtime)
         if currtime:
-            now = datetime.now(tz.tzoffset('', 0))
+            now = datetime.now(utz)
             try:
                 correction = now - currtime
             except TypeError:
-                correction = now - currtime.replace(tzinfo=tz.tzoffset('', 0))
+                correction = now - currtime.replace(tzinfo=utz)
         lurls = self._do_web_request(lsurl).get('Members', [])
         for lurl in lurls:
             lurl = lurl['@odata.id']
@@ -1282,7 +1284,7 @@ class Command(object):
             for log in entries.get('Members', []):
                 record = {}
                 entime = parse_time(log.get('Created', '')) + correction
-                entime = entime.astimezone(tz.gettz())
+                entime = entime.astimezone(ltz)
                 record['timestamp'] = entime.strftime('%Y-%m-%dT%H:%M:%S')
                 record['message'] = log.get('Message', None)
                 record['severity'] = _healthmap.get(
