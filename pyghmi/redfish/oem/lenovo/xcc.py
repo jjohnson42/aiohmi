@@ -708,7 +708,9 @@ class OEMHandler(generic.OEMHandler):
         licdata = self.wc.grab_json_response('/api/providers/imm_fod')
         for lic in licdata.get('items', [{}])[0].get('keys', []):
             if lic['status'] == 0:
-                yield {'name': lic['feature']}
+                yield {'name': lic['feature'], 'state': 'Active'}
+            if lic['status'] == 10:
+                yield {'name': lic['feature'], 'state': 'Missing required license'}
 
     def delete_license(self, name):
         licdata = self.wc.grab_json_response('/api/providers/imm_fod')
