@@ -482,7 +482,7 @@ class IMMClient(object):
                     fwu = self.wc.grab_json_response(self.ADP_FU_URL,
                     referer=self.adp_referer)
                 else:
-                    fwu = None
+                    fwu = {}
                 if adapterdata:
                     self.datacache['lenovo_cached_adapters_fu'] = (
                         (adapterdata, fwu), util._monotonic_time())
@@ -520,7 +520,7 @@ class IMMClient(object):
                             except ValueError:
                                 pass
                         yield ('{0} {1}'.format(aname, fname), bdata)
-                for fwi in fwu.get('items'):
+                for fwi in fwu.get('items', []):
                     if fwi.get('key', -1) == adata.get('key', -2):
                         if fwi.get('fw_status', 0) == 2:
                             bdata = {}
