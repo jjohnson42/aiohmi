@@ -18,7 +18,7 @@ from pyghmi.redfish.oem.lenovo import xcc
 
 def get_handler(sysinfo, sysurl, webclient, cache):
     leninf = sysinfo.get('Oem', {}).get('Lenovo', {})
-    if 'FrontPanelUSB' in leninf:
+    if 'FrontPanelUSB' in leninf or sysinfo.get('SKU', '').startswitch('7X58'):
         return xcc.OEMHandler(sysinfo, sysurl, webclient, cache)
     else:
         return generic.OEMHandler(sysinfo, sysurl, webclient, cache)
