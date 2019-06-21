@@ -20,8 +20,9 @@ def parse_time(timeval):
     if timeval is None:
         return None
     try:
-        retval = datetime.strptime(timeval, '%Y-%m-%dT%H:%M:%SZ')
-        return retval.replace(tzinfo=tz.tzutc())
+        if '+' not in timeval and len(timeval.split('-')) <= 3:
+            retval = datetime.strptime(timeval, '%Y-%m-%dT%H:%M:%SZ')
+            return retval.replace(tzinfo=tz.tzutc())
     except ValueError:
         pass
     try:
