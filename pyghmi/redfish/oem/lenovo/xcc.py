@@ -497,7 +497,7 @@ class OEMHandler(generic.OEMHandler):
             self._refresh_token()
             self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
                 {'UPD_WebCancel': 1}))
-            self.weblogout()
+            #self.weblogout()
             raise
         self.updating = False
         #self.weblogout()
