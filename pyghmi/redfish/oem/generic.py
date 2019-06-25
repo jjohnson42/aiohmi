@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import os
 import pyghmi.exceptions as exc
 
@@ -69,7 +70,15 @@ class OEMHandler(object):
         wc = self.webclient.dupe()
         res = wc.grab_json_response_with_status(url, payload, method=method)
         if res[1] < 200 or res[1] >= 300:
-            raise exc.PyghmiException(res[0])
+            try:
+                info = json.loads(res[0])
+                errmsg = [
+                    x.get('Message', x['MessageId']) for x in info.get(
+                        'error', {}).get('@Message.ExtendedInfo', {})]
+                errmsg = ','.join(errmsg)
+                raise exc.RedfishError(errmsg)
+            except (ValueError, KeyError):
+                raise exc.PyghmiException(str(url) + ":" + res[0])
         if payload is None and method is None:
             self._urlcache[url] = {
                 'contents': res[0],
