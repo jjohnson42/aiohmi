@@ -790,7 +790,11 @@ class Command(object):
         return addon, valtodisplay, displaytoval, reg
 
     def get_system_configuration(self, hideadvanced=True):
+        return self._getsyscfg()[0]
+
+    def _getsyscfg(self):
         biosinfo = self._do_web_request(self._biosurl, cache=False)
+        reginfo = None
         extrainfo = {}
         valtodisplay = {}
         self.attrdeps = []
@@ -839,7 +843,7 @@ class Command(object):
                 val['active'] = currval
             val.update(**extrainfo.get(setting, {}))
             currsettings[setting] = val
-        return currsettings
+        return currsettings, reginfo
 
     def clear_system_configuration(self):
         """Clear the BIOS/UEFI configuration
@@ -853,7 +857,7 @@ class Command(object):
         self._do_web_request(rb, {'Action': 'Bios.ResetBios'})
 
     def set_system_configuration(self, changeset):
-        currsettings = self.get_system_configuration()
+        currsettings, reginfo = self._getsyscfg()
         rawsettings = self._do_web_request(self._biosurl, cache=False)
         rawsettings = rawsettings.get('Attributes', {})
         pendingsettings = self._do_web_request(self._setbiosurl)
@@ -899,6 +903,8 @@ class Command(object):
                                 '({2})'.format(
                                     changeval, change,
                                     ','.join(currsettings[change]['possible'])))
+            if changeset[change] in reginfo[2].get(change, {}):
+                changeset[change] = reginfo[2][change][changeset[change]]
         redfishsettings = {'Attributes': changeset}
         self._do_web_request(self._setbiosurl, redfishsettings, 'PATCH')
 
