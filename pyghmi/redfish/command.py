@@ -1362,6 +1362,9 @@ class Command(object):
                 if vminfo['Image']:
                     imageurl = vminfo['Image'].replace('/' + vminfo['ImageName'], '')
                     yield media.Media(vminfo['ImageName'], imageurl)
+                elif vminfo['Inserted'] and vminfo['ImageName']:
+                    yield media.Media(vminfo['ImageName'])
+
 
     def get_storage_configuration(self):
         """"Get storage configuration data
