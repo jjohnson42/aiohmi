@@ -269,6 +269,23 @@ class Command(object):
         sroot = self._do_web_request('/redfish/v1/')
         return sroot.get('AccountService', {}).get('@odata.id', None)
 
+    @property
+    def _validroles(self):
+        okroles = set([])
+        roleurl = self._do_web_request(self._accountserviceurl).get('Roles', {}).get('@odata.id', None)
+        if roleurl:
+            roles = self._do_web_request(roleurl).get('Members', [])
+            for role in roles:
+                role = role.get('@odata.id', '')
+                if not role:
+                    continue
+                okroles.add(role.split('/')[-1])
+        if not okroles:
+            okroles.add('Administrator')
+            okroles.add('Operator')
+            okroles.add('ReadOnly')
+        return okroles
+
     def get_users(self):
         """get list of users and channel access information (helper)
 
@@ -384,6 +401,10 @@ class Command(object):
         if not accinfo:
             raise Exception("Unable to find indicated uid")
         etag = accinfo[1].get('@odata.etag', None)
+        for role in  self._validroles:
+            if role.lower() == privilege_level.lower():
+                privilege_level = role
+                break
         self._do_web_request(accinfo[0], {'RoleId': privilege_level}, method='PATCH', etag=etag)
 
     def create_user(self, uid, name, password, privilege_level='ReadOnly'):
@@ -395,6 +416,10 @@ class Command(object):
         accinfo = self._account_url_info_by_id(uid)
         if not accinfo:
             raise Exception("Unable to find indicated uid")
+        for role in  self._validroles:
+            if role.lower() == privilege_level.lower():
+                privilege_level = role
+                break
         etag = accinfo[1].get('@odata.etag', None)
         userinfo = {
             "UserName": name,
