@@ -1418,7 +1418,16 @@ class Command(object):
         if vmcoll:
             vmlist = self._do_web_request(vmcoll)
             vmurls = [x['@odata.id'] for x in vmlist.get('Members', [])]
-        return self.oem.attach_remote_media(url, username, password, vmurls)
+        try:
+            self.oem.attach_remote_media(url, username, password, vmurls)
+        except exc.BypassGenericBehavior:
+            return
+        for vmurl in vmurls:
+            vminfo = self._do_web_request(vmurl, cache=False)
+            if vminfo['ConnectedVia'] != 'NotConnected':
+                continue
+            self._do_web_request(vmurl, {'Image': url, 'Inserted': True}, 'PATCH')
+            break
 
     def detach_remote_media(self):
         bmcinfo = self._do_web_request(self._bmcurl)
@@ -1429,7 +1438,7 @@ class Command(object):
             for vminfo in self._do_bulk_requests(vmurls):
                 vminfo, currl = vminfo
                 if vminfo['Image']:
-                    self._do_web_request(currl, {'Image': None}, method='PATCH')
+                    self._do_web_request(currl, {'Image': None, 'Inserted': False}, method='PATCH')
 
     def upload_media(self, filename, progress=None):
         """Upload a file to be hosted on the target BMC

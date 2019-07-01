@@ -436,6 +436,7 @@ class OEMHandler(generic.OEMHandler):
             if vminfo['ConnectedVia'] != 'NotConnected':
                 continue
             self._do_web_request(vmurl, {'Image': url, 'Inserted': True}, 'PATCH')
+            raise pygexc.BypassGenericBehavior()
             break
 
     def upload_media(self, filename, progress=None):
