@@ -1765,13 +1765,17 @@ class Command(object):
                 ipmi_msg (bool)
                 privilege_level: (str)[callback, user, operatorm administrator,
                                        proprietary, no_access]
+            expiration:
+                None for 'unknown', 0 for no expiry, days to expire otherwise.
         """
         if channel is None:
             channel = self.get_network_channel()
         name = self.get_user_name(uid)
         access = self.get_user_access(uid, channel)
+        self.oem_init()
+        expiration = self._oem.get_user_expiration(uid)
         data = {'name': name, 'uid': uid, 'channel': channel,
-                'access': access['access']}
+                'access': access['access'], 'expiration': expiration}
         return data
 
     def get_name_uids(self, name, channel=None):

@@ -980,7 +980,12 @@ class OEMHandler(generic.OEMHandler):
         if self.has_xcc:
             return self.immhandler.get_licenses()
         return super(OEMHandler, self).get_licenses()
-    
+
+    def get_user_expiration(self, uid):
+        if self.has_xcc:
+            return self.immhandler.get_user_expiration(uid)
+        return None
+
     def delete_license(self, name):
         if self.has_xcc:
             return self.immhandler.delete_license(name)

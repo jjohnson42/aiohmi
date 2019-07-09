@@ -1836,3 +1836,14 @@ class XCCClient(IMMClient):
             self.wc.grab_json_response('/api/providers/imm_fod',
                                        {'FOD_LicenseKeyInstall': licpath})
         return self.get_licenses()
+
+    def get_user_expiration(self, uid):
+        uid = uid - 1
+        userinfo = self.wc.grab_json_response('/api/dataset/imm_users')
+        for user in userinfo['items'][0]['users']:
+            if user['users_user_id'] == uid:
+                days = user['users_pass_left_days']
+                if days == 366:
+                    return 0
+                else:
+                    return days
