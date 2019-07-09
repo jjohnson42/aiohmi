@@ -316,6 +316,7 @@ class Command(object):
                     currid = accinfo.get('Id', None)
                     if currname:
                         names[currid] = {'name': currname, 'uid': currid,
+                            'expiration': self.oem.get_user_expiration(currid),
                             'access': {
                                 'privilege_level': accinfo.get(
                                     'RoleId', 'Unknown')}}
@@ -333,6 +334,7 @@ class Command(object):
                     accinfo = self._do_web_request(account['@odata.id'])
                     currid = accinfo.get('Id', None)
                     if str(currid) == str(uid):
+                        accinfo['expiration'] = self.oem.get_user_expiration(uid)
                         return account['@odata.id'], accinfo
 
     def get_user(self, uid):
@@ -349,6 +351,7 @@ class Command(object):
                     currid = accinfo.get('Id', None)
                     if str(currid) == str(uid):
                         return {'name': currname, 'uid': uid,
+                                'expiration': self.oem.get_user_expiration(uid),
                                 'access': {
                                     'privilege_level': accinfo.get(
                                         'RoleId', 'Unknown')}}

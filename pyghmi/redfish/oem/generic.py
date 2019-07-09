@@ -109,3 +109,6 @@ class OEMHandler(object):
 
     def apply_license(self, filename, progress=None):
         raise exc.UnsupportedFunctionality()
+
+    def get_user_expiration(self, uid):
+        return None

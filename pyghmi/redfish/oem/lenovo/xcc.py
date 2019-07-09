@@ -749,3 +749,13 @@ class OEMHandler(generic.OEMHandler):
             self.wc.grab_json_response('/api/providers/imm_fod',
                                        {'FOD_LicenseKeyInstall': licpath})
         return self.get_licenses()
+
+    def get_user_expiration(self, uid):
+        userinfo = self.wc.grab_json_response('/api/dataset/imm_users')
+        for user in userinfo['items'][0]['users']:
+            if str(user['users_user_id']) == str(uid):
+                days = user['users_pass_left_days']
+                if days == 366:
+                    return 0
+                else:
+                    return days
