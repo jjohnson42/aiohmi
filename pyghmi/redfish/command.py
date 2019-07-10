@@ -731,7 +731,7 @@ class Command(object):
 
     def reset_bmc(self):
         self._do_web_request(self._bmcreseturl,
-                             {'ResetType': 'ForceRestart'})
+                             {'ResetType': 'GracefulRestart'})
 
     def set_identify(self, on=True, blink=None):
         self._do_web_request(
