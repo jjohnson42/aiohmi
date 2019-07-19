@@ -768,7 +768,7 @@ class Command(object):
                 dimmfound = False
                 for mem in self._do_web_request(
                         self.sysinfo['Memory']['@odata.id'])['Members']:
-                    dimminfo = self._do_web_request(mem)
+                    dimminfo = self._do_web_request(mem['@odata.id'])
                     if dimminfo['Status']['Health'] not in ('OK', None):
                         summary['badreadings'].append(SensorReading(dimminfo))
                         dimmfound = True
