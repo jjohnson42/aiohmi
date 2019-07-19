@@ -1,7 +1,7 @@
 # vim: tabstop=4 shiftwidth=4 softtabstop=4
 # coding=utf8
 
-# Copyright 2016-2018 Lenovo
+# Copyright 2016-2019 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1729,6 +1729,15 @@ class XCCClient(IMMClient):
 
     def get_health(self, summary):
         wc = self.get_webclient(False)
+        if not wc:
+            summary['health'] = pygconst.Health.Critical;
+            summary['badreadings'].append(
+                sdr.SensorReading({'name': 'HTTPS Service',
+                                   'states': ['Unreachable'],
+                                   'state_ids': [3],
+                                   'health': pygconst.Health.Critical,
+                                   'type': 'BMC'}, ''))
+            raise pygexc.BypassGenericBehavior()
         rsp = wc.grab_json_response('/api/providers/imm_active_events')
         if 'items' in rsp and len(rsp['items']) == 0:
             ledcheck = self.wc.grab_json_response(
