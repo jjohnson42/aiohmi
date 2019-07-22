@@ -940,6 +940,7 @@ class Command(object):
                               ipv4_gateway=None):
         patch = {}
         ipinfo = {}
+        dodhcp = None
         netmask = None
         if ipv4_address:
             if '/' in ipv4_address:
@@ -953,12 +954,22 @@ class Command(object):
             patch['IPv4StaticAddresses'] = [ipinfo]
             ipinfo['Gateway'] = ipv4_gateway
         if ipv4_configuration.lower() == 'dhcp':
+            dodhcp = True
             patch['DHCPv4'] = {'DHCPEnabled': True}
         elif (ipv4_configuration == 'static'
               or 'IPv4StaticAddresses' in patch):
+            dodhcp = False
             patch['DHCPv4'] = {'DHCPEnabled': False}
         if patch:
-            self._do_web_request(self._bmcnicurl, patch, 'PATCH')
+            try:
+                self._do_web_request(self._bmcnicurl, patch, 'PATCH')
+            except exc.RedfishError as e:
+                patch = {'IPv4Addresses': [ipinfo]}
+                if dodhcp:
+                    ipinfo['AddressOrigin'] = 'DHCP'
+                elif dodhcp is not None:
+                    ipinfo['AddressOrigin'] = 'Static'
+                self._do_web_request(self._bmcnicurl, patch, 'PATCH')
 
     def get_net_configuration(self):
         netcfg = self._do_web_request(self._bmcnicurl, cache=False)
