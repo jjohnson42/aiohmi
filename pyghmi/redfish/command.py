@@ -996,6 +996,10 @@ class Command(object):
         netcfg = self._do_web_request(self._bmcnicurl)
         return netcfg['HostName']
 
+    def set_hostname(self, hostname):
+        self._do_web_request(self._bmcnicurl,
+                             {'HostName': hostname}, 'PATCH')
+
     def get_firmware(self, components=()):
         try:
             for firminfo in self.oem.get_firmware_inventory(components):
