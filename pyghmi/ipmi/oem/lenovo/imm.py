@@ -1836,14 +1836,24 @@ class XCCClient(IMMClient):
                 break
 
     def apply_license(self, filename, progress=None):
+        license_errors = {
+            310: "License is for a different model of system",
+            311: "License is for a different system serial number",
+            312: "License is invalid",
+            313: "License is expired",
+            314: "License usage limit reached",
+        }
         uploadthread = webclient.FileUploader(self.wc, '/upload', filename)
         uploadthread.start()
         uploadthread.join()
         rsp = json.loads(uploadthread.rsp)
         licpath = rsp.get('items', [{}])[0].get('path', None)
         if licpath:
-            self.wc.grab_json_response('/api/providers/imm_fod',
+            rsp = self.wc.grab_json_response('/api/providers/imm_fod',
                                        {'FOD_LicenseKeyInstall': licpath})
+            if rsp.get('return', 0) in license_errors:
+                raise pygexc.InvalidParameterValue(
+                    license_errors[rsp['return']])
         return self.get_licenses()
 
     def get_user_expiration(self, uid):
