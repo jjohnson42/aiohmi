@@ -1332,8 +1332,14 @@ class Command(object):
                         newloginfo = self._do_web_request(lurl, cache=False)
             for log in entries.get('Members', []):
                 record = {}
-                entime = parse_time(log.get('Created', '')) + correction
-                entime = entime.astimezone(ltz)
+                parsedtime = parse_time(log.get('Created', ''))
+                if parsedtime:
+                    entime = parsedtime + correction
+                    entime = entime.astimezone(ltz)
+                    entime = entime.strftime('%Y-%m-%dT%H:%M:%S')
+                else:
+                    record['timestamp'] = log.get('Created', '')
+
                 record['timestamp'] = entime.strftime('%Y-%m-%dT%H:%M:%S')
                 record['message'] = log.get('Message', None)
                 record['severity'] = _healthmap.get(
