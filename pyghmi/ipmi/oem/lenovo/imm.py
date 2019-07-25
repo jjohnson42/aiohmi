@@ -1728,7 +1728,10 @@ class XCCClient(IMMClient):
                 break
 
     def get_health(self, summary):
-        wc = self.get_webclient(False)
+        try:
+            wc = self.get_webclient(False)
+        except Exception:
+            wc = None
         if not wc:
             summary['health'] = pygconst.Health.Critical;
             summary['badreadings'].append(
