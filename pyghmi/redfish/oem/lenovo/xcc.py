@@ -438,6 +438,9 @@ class OEMHandler(generic.OEMHandler):
             self._do_web_request(vmurl, {'Image': url, 'Inserted': True}, 'PATCH')
             raise pygexc.BypassGenericBehavior()
             break
+        else:
+            raise pygexc.InvalidParameterValue(
+                'XCC does not have required license for operation')
 
     def upload_media(self, filename, progress=None):
         xid = random.randint(0, 1000000000)
