@@ -1338,10 +1338,9 @@ class Command(object):
                 if parsedtime:
                     entime = parsedtime + correction
                     entime = entime.astimezone(ltz)
-                    entime = entime.strftime('%Y-%m-%dT%H:%M:%S')
+                    record['timestamp'] = entime.strftime('%Y-%m-%dT%H:%M:%S')
                 else:
                     record['timestamp'] = log.get('Created', '')
-                record['timestamp'] = entime.strftime('%Y-%m-%dT%H:%M:%S')
                 record['message'] = log.get('Message', None)
                 record['severity'] = _healthmap.get(
                     entries.get('Severity', 'Warning'), const.Health.Critical)
