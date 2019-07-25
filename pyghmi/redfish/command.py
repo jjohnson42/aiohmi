@@ -1309,6 +1309,7 @@ class Command(object):
             entriesurl = loginfo.get('Entries', {}).get('@odata.id', None)
             if not entriesurl:
                 continue
+            logid = loginfo.get('Id', '')
             entries = self._do_web_request(entriesurl, cache=False)
             if clear:
                 # The clear is against the log service etag, not entries
@@ -1332,6 +1333,7 @@ class Command(object):
                         newloginfo = self._do_web_request(lurl, cache=False)
             for log in entries.get('Members', []):
                 record = {}
+                record['log_id'] = logid
                 parsedtime = parse_time(log.get('Created', ''))
                 if parsedtime:
                     entime = parsedtime + correction
@@ -1339,7 +1341,6 @@ class Command(object):
                     entime = entime.strftime('%Y-%m-%dT%H:%M:%S')
                 else:
                     record['timestamp'] = log.get('Created', '')
-
                 record['timestamp'] = entime.strftime('%Y-%m-%dT%H:%M:%S')
                 record['message'] = log.get('Message', None)
                 record['severity'] = _healthmap.get(
