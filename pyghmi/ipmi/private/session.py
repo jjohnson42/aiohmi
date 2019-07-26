@@ -583,6 +583,9 @@ class Session(object):
         self.confalgo = 0
         self.aeskey = None
         self.integrityalgo = 0
+        self.attemptedhash = 256
+        self.currhashlib = None
+        self.currhashlen = 0
         self.k1 = None
         self.rmcptag = 1
         self.lastpayload = None
@@ -905,7 +908,7 @@ class Session(object):
                 # specification followed
                 message += hmac.new(self.k1,
                                     bytes(message[4:]),
-                                    hashlib.sha1).digest()[:12]  # SHA1-96
+                                    self.currhashlib).digest()[:self.currhashlen]
                 # per RFC2404 truncates to 96 bits
         self.netpacket = message
         # advance idle timer since we don't need keepalive while sending
@@ -1049,13 +1052,28 @@ class Session(object):
             0, 0,  # reserved
         ])
         data += struct.pack("<I", self.localsid)
-        data += bytearray([
-            0, 0, 0, 8, 1, 0, 0, 0,  # table 13-17, SHA-1
-            1, 0, 0, 8, 1, 0, 0, 0,  # SHA-1 integrity
-            2, 0, 0, 8, 1, 0, 0, 0,  # AES privacy
-            # 2,0,0,8,0,0,0,0, #no privacy confalgo
-        ])
+        # auth 3 sha256
+        # integrity... 4 = sha256
+        if self.attemptedhash == 1:
+            data += bytearray([
+                0, 0, 0, 8, 1, 0, 0, 0,  # table 13-17, SHA-1
+                1, 0, 0, 8, 1, 0, 0, 0,  # SHA-1 integrity
+                2, 0, 0, 8, 1, 0, 0, 0,  # AES privacy
+                # 2,0,0,8,0,0,0,0, #no privacy confalgo
+            ])
+            self.currhashlib = hashlib.sha1
+            self.currhashlen = 12
+        else:
+            data += bytearray([
+                0, 0, 0, 8, 3, 0, 0, 0,  # table 13-17, SHA-256
+                1, 0, 0, 8, 4, 0, 0, 0,  # SHA-256-128 integrity
+                2, 0, 0, 8, 1, 0, 0, 0,  # AES privacy
+                # 2,0,0,8,0,0,0,0, #no privacy confalgo
+            ])
+            self.currhashlib = hashlib.sha256
+            self.currhashlen = 16
         self.sessioncontext = 'OPENSESSION'
+        self.lastpayload = None
         self.send_payload(
             payload=data,
             payload_type=constants.payload_types['rmcpplusopenreq'])
@@ -1357,11 +1375,11 @@ class Session(object):
             encrypted = 0
             if data[5] & 0b10000000:
                 encrypted = 1
-            authcode = data[-12:]
+            authcode = data[-self.currhashlen:]
             if self.k1 is None:  # we are in no shape to process a packet now
                 return
             expectedauthcode = hmac.new(
-                self.k1, data[4:-12], hashlib.sha1).digest()[:12]
+                self.k1, data[4:-self.currhashlen], self.currhashlib).digest()[:self.currhashlen]
             if authcode != expectedauthcode:
                 return  # BMC failed to assure integrity to us, drop it
             sid = struct.unpack("<I", bytes(data[6:10]))[0]
@@ -1418,6 +1436,10 @@ class Session(object):
         if data[0] != self.rmcptag:
             return -9  # use rmcp tag to track and reject stale responses
         if data[1] != 0:  # response code...
+            if self.attemptedhash == 256:
+                self.attemptedhash = 1
+                self._open_rmcpplus_request()
+                return
             if data[1] in constants.rmcp_codes:
                 errstr = constants.rmcp_codes[data[1]]
             else:
@@ -1486,7 +1508,7 @@ class Session(object):
             self.randombytes + self.remoterandombytes + self.remoteguid +\
             struct.pack("2B", self.nameonly | self.privlevel, userlen) +\
             self.userid
-        expectedhash = hmac.new(self.password, hmacdata, hashlib.sha1).digest()
+        expectedhash = hmac.new(self.password, hmacdata, self.currhashlib).digest()
         hashlen = len(expectedhash)
         givenhash = struct.pack("%dB" % hashlen, *data[40:hashlen + 40])
         if givenhash != expectedhash:
@@ -1499,9 +1521,9 @@ class Session(object):
                             self.randombytes + self.remoterandombytes +
                             struct.pack("2B", self.nameonly | self.privlevel,
                                         userlen) +
-                            self.userid, hashlib.sha1).digest()
-        self.k1 = hmac.new(self.sik, b'\x01' * 20, hashlib.sha1).digest()
-        self.k2 = hmac.new(self.sik, b'\x02' * 20, hashlib.sha1).digest()
+                            self.userid, self.currhashlib).digest()
+        self.k1 = hmac.new(self.sik, b'\x01' * 20, self.currhashlib).digest()
+        self.k2 = hmac.new(self.sik, b'\x02' * 20, self.currhashlib).digest()
         self.aeskey = self.k2[0:16]
         self.sessioncontext = "EXPECTINGRAKP4"
         self.lastpayload = None
@@ -1518,7 +1540,7 @@ class Session(object):
                         len(self.userid)) +\
             self.userid
 
-        authcode = hmac.new(self.password, hmacdata, hashlib.sha1).digest()
+        authcode = hmac.new(self.password, hmacdata, self.currhashlib).digest()
         payload += list(struct.unpack("%dB" % len(authcode), authcode))
         self.send_payload(
             payload=payload, payload_type=constants.payload_types['rakp3'])
@@ -1554,14 +1576,14 @@ class Session(object):
             struct.pack("<I", self.pendingsessionid) +\
             self.remoteguid
         expectedauthcode = hmac.new(self.sik, hmacdata,
-                                    hashlib.sha1).digest()[:12]
+                                    self.currhashlib).digest()[:self.currhashlen]
         aclen = len(expectedauthcode)
         authcode = struct.pack("%dB" % aclen, *data[8:aclen + 8])
         if authcode != expectedauthcode:
             self.onlogon({'error': "Invalid RAKP4 integrity code (wrong Kg?)"})
             return
         self.sessionid = self.pendingsessionid
-        self.integrityalgo = 'sha1'
+        self.integrityalgo = self.attemptedhash
         self.confalgo = 'aes'
         self.sequencenumber = 1
         self.sessioncontext = 'ESTABLISHED'
