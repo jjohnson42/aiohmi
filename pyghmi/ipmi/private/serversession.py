@@ -61,6 +61,8 @@ class ServerSession(ipmisession.Session):
                  bmc):
         # begin conversation per RMCP+ open session request
         self.uuid = uuid
+        self.currhashlib = hashlib.sha1
+        self.currhashlen = 12
         self.rqaddr = constants.IPMI_BMC_ADDRESS
         self.authdata = authdata
         self.servermode = True
