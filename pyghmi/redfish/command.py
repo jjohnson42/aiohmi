@@ -776,14 +776,14 @@ class Command(object):
                     meminfo = self.sysinfo['MemorySummary']
                     meminfo['Name'] = 'Memory'
                     summary['badreadings'].append(SensorReading(meminfo))
-                for adapter in self.sysinfo['PCIeDevices']:
-                    adpinfo = self._do_web_request(adapter['@odata.id'])
-                    if adpinfo['Status']['Health'] not in ('OK', None):
-                        summary['badreadings'].append(SensorReading(adpinfo))
-                for fun in self.sysinfo['PCIeFunctions']:
-                    funinfo = self._do_web_request(fun['@odata.id'])
-                    if funinfo['Status']['Health'] not in ('OK', None):
-                        summary['badreadings'].append(SensorReading(funinfo))
+            for adapter in self.sysinfo['PCIeDevices']:
+                adpinfo = self._do_web_request(adapter['@odata.id'])
+                if adpinfo['Status']['Health'] not in ('OK', None):
+                    summary['badreadings'].append(SensorReading(adpinfo))
+            for fun in self.sysinfo['PCIeFunctions']:
+                funinfo = self._do_web_request(fun['@odata.id'])
+                if funinfo['Status']['Health'] not in ('OK', None):
+                    summary['badreadings'].append(SensorReading(funinfo))
         return summary
 
     def _get_biosreg(self, url):
