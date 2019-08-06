@@ -79,6 +79,7 @@ boot_devices_read = {
 
 _healthmap = {
     'Critical': const.Health.Critical,
+    'Unknown': const.Health.Warning,
     'Warning': const.Health.Warning,
     'OK': const.Health.Ok,
 }
@@ -752,24 +753,41 @@ class Command(object):
     def get_health(self, verbose=True):
         health = self.sysinfo.get('Status', {})
         health = health.get('HealthRollup', health.get('Health', 'Unknown'))
+        warnunknown = health == 'Unknown'
         health = _healthmap[health]
         summary = {'badreadings': [], 'health': health}
         if health > 0 and verbose:
             # now have to manually peruse all psus, fans, processors, ram,
             # storage
-            procurl = self.sysinfo.get('Processors', {}).get('@odata.id', None)
-            if procurl:
-                for cpu in self._do_web_request(procurl).get('Members', []):
-                    cinfo = self._do_web_request(cpu['@odata.id'])
-                    if cinfo['Status']['Health'] != 'OK':
-                        summary['badreadings'].append(SensorReading(cinfo))
-            if self.sysinfo.get('MemorySummary', {}).get('Status', {}).get(
-                    'HealthRollup', 'OK') not in ('OK', None):
+            procsumstatus = self.sysinfo.get('ProcessorSummary', {}).get('Status', {})
+            procsumstatus = procsumstatus.get('HealthRollup', procsumstatus.get('Health', None))
+            if procsumstatus != 'OK':
+                procfound = False
+                procurl = self.sysinfo.get('Processors', {}).get('@odata.id', None)
+                if procurl:
+                    for cpu in self._do_web_request(procurl).get('Members', []):
+                        cinfo = self._do_web_request(cpu['@odata.id'])
+                        if cinfo.get('Status', {}).get('State', None) == 'Absent':
+                            continue
+                        if cinfo.get('Status', {}).get(
+                                'Health', None) not in ('OK', None):
+                            procfound = True
+                            summary['badreadings'].append(SensorReading(cinfo))
+                if not procfound:
+                    procinfo = self.sysinfo['ProcessorSummary']
+                    procinfo['Name'] = 'Processors'
+                    summary['badreadings'].append(SensorReading(procinfo))
+            memsumstatus = self.sysinfo.get('MemorySummary', {}).get('Status', {})
+            memsumstatus = memsumstatus.get('HealthRollup', memsumstatus.get('Health', None))
+            if memsumstatus != 'OK':
                 dimmfound = False
                 for mem in self._do_web_request(
                         self.sysinfo['Memory']['@odata.id'])['Members']:
                     dimminfo = self._do_web_request(mem['@odata.id'])
-                    if dimminfo['Status']['Health'] not in ('OK', None):
+                    if dimminfo.get('Status', {}).get('State', None) == 'Absent':
+                        continue
+                    if dimminfo.get('Status', {}).get(
+                            'Health', None) not in ('OK', None):
                         summary['badreadings'].append(SensorReading(dimminfo))
                         dimmfound = True
                 if not dimmfound:
@@ -784,6 +802,10 @@ class Command(object):
                 funinfo = self._do_web_request(fun['@odata.id'])
                 if funinfo['Status']['Health'] not in ('OK', None):
                     summary['badreadings'].append(SensorReading(funinfo))
+        if warnunknown and not summary['badreadings']:
+            unkinf = SensorReading({'Name': 'BMC', 'Status': {'Health': 'Unknown'}})
+            unkinf.states = ['System does not provide health information']
+            summary['badreadings'].append(unkinf)
         return summary
 
     def _get_biosreg(self, url):
