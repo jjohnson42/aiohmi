@@ -844,10 +844,10 @@ class Command(object):
 
     def _getsyscfg(self):
         biosinfo = self._do_web_request(self._biosurl, cache=False)
-        reginfo = None
+        reginfo = ({}, {}, {}, {})
         extrainfo = {}
         valtodisplay = {}
-        self.attrdeps = []
+        self.attrdeps = {'Dependencies': [], 'Attributes': []}
         if 'AttributeRegistry' in biosinfo:
             overview = self._do_web_request('/redfish/v1/')
             reglist = overview['Registries']['@odata.id']
