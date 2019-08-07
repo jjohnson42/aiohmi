@@ -665,30 +665,35 @@ class Command(object):
     def _sensormap(self):
         if not self._varsensormap:
             for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
-                chassisurl = chassis['@odata.id']
-                chassisinfo = self._do_web_request(chassisurl)
-                powurl = chassisinfo.get('Power', {}).get('@odata.id', '')
-                if powurl:
-                    powinf = self._do_web_request(powurl)
-                    for voltage in powinf.get('Voltages', []):
-                        if 'Name' in voltage:
-                            self._varsensormap[voltage['Name']] = {
-                                'name': voltage['Name'], 'url': powurl,
-                                'type': 'Voltage'}
-                thermurl = chassisinfo.get('Thermal', {}).get('@odata.id', '')
-                if thermurl:
-                    therminf = self._do_web_request(thermurl)
-                    for fan in therminf.get('Fans', []):
-                        if 'Name' in fan:
-                            self._varsensormap[fan['Name']] = {
-                                'name': fan['Name'], 'type': 'Fan',
-                                'url': thermurl}
-                    for temp in therminf.get('Temperatures', []):
-                        if 'Name' in temp:
-                            self._varsensormap[temp['Name']] = {
-                                'name': temp['Name'], 'type': 'Temperature',
-                                'url': thermurl}
+                self._mapchassissensors(chassis)
         return self._varsensormap
+
+    def _mapchassissensors(self, chassis):
+        chassisurl = chassis['@odata.id']
+        chassisinfo = self._do_web_request(chassisurl)
+        powurl = chassisinfo.get('Power', {}).get('@odata.id', '')
+        if powurl:
+            powinf = self._do_web_request(powurl)
+            for voltage in powinf.get('Voltages', []):
+                if 'Name' in voltage:
+                    self._varsensormap[voltage['Name']] = {
+                        'name': voltage['Name'], 'url': powurl,
+                        'type': 'Voltage'}
+        thermurl = chassisinfo.get('Thermal', {}).get('@odata.id', '')
+        if thermurl:
+            therminf = self._do_web_request(thermurl)
+            for fan in therminf.get('Fans', []):
+                if 'Name' in fan:
+                    self._varsensormap[fan['Name']] = {
+                        'name': fan['Name'], 'type': 'Fan',
+                        'url': thermurl}
+            for temp in therminf.get('Temperatures', []):
+                if 'Name' in temp:
+                    self._varsensormap[temp['Name']] = {
+                        'name': temp['Name'], 'type': 'Temperature',
+                        'url': thermurl}
+        for subchassis in chassisinfo.get('Links', {}).get('Contains', []):
+            self._mapchassissensors(subchassis)
 
     @property
     def _bmcurl(self):
