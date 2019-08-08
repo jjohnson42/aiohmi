@@ -1392,15 +1392,28 @@ class Command(object):
         if sensor['type'] == 'Fan':
             for fan in reading['Fans']:
                 if fan['Name'] == sensor['name']:
-                    return SensorReading(None, sensor, value=fan['Reading'], units=fan['ReadingUnits'])
+                    val = fan.get('Reading', None)
+                    unavail = val is None
+                    units = fan.get('ReadingUnits', None)
+                    return SensorReading(
+                        None, sensor, value=val, units=units,
+                        unavailable=unavail)
         elif sensor['type'] == 'Temperature':
             for temp in reading['Temperatures']:
                 if temp['Name'] == sensor['name'] and 'ReadingCelsius' in temp:
-                    return SensorReading(None, sensor, value=temp['ReadingCelsius'], units='°C')
+                    val = temp.get('ReadingCelsius', None)
+                    unavail = val is None
+                    return SensorReading(
+                        None, sensor, value=val, units='°C',
+                        unavailable=unavail)
         elif sensor['type'] == 'Voltage':
             for volt in reading['Voltages']:
-                if volt['Name'] == sensor['name'] and 'ReadingVolts' in volt:
-                    return SensorReading(None, sensor, value=volt['ReadingVolts'], units='V')
+                if volt['Name'] == sensor['name']:
+                    val = volt.get('ReadingVolts', None)
+                    unavail = val is None
+                    return SensorReading(
+                        None, sensor, value=val, units='V',
+                        unavailable=unavail)
 
     def list_media(self):
         bmcinfo = self._do_web_request(self._bmcurl)
