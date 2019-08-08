@@ -125,7 +125,8 @@ def natural_sort(iterable):
 
 
 class SensorReading(object):
-    def __init__(self, healthinfo, sensor=None, value=None, units=None):
+    def __init__(self, healthinfo, sensor=None, value=None, units=None,
+                 unavailable=False):
         if sensor:
             self.name = sensor['name']
         else:
@@ -136,6 +137,7 @@ class SensorReading(object):
         self.state_ids = None
         self.imprecision = None
         self.units = units
+        self.unavailable = unavailable
 
 
 class AttrDependencyHandler(object):
