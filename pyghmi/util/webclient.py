@@ -128,6 +128,8 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
             self._certverify = verifycallback
             self.cookies = {}
             self.stdheaders = {}
+        if '[' not in host and '%' in host:
+            self.stdheaders['Host'] = '[' + host[:host.find('%')] + ']'
 
     def dupe(self):
         return SecureHTTPConnection(self.thehost, self.theport, clone=self)
