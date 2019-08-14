@@ -638,7 +638,8 @@ class Command(object):
                     return {'bootdev': reqbootdev}
                 except Exception:
                     del payload['BootSourceOverrideMode']
-        self._do_web_request(self.sysurl, payload, method='PATCH')
+        thetag = self.sysinfo.get('@odata.etag', None)
+        self._do_web_request(self.sysurl, payload, method='PATCH', etag=thetag)
         return {'bootdev': reqbootdev}
 
     @property
