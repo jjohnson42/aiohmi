@@ -938,6 +938,16 @@ class OEMHandler(generic.OEMHandler):
             return {'height': self._fpc_variant, 'slot': 0}
         return super(OEMHandler, self).get_description()
 
+    def get_bmc_configuration(self):
+        if self.has_xcc:
+            return self.immhandler.get_bmc_configuration()
+        return super(OEMHandler, self).get_bmc_configuration()
+
+    def set_bmc_configuration(self, changeset):
+        if self.has_xcc:
+            return self.immhandler.set_bmc_configuration(changeset)
+        return super(OEMHandler, self).set_bmc_configuration(changeset)
+
     def get_system_configuration(self, hideadvanced):
         if self.has_imm or self.has_xcc:
             return self.immhandler.get_system_configuration(hideadvanced)
@@ -947,6 +957,13 @@ class OEMHandler(generic.OEMHandler):
         if self.has_imm or self.has_xcc:
             return self.immhandler.set_system_configuration(changeset)
         return super(OEMHandler, self).set_system_configuration(changeset)
+
+    def clear_bmc_configuration(self):
+        if self.has_xcc:
+            return self.immhandler.clear_bmc_configuration()
+        elif self.is_fpc:
+            return self.smmhandler.clear_bmc_configuration()
+        return super(OEMHandler, self).clear_system_configuration()
 
     def clear_system_configuration(self):
         if self.has_xcc:

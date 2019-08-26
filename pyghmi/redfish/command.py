@@ -847,6 +847,41 @@ class Command(object):
             }
         return addon, valtodisplay, displaytoval, reg
 
+    def get_bmc_configuration(self):
+        """Get miscellaneous BMC configuration
+
+        In much the same way a bmc can present arbitrary key-value
+        structure for BIOS/UEFI configuration, provide a mechanism
+        for a BMC to provide arbitrary key-value for BMC specific
+        settings.
+        """
+
+        # For now, this is a stub, no implementation for redfish currently
+        return {}
+
+    def set_bmc_configuration(self, changeset):
+        """Get miscellaneous BMC configuration
+
+        In much the same way a bmc can present arbitrary key-value
+        structure for BIOS/UEFI configuration, provide a mechanism
+        for a BMC to provide arbitrary key-value for BMC specific
+        settings.
+        """
+
+        # For now, this is a stub, no implementation for redfish currently
+        raise exc.UnsupportedFunctionality(
+            'Set BMC configuration not supported in redfish yet')
+
+    def clear_bmc_configuration(self):
+        """Reset BMC to factory default
+
+        Call appropriate function to clear BMC to factory default settings.
+        In many cases, this may render remote network access impracticle or
+        impossible."
+        """
+        raise exc.UnsupportedFunctionality(
+            'Clear BMC configuration not supported in redfish yet')
+
     def get_system_configuration(self, hideadvanced=True):
         return self._getsyscfg()[0]
 

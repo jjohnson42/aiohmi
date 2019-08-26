@@ -774,6 +774,18 @@ class Command(object):
         else:
             raise Exception("Unrecognized data format " + repr(fetchdata))
 
+    def get_bmc_configuration(self):
+        self.oem_init()
+        return self._oem.get_bmc_configuration()
+
+    def set_bmc_configuration(self, changeset):
+        self.oem_init()
+        return self._oem.set_bmc_configuration(changeset)
+
+    def clear_bmc_configuration(self):
+        self.oem_init()
+        return self._oem.clear_bmc_configuration()
+
     def get_system_configuration(self, hideadvanced=True):
         self.oem_init()
         return self._oem.get_system_configuration(hideadvanced)

@@ -60,6 +60,10 @@ class OEMHandler(object):
         raise exc.UnsupportedFunctionality(
             'Clearing system configuration not implemented for this platform')
 
+    def clear_bmc_configuration(self):
+        raise exc.UnsupportedFunctionality(
+            'Clearing BMC configuration not implemented for this platform')
+
     def get_oem_inventory_descriptions(self):
         """Get descriptions of available additional inventory items
 
@@ -334,6 +338,12 @@ class OEMHandler(object):
         :returns True if standard parameter set should be suppressed
         """
         return False
+
+    def get_bmc_configuration(self):
+        return {}
+
+    def set_bmc_configuration(self, changeset):
+        raise exc.UnsupportedFunctionality('Platform does not support setting bmc attributes')
 
     def get_system_configuration(self, hideadvanced):
         """Retrieve system configuration

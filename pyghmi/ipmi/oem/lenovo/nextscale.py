@@ -251,6 +251,9 @@ class SMMClient(object):
         self.password = ipmicmd.ipmi_session.password
         self._wc = None
 
+    def clear_bmc_configuration(self):
+        self.ipmicmd.xraw_command(0x32, 0xad)
+
     def set_user_priv(self, uid, priv):
         if priv.lower() == 'administrator':
             rsp = self.ipmicmd.xraw_command(netfn=6, command=0x46, data=(uid,))

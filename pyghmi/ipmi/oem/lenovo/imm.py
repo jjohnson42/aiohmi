@@ -265,6 +265,9 @@ class IMMClient(object):
                 self.fwo = None
                 raise
 
+    def clear_bmc_configuration(self):
+        self.ipmicmd.xraw_command(0x2e, 0xcc, data=(0x5e, 0x2b, 0, 0xa, 1, 0xff, 0, 0, 0))
+
     def set_property(self, propname, value):
         if not isinstance(value, int) or value > 255:
             raise Exception('Unsupported property value')
@@ -805,6 +808,40 @@ class XCCClient(IMMClient):
             else:
                 return {}
         return {'height': int(dsc['u-height']), 'slot': int(dsc['slot'])}
+
+    def get_bmc_configuration(self):
+        try:
+            enclosureinfo = self.ipmicmd.xraw_command(0x3a, 0xf1, data=[0])
+        except pygexc.IpmiException:
+            return {}
+        settings = {
+            'smm': {
+                'default': 'Disable',
+                'possible': ['Enable', 'Disable'],
+            }
+        }
+        if enclosureinfo['data'][0] == '\x02':
+            settings['smm']['value'] = 'Disable'
+        elif enclosureinfo['data'][0] == '\x01':
+            settings['smm']['value'] = 'Enable'
+        else:
+            settings['smm']['value'] = None
+        return settings
+
+    def set_bmc_configuration(self, changeset):
+        for key in changeset:
+            if (isinstance(changeset[key], str) or
+                    isinstance(changeset[key], unicode)):
+                changeset[key] = {'value': changeset[key]}
+            currval = changeset[key].get('value', None)
+            if 'smm'.startswith(key.lower()):
+                if currval == 'Enable':
+                    self.ipmicmd.xraw_command(0x3a, 0xf1, data=[1])
+                elif currval == 'Disable':
+                    self.ipmicmd.xraw_command(0x3a, 0xf1, data=[2])
+            else:
+                raise pygexc.InvalidParameterValue(
+                        '{0} not a known setting'.format(key))
 
     def clear_system_configuration(self):
         res = self.wc.grab_json_response_with_status(
