@@ -887,7 +887,10 @@ class Command(object):
                         reginfo =  self._get_biosreg(reguri)
                         extrainfo, valtodisplay, _, self.attrdeps = reginfo
         currsettings = {}
-        pendingsettings = self._do_web_request(self._setbiosurl)
+        try:
+            pendingsettings = self._do_web_request(self._setbiosurl)
+        except exc.UnsupportedFunctionality:
+            pendingsettings = {}
         pendingsettings = pendingsettings.get('Attributes', {})
         for setting in biosinfo.get('Attributes', {}):
             val = biosinfo['Attributes'][setting]
