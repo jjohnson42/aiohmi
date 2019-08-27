@@ -1,6 +1,6 @@
 # vim: tabstop=4 shiftwidth=4 softtabstop=4
 
-# Copyright 2017 Lenovo
+# Copyright 2017-2019 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -289,6 +289,7 @@ class LenovoFirmwareConfig(object):
                 else:
                     lenovo_group = group.get("ID")
                 for setting in group.iter("setting"):
+                    forceinstance = False
                     is_list = False
                     lenovo_setting = setting.get("ID")
                     protect = True if setting.get("protected") == 'true' \
@@ -306,34 +307,26 @@ class LenovoFirmwareConfig(object):
                     name = setting.find("mriName").text
                     help = setting.find("desc").text
                     onedata = setting.find('text_data')
-                    if onedata:
-                        if len(list(onedata.iter('instance'))) > 1:
-                            protect = True
                     if onedata is not None:
                         if onedata.get('password') == 'true':
                             protect = True
                     enumdata = setting.find('enumerate_data')
                     if enumdata is not None:
                         if enumdata.get('maxinstance') is not None:
-                            protect = True
-                        for currchoice in enumdata.iter('choice'):
-                            if len(list(currchoice.iter('instance'))) > 1:
-                                protect = True
-                                break
+                            forceinstance = True
                     if onedata is None:
                         onedata = setting.find('numeric_data')
                     if onedata is not None:
                         if onedata.get('maxinstance') is not None:
-                            protect = True  # Not yet supported
+                            forceinstance = True
+                        instances = list(onedata.iter('instance'))
+                        if not instances:
+                            protect = True  # not supported yet
                         else:
-                            instance = onedata.find('instance')
-                            if instance is None:
-                                protect = True  # not supported yet
-                            else:
-                                current = instance.text
-                            default = onedata.get('default', None)
-                            if default == '':
-                                default = None
+                            current = [x.text for x in instances]
+                        default = onedata.get('default', None)
+                        if default == '':
+                            default = None
                     if (setting.find('cmd_data') is not None or
                             setting.find('boolean_data') is not None):
                         protect = True  # Hide currently unsupported settings
@@ -346,11 +339,11 @@ class LenovoFirmwareConfig(object):
                         current = []
                         extraorder = ldata.get('ordered') == 'true'
                     lenovo_value = None
+                    instancetochoicemap = {}
                     for choice in setting.iter("choice"):
                         label = choice.find("label").text
                         possible.append(label)
-                        instance = choice.find("instance")
-                        if instance is not None:
+                        for instance in choice.iter("instance"):
                             if is_list:
                                 if not extraorder:
                                     current.append(label)
@@ -358,7 +351,11 @@ class LenovoFirmwareConfig(object):
                                     currentdict[
                                         int(instance.get("order"))] = label
                             else:
-                                current = label
+                                currid = instance.get('ID')
+                                if currid:
+                                    instancetochoicemap[currid] = label
+                                else:
+                                    current = label
                                 try:
                                     lenovo_value = int(
                                         choice.find('value').text)
@@ -384,6 +381,62 @@ class LenovoFirmwareConfig(object):
                             default.append(currentdef[order])
                     optionname = "%s.%s" % (cfglabel, name)
                     alias = "%s.%s" % (lenovo_id, name)
+                    if onedata is not None:
+                        if current and len(current) > 1:
+                            instidx = 1
+                            for inst in current:
+                                optname = '{0}.{1}'.format(optionname, instidx)
+                                options[optname] = dict(current=inst,
+                                               default=default,
+                                               possible=possible,
+                                               pending=None,
+                                               new_value=None,
+                                               help=help,
+                                               is_list=is_list,
+                                               lenovo_value=lenovo_value,
+                                               lenovo_id=lenovo_id,
+                                               lenovo_group=lenovo_group,
+                                               lenovo_setting=lenovo_setting,
+                                               lenovo_reboot=reset,
+                                               lenovo_protect=protect,
+                                               lenovo_instance=instidx,
+                                               readonly_expression=readonly,
+                                               hide_expression=hide,
+                                               sortid=sortid,
+                                               alias=alias)
+                                sortid += 1
+                                instidx += 1
+                            continue
+                        if current:
+                            current = current[0]
+                    if instancetochoicemap:
+                        for currid in sorted(instancetochoicemap):
+                            optname = '{0}.{1}'.format(optionname, currid)
+                            current = instancetochoicemap[currid]
+                            options[optname] = dict(current=current,
+                                               default=default,
+                                               possible=possible,
+                                               pending=None,
+                                               new_value=None,
+                                               help=help,
+                                               is_list=is_list,
+                                               lenovo_value=lenovo_value,
+                                               lenovo_id=lenovo_id,
+                                               lenovo_group=lenovo_group,
+                                               lenovo_setting=lenovo_setting,
+                                               lenovo_reboot=reset,
+                                               lenovo_protect=protect,
+                                               lenovo_instance=currid,
+                                               readonly_expression=readonly,
+                                               hide_expression=hide,
+                                               sortid=sortid,
+                                               alias=alias)
+                            sortid += 1
+                        continue
+                    lenovoinstance = ""
+                    if forceinstance:
+                        optionname = '{0}.{1}'.format(optionname, 1)
+                        lenovoinstance = 1
                     options[optionname] = dict(current=current,
                                                default=default,
                                                possible=possible,
@@ -397,10 +450,10 @@ class LenovoFirmwareConfig(object):
                                                lenovo_setting=lenovo_setting,
                                                lenovo_reboot=reset,
                                                lenovo_protect=protect,
+                                               lenovo_instance=lenovoinstance,
                                                readonly_expression=readonly,
                                                hide_expression=hide,
                                                sortid=sortid,
-                                               lenovo_instance="",
                                                alias=alias)
                     sortid = sortid + 1
         for opt in options:
