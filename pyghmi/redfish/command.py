@@ -1001,6 +1001,11 @@ class Command(object):
                                     ','.join(currsettings[change]['possible'])))
             if changeset[change] in reginfo[2].get(change, {}):
                 changeset[change] = reginfo[2][change][changeset[change]]
+            for regentry in reginfo[3].get('Attributes', []):
+                if change in (regentry.get('AttributeName', ''),
+                        regentry.get('DisplayName', '')):
+                    if regentry.get('Type', None) == 'Integer':
+                        changeset[change] = int(changeset[change])
         redfishsettings = {'Attributes': changeset}
         self._do_web_request(self._setbiosurl, redfishsettings, 'PATCH')
 
