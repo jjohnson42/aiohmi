@@ -826,9 +826,29 @@ class XCCClient(IMMClient):
             settings['smm']['value'] = 'Enable'
         else:
             settings['smm']['value'] = None
+        passrules = self.wc.grab_json_response('/api/dataset/imm_users_global')
+        passrules = passrules.get('items', [{}])[0]
+        settings['password_reuse_count'] = {'value': passrules.get('pass_min_resuse')}
+        settings['password_change_interval'] = {'value': passrules.get('pass_min_resuse')}
+        settings['password_expiration'] = {'value': passrules.get('pass_expire_days')}
+        settings['password_login_failures'] = {'value': passrules.get('max_login_failures')}
+        settings['password_complexity'] = {'value': passrules.get('pass_complex_required')}
+        settings['password_min_length'] = {'value': passrules.get('pass_min_length')}
+        settings['password_lockout_period'] = {'value': passrules.get('lockout_period')}
         return settings
 
+    rulemap = {
+        'password_change_interval': 'USER_GlobalMinPassChgInt',
+        'password_reuse_count': 'USER_GlobalMinPassReuseCycle',
+        'password_expiration': 'USER_GlobalPassExpPeriod',
+        'password_login_failures': 'USER_GlobalMaxLoginFailures',
+        'password_complexity': 'USER_GlobalPassComplexRequired',
+        'password_min_length': 'USER_GlobalMinPassLen',
+        'password_lockout_period': 'USER_GlobalLockoutPeriod',
+    }
+
     def set_bmc_configuration(self, changeset):
+        ruleset = {}
         for key in changeset:
             if (isinstance(changeset[key], str) or
                     isinstance(changeset[key], unicode)):
@@ -839,9 +859,13 @@ class XCCClient(IMMClient):
                     self.ipmicmd.xraw_command(0x3a, 0xf1, data=[1])
                 elif currval == 'Disable':
                     self.ipmicmd.xraw_command(0x3a, 0xf1, data=[2])
+            elif key.lower() in self.rulemap:
+                ruleset[self.rulemap[key.lower()]] = changeset[key]['value']
             else:
                 raise pygexc.InvalidParameterValue(
                         '{0} not a known setting'.format(key))
+        if ruleset:
+            rsp = self.wc.grab_json_response('/api/dataset', ruleset)
 
     def clear_system_configuration(self):
         res = self.wc.grab_json_response_with_status(
