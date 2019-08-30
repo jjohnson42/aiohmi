@@ -254,6 +254,45 @@ class SMMClient(object):
     def clear_bmc_configuration(self):
         self.ipmicmd.xraw_command(0x32, 0xad)
 
+    rulemap = {
+        'password_reuse_count': 'passwordReuseCheckNum',
+        'password_change_interval': 'passwordChangeInterval',
+        'password_expiration': 'passwordDurationDays',
+        'password_login_failures': 'passwordFailAllowdNum',
+        'password_min_length': 'passwordMinLength',
+        'password_lockout_period': 'passwordLockoutTimePeriod',
+    }
+
+    def get_bmc_configuration(self):
+        settings = {}
+        self.wc.request(
+            'POST', '/data',
+            ('get=passwordMinLength,passwordForceChange,passwordDurationDays,'
+            'passwordExpireWarningDays,passwordChangeInterval,'
+            'passwordReuseCheckNum,passwordFailAllowdNum,passwordLockoutTimePeriod'))
+        rsp = self.wc.getresponse()
+        rspbody = rsp.read()
+        accountinfo = fromstring(rspbody)
+        for rule in self.rulemap:
+            settings[rule] = {'value': int(
+                accountinfo.find(self.rulemap[rule]).text)}
+        return settings
+
+
+    def set_bmc_configuration(self, changeset):
+        for key in changeset:
+            if (isinstance(changeset[key], str) or
+                    isinstance(changeset[key], unicode)):
+                changeset[key] = {'value': changeset[key]}
+            rules = []
+            if key.lower() in self.rulemap:
+                rules.append('{0}:{1}'.format(
+                    self.rulemap[key.lower()], changeset[key]['value']))
+        if rules:
+            rules = 'set={0}'.format(','.join(rules))
+            self.wc.request('POST', '/data', rules)
+            self.wc.getresponse().read()
+
     def set_user_priv(self, uid, priv):
         if priv.lower() == 'administrator':
             rsp = self.ipmicmd.xraw_command(netfn=6, command=0x46, data=(uid,))
@@ -262,6 +301,7 @@ class SMMClient(object):
                 'POST', '/data', b'set=user({0},1,{1},511,,4,15,0)'.format(
                     uid, username))
             rsp = self.wc.getresponse()
+            rsp.read()
 
     def reseat_bay(self, bay):
         self.ipmicmd.xraw_command(netfn=0x32, command=0xa4,
