@@ -861,6 +861,9 @@ class XCCClient(IMMClient):
                     self.ipmicmd.xraw_command(0x3a, 0xf1, data=[2])
             elif key.lower() in self.rulemap:
                 ruleset[self.rulemap[key.lower()]] = changeset[key]['value']
+                if key.lower() == 'password_expiration':
+                    warntime = str(int(int(changeset[key]['value']) * 0.08))
+                    rulset['USER_GlobalPassExpWarningPeriod'] = warntime
             else:
                 raise pygexc.InvalidParameterValue(
                         '{0} not a known setting'.format(key))
