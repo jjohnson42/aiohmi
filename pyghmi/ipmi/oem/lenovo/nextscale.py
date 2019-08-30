@@ -263,6 +263,15 @@ class SMMClient(object):
         'password_lockout_period': 'passwordLockoutTimePeriod',
     }
 
+    fanmodes = {
+        1: 'Capped_20%',
+        2: 'Capped_25%',
+        3: 'Capped_30%',
+        4: 'Capped_45%',
+        0: 'Normal',
+        5: 'Boosted',
+    }
+
     def get_bmc_configuration(self):
         settings = {}
         self.wc.request(
@@ -276,6 +285,17 @@ class SMMClient(object):
         for rule in self.rulemap:
             settings[rule] = {'value': int(
                 accountinfo.find(self.rulemap[rule]).text)}
+        rsp = self.ipmicmd.xraw_command(0x34, 3)
+        fanmode = self.fanmodes[ord(rsp['data'][0])]
+        settings['fanspeed'] = {
+            'value': fanmode, 'default': 'Normal',
+            'help': ('Adjust the fan speed of the D2 Chassis. Capped settings '
+                     'will reduce fan speed for better acoustic experience at '
+                     'the expense of performance.  Normal is using the Lenovo '
+                     'engineered cooling adjustments across the full range. '
+                     'Boosted adds fanspeed to the Normal response to '
+                     'provide more aggressive cooling.'),
+            'possible': [self.fanmodes[x] for x in self.fanmodes]}
         return settings
 
 
@@ -288,6 +308,18 @@ class SMMClient(object):
             if key.lower() in self.rulemap:
                 rules.append('{0}:{1}'.format(
                     self.rulemap[key.lower()], changeset[key]['value']))
+            if key.lower() == 'fanspeed':
+                for mode in self.fanmodes:
+                    byteval = mode
+                    mode = self.fanmodes[mode]
+                    if changeset[key]['value'].lower() == mode.lower():
+                        self.ipmicmd.xraw_command(
+                            0x32, 0x9b, data=[byteval])
+                        break
+                else:
+                    raise pygexc.InvalidParameterValue(
+                            '{0} not a valid mode for fanspeed'.format(
+                                changeset[key]['value']))
         if rules:
             rules = 'set={0}'.format(','.join(rules))
             self.wc.request('POST', '/data', rules)

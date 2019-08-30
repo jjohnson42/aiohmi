@@ -818,6 +818,7 @@ class XCCClient(IMMClient):
             'smm': {
                 'default': 'Disable',
                 'possible': ['Enable', 'Disable'],
+                'help': 'Enables or disables the network of the D2 enclosure manager.',
             }
         }
         if enclosureinfo['data'][0] == '\x02':
