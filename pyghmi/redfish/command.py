@@ -131,6 +131,11 @@ class SensorReading(object):
             self.name = sensor['name']
         else:
             self.name = healthinfo['Name']
+            self.health = _healthmap.get(
+                            healthinfo.get('Status', {}).get(
+                            'Health', None), const.Health.Warning)
+            self.states = [healthinfo.get('Status', {}).get('Health',
+                                                            'Unknown')]
             self.health = _healthmap[healthinfo['Status']['Health']]
             self.states = [healthinfo['Status']['Health']]
         self.value = value
