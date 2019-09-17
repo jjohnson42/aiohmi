@@ -957,6 +957,7 @@ class Command(object):
         rawsettings = self._do_web_request(self._biosurl, cache=False)
         rawsettings = rawsettings.get('Attributes', {})
         pendingsettings = self._do_web_request(self._setbiosurl)
+        etag = pendingsettings.get('@odata.etag', None)
         pendingsettings = pendingsettings.get('Attributes', {})
         dephandler = AttrDependencyHandler(self.attrdeps, rawsettings, pendingsettings)
         for change in list(changeset):
@@ -1007,7 +1008,8 @@ class Command(object):
                     if regentry.get('Type', None) == 'Integer':
                         changeset[change] = int(changeset[change])
         redfishsettings = {'Attributes': changeset}
-        self._do_web_request(self._setbiosurl, redfishsettings, 'PATCH')
+        self._do_web_request(self._setbiosurl, redfishsettings, 'PATCH',
+                             etag=etag)
 
     def set_net_configuration(self, ipv4_address=None, ipv4_configuration=None,
                               ipv4_gateway=None):
