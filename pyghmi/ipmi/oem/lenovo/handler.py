@@ -37,6 +37,7 @@ from pyghmi.ipmi.oem.lenovo import pci
 from pyghmi.ipmi.oem.lenovo import psu
 from pyghmi.ipmi.oem.lenovo import raid_controller
 from pyghmi.ipmi.oem.lenovo import raid_drive
+from pyghmi.ipmi.oem.lenovo import tsma
 
 
 import pyghmi.util.webclient as wc
@@ -156,6 +157,8 @@ class OEMHandler(generic.OEMHandler):
             self.immhandler = imm.IMMClient(ipmicmd)
         elif self.is_fpc:
             self.smmhandler = nextscale.SMMClient(ipmicmd)
+        elif self.has_tsma:
+            self.tsmahandler = tsma.TsmHandler(ipmicmd)
 
     @property
     def _megarac_eth_index(self):
@@ -354,6 +357,13 @@ class OEMHandler(generic.OEMHandler):
         return (19046, 32, 13616) == (self.oemid['manufacturer_id'],
                                       self.oemid['device_id'],
                                       self.oemid['product_id'])
+
+    tsma_ids = ((19046, 32, 1287),)
+    @property
+    def has_tsma(self):
+        currid = (self.oemid['manufacturer_id'], self.oemid['device_id'],
+                  self.oemid['product_id'])
+        return currid in self.tsma_ids
 
     @property
     def has_tsm(self):
@@ -926,6 +936,9 @@ class OEMHandler(generic.OEMHandler):
                 filename, data=data, progress=progress, bank=bank)
         if self.is_fpc:
             return self.smmhandler.update_firmware(
+                filename, data=data, progress=progress, bank=bank)
+        if self.has_tsma:
+            return self.tsmahandler.update_firmware(
                 filename, data=data, progress=progress, bank=bank)
         return super(OEMHandler, self).update_firmware(filename, data=data,
                                                        progress=progress,

@@ -109,6 +109,7 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
                  **kwargs):
         if 'timeout' not in kwargs:
             kwargs['timeout'] = 60
+        self.mytimeout = kwargs['timeout']
         self._currdl = None
         self.lastjsonerror = None
         self.broken = False
@@ -132,7 +133,8 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
             self.stdheaders['Host'] = '[' + host[:host.find('%')] + ']'
 
     def dupe(self):
-        return SecureHTTPConnection(self.thehost, self.theport, clone=self)
+        return SecureHTTPConnection(self.thehost, self.theport, clone=self,
+                                    timeout=self.mytimeout)
 
     def set_header(self, key, value):
         self.stdheaders[key] = value
@@ -146,7 +148,7 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         # workaround problems of too large mtu, moderately frequent occurance
         # in this space
         plainsock = socket.socket(addrinfo[0])
-        plainsock.settimeout(60)
+        plainsock.settimeout(self.mytimeout)
         try:
             plainsock.setsockopt(socket.IPPROTO_TCP, socket.TCP_MAXSEG, 1456)
         except socket.error:
