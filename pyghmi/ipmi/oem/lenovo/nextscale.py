@@ -300,11 +300,11 @@ class SMMClient(object):
 
 
     def set_bmc_configuration(self, changeset):
+        rules = []
         for key in changeset:
             if (isinstance(changeset[key], str) or
                     isinstance(changeset[key], unicode)):
                 changeset[key] = {'value': changeset[key]}
-            rules = []
             if key.lower() in self.rulemap:
                 rules.append('{0}:{1}'.format(
                     self.rulemap[key.lower()], changeset[key]['value']))
