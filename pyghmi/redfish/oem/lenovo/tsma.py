@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pyghmi.redfish.oem.generic as generic
 import pyghmi.util.webclient as webclient
 import struct
 import time
@@ -64,14 +65,18 @@ def read_hpm(filename):
 
 
 
-class TsmHandler(object):
-    def __init__(self, ipmicmd):
-        self.ipmicmd = weakref.proxy(ipmicmd)
-        self.tsm = ipmicmd.bmc
-        self.username = ipmicmd.ipmi_session.userid.decode('utf-8')
-        self.password = ipmicmd.ipmi_session.password.decode('utf-8')
+class TsmHandler(generic.OEMHandler):
+    def __init__(self, sysinfo, sysurl, webclient, cache=None):
+        if cache is None:
+            cache = {}
+        self._wc = None
+        self.username = None
+        self.password = None
         self._wc = None
         self.csrftok = None
+        super(TsmHandler, self).__init__(sysinfo, sysurl, webclient, cache)
+        self.tsm = webclient.thehost
+        self._certverify = webclient._certverify
 
     @property
     def wc(self):
@@ -82,7 +87,7 @@ class TsmHandler(object):
             'username': self.username,
             'password': self.password,
         }
-        wc = webclient.SecureHTTPConnection(self.tsm, 443, verifycallback=self.ipmicmd.certverify, timeout=180)
+        wc = webclient.SecureHTTPConnection(self.tsm, 443, verifycallback=self._certverify, timeout=180)
         rsp, status = wc.grab_json_response_with_status('/api/session', urllib.urlencode(authdata))
         if status < 200 or status >= 300:
             raise Exception('Error establishing web session')
@@ -169,8 +174,7 @@ class TsmHandler(object):
             'IS_MMC': 1,
         }
         rsp, status = wc.grab_json_response_with_status(
-            '/api/maintenance/hpm/preparecomponents', payload,
-            referer='https://{0}/'.format(self.tsm), method='PUT')
+            '/api/maintenance/hpm/preparecomponents', payload, method='PUT')
         if status < 200 or status >= 300:
             err = wc.grab_json_response_with_status(
                 '/api/maintenance/hpm/exitupdatemode', {'FWUPDATEID': uid},

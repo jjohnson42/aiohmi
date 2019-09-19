@@ -37,7 +37,7 @@ from pyghmi.ipmi.oem.lenovo import pci
 from pyghmi.ipmi.oem.lenovo import psu
 from pyghmi.ipmi.oem.lenovo import raid_controller
 from pyghmi.ipmi.oem.lenovo import raid_drive
-from pyghmi.ipmi.oem.lenovo import tsma
+from pyghmi.redfish.oem.lenovo import tsma
 
 
 import pyghmi.util.webclient as wc
@@ -158,7 +158,13 @@ class OEMHandler(generic.OEMHandler):
         elif self.is_fpc:
             self.smmhandler = nextscale.SMMClient(ipmicmd)
         elif self.has_tsma:
-            self.tsmahandler = tsma.TsmHandler(ipmicmd)
+            conn = wc.SecureHTTPConnection(ipmicmd.bmc, 443,
+                verifycallback=self.ipmicmd.certverify)
+                #sysinfo, sysurl, webclient, cache=None):
+            self.tsmahandler = tsma.TsmHandler(None, None, conn)
+            self.tsmahandler.set_credentials(
+                ipmicmd.ipmi_session.userid.decode('utf-8'),
+                ipmicmd.ipmi_session.password.decode('utf-8'))
 
     @property
     def _megarac_eth_index(self):
