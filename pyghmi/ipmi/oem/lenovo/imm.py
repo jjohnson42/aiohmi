@@ -830,7 +830,7 @@ class XCCClient(IMMClient):
         passrules = self.wc.grab_json_response('/api/dataset/imm_users_global')
         passrules = passrules.get('items', [{}])[0]
         settings['password_reuse_count'] = {'value': passrules.get('pass_min_resuse')}
-        settings['password_change_interval'] = {'value': passrules.get('pass_min_resuse')}
+        settings['password_change_interval'] = {'value': passrules.get('pass_change_interval')}
         settings['password_expiration'] = {'value': passrules.get('pass_expire_days')}
         settings['password_login_failures'] = {'value': passrules.get('max_login_failures')}
         settings['password_complexity'] = {'value': passrules.get('pass_complex_required')}
