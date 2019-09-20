@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import pyghmi.redfish.oem.generic as generic
+import pyghmi.exceptions as exc
 import pyghmi.util.webclient as webclient
 import struct
 import time
@@ -77,6 +78,33 @@ class TsmHandler(generic.OEMHandler):
         super(TsmHandler, self).__init__(sysinfo, sysurl, webclient, cache)
         self.tsm = webclient.thehost
         self._certverify = webclient._certverify
+
+    def get_firmware_inventory(self, components, raisebypass=True):
+        wc = self.wc
+        fwinf = wc.grab_json_response('/api/DeviceVersion')
+        for biosinf in fwinf:
+            if biosinf['device'] != 1:
+                continue
+            biosinf = fwinf[1]
+            biosres = {
+                'version': '{0}.{1}'.format(
+                    biosinf['main'][0], biosinf['main'][1:]),
+                'build': biosinf['buildname']
+            }
+            yield ('UEFI', biosres)
+            break
+        name = 'TSM'
+        fwinf = wc.grab_json_response('/api/get-sysfwinfo')
+        for cinf in fwinf:
+            bmcinf = {
+                'version': cinf['fw_ver'],
+                'build': cinf['buildname'],
+                'date': cinf['builddate'],
+            }
+            yield (name, bmcinf)
+            name += ' Backup'
+        if raisebypass:
+            raise exc.BypassGenericBehavior()
 
     @property
     def wc(self):
