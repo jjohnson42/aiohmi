@@ -38,6 +38,7 @@ from pyghmi.ipmi.oem.lenovo import psu
 from pyghmi.ipmi.oem.lenovo import raid_controller
 from pyghmi.ipmi.oem.lenovo import raid_drive
 from pyghmi.redfish.oem.lenovo import tsma
+import pyghmi.redfish.command as redfishcmd
 
 
 import pyghmi.util.webclient as wc
@@ -161,10 +162,11 @@ class OEMHandler(generic.OEMHandler):
             conn = wc.SecureHTTPConnection(ipmicmd.bmc, 443,
                 verifycallback=self.ipmicmd.certverify)
                 #sysinfo, sysurl, webclient, cache=None):
-            self.tsmahandler = tsma.TsmHandler(None, None, conn)
+            self.tsmahandler = tsma.TsmHandler(None, None, conn, fish=redfishcmd)
             self.tsmahandler.set_credentials(
                 ipmicmd.ipmi_session.userid.decode('utf-8'),
                 ipmicmd.ipmi_session.password.decode('utf-8'))
+            self.tsmahandler.init_redfish()
 
     @property
     def _megarac_eth_index(self):
@@ -976,6 +978,8 @@ class OEMHandler(generic.OEMHandler):
     def get_system_configuration(self, hideadvanced):
         if self.has_imm or self.has_xcc:
             return self.immhandler.get_system_configuration(hideadvanced)
+        if self.has_tsma:
+            return self.tsmahandler.get_uefi_configuration(hideadvanced)
         return super(OEMHandler, self).get_system_configuration(hideadvanced)
 
     def set_system_configuration(self, changeset):

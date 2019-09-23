@@ -67,7 +67,7 @@ def read_hpm(filename):
 
 
 class TsmHandler(generic.OEMHandler):
-    def __init__(self, sysinfo, sysurl, webclient, cache=None):
+    def __init__(self, sysinfo, sysurl, webclient, cache=None, fish=None):
         if cache is None:
             cache = {}
         self._wc = None
@@ -75,9 +75,17 @@ class TsmHandler(generic.OEMHandler):
         self.password = None
         self._wc = None
         self.csrftok = None
+        self.fish = fish
         super(TsmHandler, self).__init__(sysinfo, sysurl, webclient, cache)
         self.tsm = webclient.thehost
         self._certverify = webclient._certverify
+
+    def get_uefi_configuration(self, hideadvanced=True):
+        return self.fishclient.get_system_configuration(hideadvanced)
+
+    def init_redfish(self):
+        self.fishclient = self.fish.Command(self.tsm, self.username, self.password,
+            verifycallback=self._certverify)
 
     def get_firmware_inventory(self, components, raisebypass=True):
         wc = self.wc
