@@ -1,4 +1,4 @@
-# Copyright 2015-2017 Lenovo
+# Copyright 2015-2019 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,11 +28,10 @@ import threading
 try:
     import Cookie
     import httplib
-    import StringIO
 except ImportError:
     import http.client as httplib
     import http.cookies as Cookie
-    import io as StringIO
+import io
 
 __author__ = 'jjohnson2'
 
@@ -140,8 +139,13 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         self.stdheaders[key] = value
 
     def set_basic_credentials(self, username, password):
-        self.stdheaders['Authorization'] = 'Basic {0}'.format(
-            base64.b64encode(':'.join((username, password))))
+        authinfo = ':'.join((username, password))
+        if not isinstance(authinfo, bytes):
+            authinfo = authinfo.encode('utf-8')
+        authinfo = base64.b64encode(authinfo)
+        if not isinstance(authinfo, str):
+            authinfo = authinfo.decode('utf-8')
+        self.stdheaders['Authorization'] = 'Basic {0}'.format(authinfo)
 
     def connect(self):
         addrinfo = socket.getaddrinfo(self.host, self.port)[0]
@@ -203,7 +207,7 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         rsp = webclient.getresponse()
         body = rsp.read()
         if rsp.getheader('Content-Encoding', None) == 'gzip':
-            body = gzip.GzipFile(fileobj=StringIO.StringIO(body)).read()
+            body = gzip.GzipFile(fileobj=io.BytesIO(body)).read()
         if rsp.status >= 200 and rsp.status < 300:
             return json.loads(body) if body else {}, rsp.status
         return body, rsp.status
@@ -245,7 +249,7 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         """
         if data is None:
             data = open(filename, 'rb')
-        self._upbuffer = StringIO.StringIO(get_upload_form(filename, data,
+        self._upbuffer = io.BytesIO(get_upload_form(filename, data,
                                                            formname,
                                                            otherfields))
         ulheaders = self.stdheaders.copy()
@@ -268,7 +272,7 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
                             rsp.read())
         body = rsp.read()
         if rsp.getheader('Content-Encoding', None) == 'gzip':
-            body = gzip.GzipFile(fileobj=StringIO.StringIO(body)).read()
+            body = gzip.GzipFile(fileobj=io.BytesIO(body)).read()
         return body
 
     def get_upload_progress(self):

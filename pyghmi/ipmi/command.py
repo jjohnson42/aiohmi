@@ -1910,8 +1910,8 @@ class Command(object):
         """
         self.oem_init()
         mcinfo = self.xraw_command(netfn=6, command=1)
-        bmcver = '{0}.{1}'.format(
-            ord(mcinfo['data'][2]), hex(ord(mcinfo['data'][3]))[2:])
+        major, minor = struct.unpack('BB', mcinfo['data'][2:4])
+        bmcver = '{0}.{1}'.format(major, hex(minor)[2:])
         return self._oem.get_oem_firmware(bmcver, components)
 
     def get_capping_enabled(self):

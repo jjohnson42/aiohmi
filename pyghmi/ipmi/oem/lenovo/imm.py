@@ -16,6 +16,7 @@
 # limitations under the License.
 
 import base64
+import binascii
 from datetime import datetime
 import errno
 import fnmatch
@@ -77,7 +78,10 @@ def natural_sort(iterable):
 def fixup_uuid(uuidprop):
     baduuid = ''.join(uuidprop.split())
     uuidprefix = (baduuid[:8], baduuid[8:12], baduuid[12:16])
-    a = struct.pack('<IHH', *[int(x, 16) for x in uuidprefix]).encode('hex')
+    a = struct.pack('<IHH', *[int(x, 16) for x in uuidprefix])
+    a = binascii.hexlify(a)
+    if not isinstance(a, str):
+        a = a.decode('utf-8')
     uuid = (a[:8], a[8:12], a[12:16], baduuid[16:20], baduuid[20:])
     return '-'.join(uuid).upper()
 
@@ -129,6 +133,8 @@ class IMMClient(object):
 
     @staticmethod
     def _parse_builddate(strval):
+        if not isinstance(strval, ,str):
+            strval = strval.decode('utf-8')
         try:
             return datetime.strptime(strval, '%Y/%m/%d %H:%M:%S')
         except ValueError:
@@ -157,8 +163,10 @@ class IMMClient(object):
 
     @classmethod
     def parse_imm_buildinfo(cls, buildinfo):
-        buildid = buildinfo[:9].rstrip(' \x00')
-        bdt = ' '.join(buildinfo[9:].replace('\x00', ' ').split())
+        buildid = bytes(buildinfo[:9]).rstrip(b' \x00')
+        if not isinstance(buildid, str):
+            buildid = buildid.decode('utf-8')
+        bdt = b' '.join(bytes(buildinfo[9:]).replace(b'\x00', b' ').split())
         bdate = cls._parse_builddate(bdt)
         return buildid, bdate
 
@@ -294,7 +302,10 @@ class IMMClient(object):
             return None
         propdata = rsp['data'][3:]  # second two bytes are size, don't need it
         if propdata[0] & 0b10000000:  # string, for now assume length valid
-            return str(propdata[1:]).rstrip(' \x00')
+            ret = bytes(propdata[1:]).rstrip(b' \x00')
+            if not isinstance(ret, str):
+                ret = ret.decode('utf-8')
+            return ret
         else:
             raise Exception('Unknown format for property: ' + repr(propdata))
 
@@ -1455,7 +1466,7 @@ class XCCClient(IMMClient):
             try:
                 fpga = self.ipmicmd.xraw_command(netfn=0x3a, command=0x6b,
                                                  data=(0,))
-                fpga = '{0}.{1}.{2}'.format(*[ord(x) for x in fpga['data']])
+                fpga = '{0}.{1}.{2}'.format(*struct.unpack('BBB', fpga['data']))
                 yield ('FPGA', {'version': fpga})
             except pygexc.IpmiException as ie:
                 if ie.ipmicode != 193:
@@ -1795,7 +1806,7 @@ class XCCClient(IMMClient):
     def get_health(self, summary):
         try:
             wc = self.get_webclient(False)
-        except Exception:
+        except (socket.timeout, socket.error) as e:
             wc = None
         if not wc:
             summary['health'] = pygconst.Health.Critical;

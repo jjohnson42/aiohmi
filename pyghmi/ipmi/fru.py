@@ -227,7 +227,7 @@ class FRU(object):
             # to fru info, particularly the last values
             # Additionally 0xfe has been observed, which should be a thorn, but
             # again assuming termination of string is more likely than thorn.
-            retinfo = retinfo.rstrip('\xfe\xff\x10\x03\x00 ')
+            retinfo = retinfo.rstrip(b'\xfe\xff\x10\x03\x00 ')
             if lang in (0, 25):
                 try:
                     retinfo = retinfo.decode('iso-8859-1')
@@ -242,7 +242,7 @@ class FRU(object):
             # removing trailing spaces and nulls like makes sense for text
             # and rely on vendors to workaround deviations in their OEM
             # module
-            retinfo = retinfo.rstrip('\x00 ')
+            #retinfo = retinfo.rstrip(b'\x00 ')
             return retinfo, newoffset
         elif currtype == 1:  # BCD 'plus'
             retdata = ''

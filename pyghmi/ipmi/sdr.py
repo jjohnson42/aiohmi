@@ -597,9 +597,14 @@ class SDREntry(object):
                 tstr += chr(((data[2] & 0b11) << 4) +
                             (data[1] >> 4) + 0x20)
                 tstr += chr((data[2] >> 2) + 0x20)
+            if not isinstance(tstr, str):
+                tstr = tstr.decode('utf-8')
             return tstr
         elif ipmitype == 3:  # ACSII+LATIN1
-            return struct.pack("%dB" % len(data), *data)
+            ret = struct.pack("%dB" % len(data), *data)
+            if not isinstance(ret, str):
+                ret = ret.decode('utf-8')
+            return ret
 
 
 class SDR(object):

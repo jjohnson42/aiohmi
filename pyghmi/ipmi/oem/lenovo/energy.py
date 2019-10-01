@@ -25,10 +25,10 @@ class EnergyManager(object):
         # the Lenovo, then fallback to IBM
         # We start with a 'find firmware instance' to test the water and
         # get the handle (which has always been the same, but just in case
-        self.iana = bytearray('\x66\x4a\x00')
+        self.iana = bytearray(b'\x66\x4a\x00')
         try:
             rsp = ipmicmd.xraw_command(netfn=0x2e, command=0x82,
-                                       data=self.iana + '\x00\x00\x01')
+                                       data=self.iana + b'\x00\x00\x01')
         except pygexc.IpmiException as ie:
             if ie.ipmicode == 193:  # try again with IBM IANA
                 self.iana = bytearray('\x4d\x4f\x00')
