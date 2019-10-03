@@ -753,7 +753,7 @@ class Command(object):
         fetchcmd = bytearray((channel, param, 0, 0))
         fetched = self.xraw_command(0xc, 2, data=fetchcmd)
         fetchdata = fetched['data']
-        if ord(fetchdata[0]) != 17:
+        if bytearray(fetchdata)[0] != 17:
             return None
         if len(fetchdata) == 5:  # IPv4 address
             if prefixlen:
@@ -770,7 +770,7 @@ class Command(object):
                 return None
             return mac
         elif len(fetchdata) == 2:
-            return ord(fetchdata[1])
+            return bytearray(fetchdata)[1]
         else:
             raise Exception("Unrecognized data format " + repr(fetchdata))
 
@@ -989,7 +989,8 @@ class Command(object):
                         continue
                     else:
                         raise
-                chantype = ord(rsp['data'][1]) & 0b1111111
+                chantype = bytearray(rsp['data'])[1]
+                chantype = chantype & 0b1111111
                 if chantype in (4, 6):
                     try:
                         # Some implementations denote an inactive channel
@@ -1003,7 +1004,8 @@ class Command(object):
                         # However some implementations may still have
                         # ambiguous channel info, that will need to be
                         # picked up on an OEM extension...
-                        self._netchannel = ord(rsp['data'][0]) & 0b1111
+                        netchan = bytearray(rsp['data'])[0]
+                        self._netchannel = netchan & 0b1111
                         break
                     except exc.IpmiException as ie:
                         # This means the attempt to fetch parameter 5 failed,

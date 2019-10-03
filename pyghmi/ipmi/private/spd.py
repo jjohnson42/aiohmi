@@ -764,4 +764,4 @@ class SPD(object):
         self.info['serial'] = hex(struct.unpack(
             '>I', struct.pack('4B', *spd[325:329]))[0])[2:].rjust(8, '0')
         self.info['model'] = struct.pack('18B', *spd[329:347]).strip(
-            '\x00\xff ')
+            b'\x00\xff ')
