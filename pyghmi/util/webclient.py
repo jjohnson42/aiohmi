@@ -139,6 +139,10 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         self.stdheaders[key] = value
 
     def set_basic_credentials(self, username, password):
+        if isinstance(username, bytes) and not isinstance(username, str):
+            username = username.decode('utf-8')
+        if isinstance(password, bytes) and not isinstance(password, str):
+            password = password.decode('utf-8')
         authinfo = ':'.join((username, password))
         if not isinstance(authinfo, bytes):
             authinfo = authinfo.encode('utf-8')

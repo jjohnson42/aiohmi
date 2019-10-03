@@ -700,7 +700,7 @@ class SDR(object):
                 self.fw_minor, modtime)
             cachefilename = os.path.join(self.cachedir, cachefilename)
         if cachefilename and os.path.isfile(cachefilename):
-            with open(cachefilename, 'r') as cfile:
+            with open(cachefilename, 'rb') as cfile:
                 csdrs = pickle.load(cfile)
                 for sdrdata in csdrs:
                     self.add_sdr(sdrdata)
@@ -782,7 +782,7 @@ class SDR(object):
         if cachefilename:
             suffix = ''.join(
                 random.choice(string.ascii_lowercase) for _ in range(12))
-            with open(cachefilename + '.' + suffix, 'w') as cfile:
+            with open(cachefilename + '.' + suffix, 'wb') as cfile:
                 pickle.dump(sdrraw, cfile)
             os.rename(cachefilename + '.' + suffix, cachefilename)
 

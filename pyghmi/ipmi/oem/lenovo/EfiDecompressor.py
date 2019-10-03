@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
 import struct
 
+try:
+    range = xrange
+except NameError:
+    pass
 
 class BitArray:
     def __init__(self, data):
-        self._Data = data
+        self._Data = bytearray(data)
 
         self._DataBitsLeft = len(data) * 8
 
@@ -20,7 +24,7 @@ class BitArray:
         result = 0
         while bitsleftcount:
             curbitsleftcount = 8 - self._BitIdx
-            curdata = ord(self._Data[self._ByteIdx]) & self.mask(
+            curdata = self._Data[self._ByteIdx] & self.mask(
                 curbitsleftcount)
 
             if curbitsleftcount >= bitsleftcount:
@@ -68,7 +72,7 @@ def loadhuffmansyms(bits, symscountbits, zeroskipidx):
 
         # Allocate huffman codes to the length-ordered symbols
         huffsyms[0][2] = 0
-        for idx in xrange(1, len(huffsyms)):
+        for idx in range(1, len(huffsyms)):
             huffsyms[idx][2] = (huffsyms[idx - 1][2] + 1) << (
                 huffsyms[idx][1] - huffsyms[idx - 1][1])
 
@@ -85,7 +89,7 @@ def buildhuffmantree(huffsyms):
             continue
 
         huffsubtree = hufftree
-        for bit in xrange(0, bitlen):
+        for bit in range(0, bitlen):
             lr = huffcode & (1 << (bitlen - bit - 1)) != 0
 
             if bit < bitlen - 1:
@@ -137,7 +141,7 @@ def loadcharlenhuffmansyms(bits, extra_hufftree):
 
         # Allocate huffman codes to the length-ordered symbols
         huffsyms[0][2] = 0
-        for idx in xrange(1, len(huffsyms)):
+        for idx in range(1, len(huffsyms)):
             huffsyms[idx][2] = (huffsyms[idx - 1][2] + 1) << (
                 huffsyms[idx][1] - huffsyms[idx - 1][1])
 
@@ -148,7 +152,7 @@ def decompress(buf):
     (compressed_size, decompressed_size) = struct.unpack("<II", buf[0:8])
     bits = BitArray(buf[8:])
 
-    outbuf = ''
+    outbuf = bytearray()
     blocksize = 0
     charlen_hufftree = None
     positionset_hufftree = None
@@ -165,7 +169,7 @@ def decompress(buf):
         c = huffmandecode(charlen_hufftree, bits)
         blocksize -= 1
         if c < 256:
-            outbuf += chr(c)
+            outbuf.append(c)
             decompressed_size -= 1
         else:
             data_length = (c & 0xff) + 3
@@ -176,8 +180,8 @@ def decompress(buf):
                     pos_bitlen - 1)
             data_idx = len(outbuf) - data_offset - 1
 
-            for i in xrange(0, data_length):
-                outbuf += outbuf[data_idx + i]
+            for i in range(0, data_length):
+                outbuf.append(outbuf[data_idx + i])
             decompressed_size -= data_length
 
-    return outbuf
+    return bytes(outbuf)

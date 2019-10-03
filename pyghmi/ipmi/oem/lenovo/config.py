@@ -134,11 +134,12 @@ class LenovoFirmwareConfig(object):
         self.connection = ipmicmd
 
     def imm_size(self, filename):
-        data = []
-        data += LENOVO_ENTERPRISE
-        data += SIZE_COMMAND
-        for i in range(len(filename)):
-            data += [ord(filename[i])]
+        data = bytearray()
+        data.extend(LENOVO_ENTERPRISE)
+        data.extend(SIZE_COMMAND)
+        if not isinstance(filename, bytes):
+            filename = filename.encode('utf-8')
+        data.extend(filename)
 
         response = run_command_with_retry(self.connection, data=data)
 
@@ -150,21 +151,21 @@ class LenovoFirmwareConfig(object):
     def imm_open(self, filename, write=False, size=None):
         response = None
         retries = 12
-        data = []
-        data += LENOVO_ENTERPRISE
+        data = bytearray()
+        data.extend(LENOVO_ENTERPRISE)
         if write is False:
-            data += OPEN_RO_COMMAND
+            data.extend(OPEN_RO_COMMAND)
         else:
             assert size is not None
-            data += OPEN_WO_COMMAND
+            data.extend(OPEN_WO_COMMAND)
             hex_size = struct.pack("<I", size)
-            for byte in hex_size[:4]:
-                data += [ord(byte)]
-            data += [0x01, 0x10]
-        for i in range(len(filename)):
-            data += [ord(filename[i])]
+            data.extend(bytearray(hex_size[:4]))
+            data.extend([0x01, 0x10])
+        if not isinstance(filename, bytes):
+            filename = filename.encode('utf-8')
+        data.extend(filename)
         while len(data) < 38:
-            data += [0x00]
+            data.append(0)
 
         while retries:
             retries = retries-1
@@ -185,10 +186,7 @@ class LenovoFirmwareConfig(object):
         data += CLOSE_COMMAND
 
         hex_filehandle = struct.pack("<I", filehandle)
-
-        for byte in hex_filehandle[:4]:
-            data += [ord(byte)]
-
+        data.extend(bytearray(hex_filehandle[:4]))
         run_command_with_retry(self.connection, data=data)
 
     def imm_write(self, filehandle, size, inputdata):
@@ -199,20 +197,17 @@ class LenovoFirmwareConfig(object):
         hex_filehandle = struct.pack("<I", filehandle)
 
         while remaining > 0:
-            data = []
-            data += LENOVO_ENTERPRISE
-            data += WRITE_COMMAND
-            for byte in hex_filehandle[:4]:
-                data += [ord(byte)]
+            data = bytearray()
+            data.extend(LENOVO_ENTERPRISE)
+            data.extend(WRITE_COMMAND)
+            data.extend(hex_filehandle[:4])
             hex_offset = struct.pack("<I", offset)
-            for byte in hex_offset[:4]:
-                data += [ord(byte)]
+            data.extend(hex_offset[:4])
             if remaining < blocksize:
                 amount = remaining
             else:
                 amount = blocksize
-            for byte in inputdata[offset:offset+amount]:
-                data += [ord(byte)]
+            data.extend(inputdata[offset:offset+amount])
             remaining -= blocksize
             offset += blocksize
             run_command_with_retry(self.connection, data=data)
@@ -220,7 +215,7 @@ class LenovoFirmwareConfig(object):
     def imm_read(self, filehandle, size):
         blocksize = 0xc8
         offset = 0
-        output = ''
+        output = b''
         remaining = size
 
         hex_filehandle = struct.pack("<I", filehandle)
@@ -230,15 +225,12 @@ class LenovoFirmwareConfig(object):
             data = []
             data += LENOVO_ENTERPRISE
             data += READ_COMMAND
-            for byte in hex_filehandle[:4]:
-                data += [ord(byte)]
+            data.extend(bytearray(hex_filehandle[:4]))
             hex_offset = struct.pack("<I", offset)
-            for byte in hex_offset[:4]:
-                data += [ord(byte)]
+            data.extend(bytearray(hex_offset[:4]))
             if remaining < blocksize:
                 hex_blocksize = struct.pack("<H", remaining)
-            for byte in hex_blocksize[:2]:
-                data += [ord(byte)]
+            data.extend(hex_blocksize[:2])
             remaining -= blocksize
             offset += blocksize
 
@@ -259,7 +251,7 @@ class LenovoFirmwareConfig(object):
     def get_fw_options(self):
         options = {}
         data = None
-        for i in range(0, 30):
+        for _ in range(0, 30):
             filehandle = self.imm_open("config.efi")
             size = self.imm_size("config.efi")
             data = self.imm_read(filehandle, size)
