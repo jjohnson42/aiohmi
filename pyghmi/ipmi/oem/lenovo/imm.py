@@ -133,7 +133,7 @@ class IMMClient(object):
 
     @staticmethod
     def _parse_builddate(strval):
-        if not isinstance(strval, ,str):
+        if not isinstance(strval, str) and isinstance(strval, bytes):
             strval = strval.decode('utf-8')
         try:
             return datetime.strptime(strval, '%Y/%m/%d %H:%M:%S')
