@@ -37,7 +37,7 @@ __author__ = 'jjohnson2'
 
 
 # Used as the separator for form data
-BND = 'TbqbLUSn0QFjx9gxiQLtgBK4Zu6ehLqtLs4JOBS50EgxXJ2yoRMhTrmRXxO1lkoAQdZx16'
+BND = b'TbqbLUSn0QFjx9gxiQLtgBK4Zu6ehLqtLs4JOBS50EgxXJ2yoRMhTrmRXxO1lkoAQdZx16'
 
 # We will frequently be dealing with the same data across many instances,
 # consolidate forms to single memory location to get benefits..
@@ -88,14 +88,14 @@ def get_upload_form(filename, data, formname, otherfields):
             data = data.read()
         except AttributeError:
             pass
-        form = '--' + BND + '\r\nContent-Disposition: form-data; ' \
+        form = b'--' + BND + '\r\nContent-Disposition: form-data; ' \
                             'name="{0}"; filename="{1}"\r\n'.format(formname,
-                                                                    filename)
-        form += 'Content-Type: application/octet-stream\r\n\r\n' + data
+                                                                    filename).encode('utf-8')
+        form += b'Content-Type: application/octet-stream\r\n\r\n' + data
         for ofield in otherfields:
-            form += '\r\n--' + BND + '\r\nContent-Disposition: form-data; ' \
-                'name="{0}"\r\n\r\n{1}'.format(ofield, otherfields[ofield])
-        form += '\r\n--' + BND + '--\r\n'
+            form += b'\r\n--' + BND + '\r\nContent-Disposition: form-data; ' \
+                'name="{0}"\r\n\r\n{1}'.format(ofield, otherfields[ofield]).encode('utf-8')
+        form += b'\r\n--' + BND + b'--\r\n'
         uploadforms[filename] = form
         return form
 
@@ -257,7 +257,7 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
                                                            formname,
                                                            otherfields))
         ulheaders = self.stdheaders.copy()
-        ulheaders['Content-Type'] = 'multipart/form-data; boundary=' + BND
+        ulheaders['Content-Type'] = b'multipart/form-data; boundary=' + BND
         ulheaders['Content-Length'] = len(uploadforms[filename])
         self.ulsize = len(uploadforms[filename])
         webclient = self.dupe()
