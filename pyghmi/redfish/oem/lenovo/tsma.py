@@ -19,7 +19,10 @@ import pyghmi.exceptions as exc
 import pyghmi.util.webclient as webclient
 import struct
 import time
-import urllib
+try:
+    from urllib import urlencode
+except ImportError:
+    from urllib.parse import urlencode
 import weakref
 
 hpm_by_filename = {}
@@ -40,7 +43,7 @@ def read_hpm(filename):
             hpmfile.seek(1, 1)
             major, minor, pat = struct.unpack('<BBI', hpmfile.read(6))
             currsec.comp_ver = '{0}.{1}.{2}'.format(major, minor, pat)
-            currsec.comp_name = hpmfile.read(21).rstrip('\x00')
+            currsec.comp_name = hpmfile.read(21).rstrip(b'\x00')
             currlen = struct.unpack('<I', hpmfile.read(4))[0] - 16
             oemstr = hpmfile.read(4)
             if oemstr != b'OEM\x00':
@@ -124,7 +127,7 @@ class TsmHandler(generic.OEMHandler):
             'password': self.password,
         }
         wc = webclient.SecureHTTPConnection(self.tsm, 443, verifycallback=self._certverify, timeout=180)
-        rsp, status = wc.grab_json_response_with_status('/api/session', urllib.urlencode(authdata))
+        rsp, status = wc.grab_json_response_with_status('/api/session', urlencode(authdata))
         if status < 200 or status >= 300:
             raise Exception('Error establishing web session')
         self.csrftok = rsp['CSRFToken']
