@@ -1674,10 +1674,13 @@ class Command(object):
         :param name: username (limit of 16bytes)
         """
         data = [uid]
+        if not isinstance(name, bytes):
+            name = name.encode('utf-8')
         if len(name) > 16:
             raise Exception('name must be less than or = 16 chars')
-        name = name.ljust(16, "\x00")
-        data.extend([ord(x) for x in name])
+        name = name.ljust(16, b'\x00')
+        name = bytearray(name)
+        data.extend(name)
         self.xraw_command(netfn=0x06, command=0x45, data=data)
         return True
 
