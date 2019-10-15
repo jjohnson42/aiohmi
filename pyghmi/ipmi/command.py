@@ -1276,10 +1276,10 @@ class Command(object):
     def _chunkwise_dcmi_fetch(self, command):
         szdata = self.xraw_command(
             netfn=0x2c, command=command, data=(0xdc, 0, 0))
-        totalsize = ord(szdata['data'][1])
+        totalsize = bytearray(szdata['data'])[1]
         chksize = 0xf
         offset = 0
-        retstr = ''
+        retstr = b''
         while offset < totalsize:
             if (offset + chksize) > totalsize:
                 chksize = totalsize - offset
@@ -1287,6 +1287,8 @@ class Command(object):
                 netfn=0x2c, command=command, data=(0xdc, offset, chksize))
             retstr += chk['data'][2:]
             offset += chksize
+        if not isinstance(retstr, str):
+            retstr = retstr.decode('utf-8')
         return retstr
 
     def _chunkwise_dcmi_set(self, command, data):
