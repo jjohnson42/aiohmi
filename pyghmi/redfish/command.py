@@ -713,27 +713,53 @@ class Command(object):
     @property
     def _bmcnicurl(self):
         if not self._varbmcnicurl:
-            bmcinfo = self._do_web_request(self._bmcurl)
-            nicurl = bmcinfo.get('EthernetInterfaces', {}).get('@odata.id',
-                                                               None)
-            niclist = self._do_web_request(nicurl)
-            foundnics = 0
-            lastnicurl = None
-            for nic in niclist.get('Members', []):
-                curl = nic.get('@odata.id', None)
-                if not curl:
-                    continue
-                nicinfo = self._do_web_request(curl)
-                if nicinfo.get('Links', {}).get('HostInterface', None):
-                    # skip host interface
-                    continue
-                foundnics += 1
-                lastnicurl = curl
-            if foundnics != 1:
-                raise exc.PyghmiException(
-                    'BMC does not have exactly one interface')
-            self._varbmcnicurl = lastnicurl
+            self._varbmcnicurl = self._get_bmc_nic_url()
         return self._varbmcnicurl
+
+    def list_network_interface_names(self):
+        bmcinfo = self._do_web_request(self._bmcurl)
+        nicurl = bmcinfo.get('EthernetInterfaces', {}).get('@odata.id',
+                                                            None)
+        if not nicurl:
+            return
+        niclist = self._do_web_request(nicurl)
+        for nic in niclist.get('Members', []):
+            curl = nic.get('@odata.id', None)
+            if not curl:
+                continue
+            yield curl.rsplit('/', 1)[1]
+
+    def _get_bmc_nic_url(self, name=None):
+        bmcinfo = self._do_web_request(self._bmcurl)
+        nicurl = bmcinfo.get('EthernetInterfaces', {}).get('@odata.id',
+                                                            None)
+        niclist = self._do_web_request(nicurl)
+        foundnics = 0
+        lastnicurl = None
+        for nic in niclist.get('Members', []):
+            curl = nic.get('@odata.id', None)
+            if not curl:
+                continue
+            if name is not None:
+                if curl.endswith('/{0}'.format(name)):
+                    return curl
+                continue
+            if self.oem.hostnic and curl.endswith('/{0}'.format(self.oem.hostnic)):
+                continue
+            nicinfo = self._do_web_request(curl)
+            if nicinfo.get('Links', {}).get('HostInterface', None):
+                # skip host interface
+                continue
+            if not nicinfo.get('InterfaceEnabled', True):
+                # skip disabled interfaces
+                continue
+            foundnics += 1
+            lastnicurl = curl
+        if name is None and foundnics != 1:
+            raise exc.PyghmiException(
+                'BMC does not have exactly one interface')
+        if name is None:
+            return lastnicurl
 
     @property
     def _bmcreseturl(self):
@@ -1017,7 +1043,7 @@ class Command(object):
                              etag=etag)
 
     def set_net_configuration(self, ipv4_address=None, ipv4_configuration=None,
-                              ipv4_gateway=None):
+                              ipv4_gateway=None, name=None):
         patch = {}
         ipinfo = {}
         dodhcp = None
@@ -1041,18 +1067,20 @@ class Command(object):
             dodhcp = False
             patch['DHCPv4'] = {'DHCPEnabled': False}
         if patch:
+            nicurl = self._get_bmc_nic_url(name)
             try:
-                self._do_web_request(self._bmcnicurl, patch, 'PATCH')
+                self._do_web_request(nicurl, patch, 'PATCH')
             except exc.RedfishError as e:
                 patch = {'IPv4Addresses': [ipinfo]}
                 if dodhcp:
                     ipinfo['AddressOrigin'] = 'DHCP'
                 elif dodhcp is not None:
                     ipinfo['AddressOrigin'] = 'Static'
-                self._do_web_request(self._bmcnicurl, patch, 'PATCH')
+                self._do_web_request(nicurl, patch, 'PATCH')
 
-    def get_net_configuration(self):
-        netcfg = self._do_web_request(self._bmcnicurl, cache=False)
+    def get_net_configuration(self, name=None):
+        nicurl = self._get_bmc_nic_url(name)
+        netcfg = self._do_web_request(nicurl, cache=False)
         ipv4 = netcfg.get('IPv4Addresses', {})
         if not ipv4:
             raise exc.PyghmiException('Unable to locate network information')

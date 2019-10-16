@@ -18,6 +18,8 @@ import pyghmi.exceptions as exc
 
 
 class OEMHandler(object):
+    hostnic = None
+
     def __init__(self, sysinfo, sysurl, webclient, cache):
         self._varsysinfo = sysinfo
         self._varsysurl = sysurl

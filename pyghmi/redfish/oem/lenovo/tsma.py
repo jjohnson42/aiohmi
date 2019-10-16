@@ -70,6 +70,7 @@ def read_hpm(filename):
 
 
 class TsmHandler(generic.OEMHandler):
+    hostnic = 'usb0'
     def __init__(self, sysinfo, sysurl, webclient, cache=None, fish=None):
         if cache is None:
             cache = {}
