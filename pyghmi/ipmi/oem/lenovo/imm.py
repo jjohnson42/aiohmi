@@ -950,7 +950,7 @@ class XCCClient(IMMClient):
         self.weblogout()
         return True
 
-    def get_diagnostic_data(self, savefile, progress=None):
+    def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
         self.wc.grab_json_response('/api/providers/ffdc',
                                    {'Generate_FFDC': 1})
         percent = 0
@@ -966,6 +966,8 @@ class XCCClient(IMMClient):
             result = self.wc.grab_json_response('/api/providers/ffdc',
                                                 {'Generate_FFDC_status': 1})
         url = '/ffdc/{0}'.format(result['FileName'])
+        if autosuffix and not savefile.endswith('.tzz'):
+            savefile += '.tzz'
         fd = webclient.FileDownloader(self.wc, url, savefile)
         fd.start()
         while fd.isAlive():

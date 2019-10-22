@@ -91,13 +91,15 @@ class OEMHandler(object):
             }
         return res[0]
 
-    def get_diagnostic_data(self, savefile, progress=None):
+    def get_diagnostic_data(self, savefile, progress=None, autosuffix=None):
         """Download diagnostic data about target to a file
 
         This should be a payload that the vendor's support team can use
         to do diagnostics.
         :param savefile: File object or filename to save to
         :param progress: Callback to be informed about progress
+        :param autosuffix: Have the library automatically amend filename per
+                           vendor support requirements.
         :return:
         """
         raise exc.UnsupportedFunctionality(

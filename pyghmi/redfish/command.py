@@ -1610,8 +1610,8 @@ class Command(object):
         """
         return self.oem.update_firmware(file, data, progress, bank)
 
-    def get_diagnostic_data(self, savefile, progress=None):
-        return self.oem.get_diagnostic_data(savefile, progress)
+    def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
+        return self.oem.get_diagnostic_data(savefile, progress, autosuffix)
 
     def get_licenses(self):
         return self.oem.get_licenses()

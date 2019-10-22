@@ -638,11 +638,11 @@ class OEMHandler(generic.OEMHandler):
             return self.tsmahandler.get_firmware_inventory(components, raisebypass=False)
         return super(OEMHandler, self).get_oem_firmware(bmcver, components)
 
-    def get_diagnostic_data(self, savefile, progress):
+    def get_diagnostic_data(self, savefile, progress, autosuffix=False):
         if self.has_xcc:
-            return self.immhandler.get_diagnostic_data(savefile, progress)
+            return self.immhandler.get_diagnostic_data(savefile, progress, autosuffix)
         if self.is_fpc:
-            return self.smmhandler.get_diagnostic_data(savefile, progress)
+            return self.smmhandler.get_diagnostic_data(savefile, progress, autosuffix)
 
     def get_oem_capping_enabled(self):
         if self.has_tsm:
