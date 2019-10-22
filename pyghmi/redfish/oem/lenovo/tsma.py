@@ -128,7 +128,12 @@ class TsmHandler(generic.OEMHandler):
             'password': self.password,
         }
         wc = webclient.SecureHTTPConnection(self.tsm, 443, verifycallback=self._certverify, timeout=180)
-        rsp, status = wc.grab_json_response_with_status('/api/session', urlencode(authdata))
+        wc.set_header('Content-Type', 'application/json')
+        rsp, status = wc.grab_json_response_with_status('/api/session', authdata)
+        if status == 403:
+            wc.set_header('Content-Type', 'application/x-www-form-urlencoded')
+            rsp, status = wc.grab_json_response_with_status('/api/session', urlencode(authdata))
+
         if status < 200 or status >= 300:
             raise Exception('Error establishing web session')
         self.csrftok = rsp['CSRFToken']
