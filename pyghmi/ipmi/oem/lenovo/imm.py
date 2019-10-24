@@ -1833,6 +1833,7 @@ class XCCClient(IMMClient):
                 raise pygexc.BypassGenericBehavior()
         fallbackdata = []
         hmap = {
+            'I': pygconst.Health.Ok,
             'E': pygconst.Health.Critical,
             'W': pygconst.Health.Warning,
         }
@@ -1840,7 +1841,7 @@ class XCCClient(IMMClient):
             # while usually the ipmi interrogation shall explain things,
             # just in case there is a gap, make sure at least the
             # health field is accurately updated
-            itemseverity = hmap.get(item.get('severity', 'E'), 'E')
+            itemseverity = hmap.get(item.get('severity', 'E'), pygconst.Health.Critical)
             if (summary['health'] < itemseverity):
                 summary['health'] = itemseverity
             if item['cmnid'] == 'FQXSPPW0104J':
