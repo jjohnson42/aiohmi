@@ -978,6 +978,7 @@ class XCCClient(IMMClient):
             self._refresh_token()
         if progress:
             progress({'phase': 'complete'})
+        return savefile
 
     def disk_inventory(self, mode=0):
         # mode 0 is firmware, 1 is hardware

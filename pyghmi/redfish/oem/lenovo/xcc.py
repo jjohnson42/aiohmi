@@ -709,6 +709,7 @@ class OEMHandler(generic.OEMHandler):
             self._refresh_token()
         if progress:
             progress({'phase': 'complete'})
+        return savefile
 
     def get_licenses(self):
         licdata = self.wc.grab_json_response('/api/providers/imm_fod')

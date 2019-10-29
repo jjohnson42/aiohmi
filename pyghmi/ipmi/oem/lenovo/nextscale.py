@@ -370,6 +370,7 @@ class SMMClient(object):
                           'progress': 100 * self.wc.get_download_progress()})
         if progress:
             progress({'phase': 'complete'})
+        return savefile
 
     def process_fru(self, fru):
         # TODO(jjohnson2): can also get EIOM, SMM, and riser data if warranted
