@@ -95,14 +95,16 @@ class TsmHandler(generic.OEMHandler):
         wc = self.wc
         fwinf = wc.grab_json_response('/api/DeviceVersion')
         for biosinf in fwinf:
-            if biosinf['device'] != 1:
+            if biosinf.get('device', None) != 1:
                 continue
-            biosinf = fwinf[1]
+            if not biosinf.get('buildname', False):
+                break
             biosres = {
-                'version': '{0}.{1}'.format(
-                    biosinf['main'][0], biosinf['main'][1:]),
                 'build': biosinf['buildname']
             }
+            if biosinf.get('main', False):
+                biosres['version'] = '{0}.{1}'.format(
+                    biosinf['main'][0], biosinf['main'][1:]),
             yield ('UEFI', biosres)
             break
         name = 'TSM'
