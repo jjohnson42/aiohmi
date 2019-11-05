@@ -762,16 +762,30 @@ class Command(object):
             return lastnicurl
 
     @property
-    def _bmcreseturl(self):
+    def _bmcresetinfo(self):
         if not self._varresetbmcurl:
             bmcinfo = self._do_web_request(self._bmcurl)
-            self._varresetbmcurl = bmcinfo.get('Actions', {}).get(
-                '#Manager.Reset', {}).get('target', None)
+            resetinf = bmcinfo.get('Actions', {}).get('#Manager.Reset',
+                                                 {})
+            url = resetinf.get('target', '')
+            valid = resetinf.get('ResetType@Redfish.AllowableValues', [])
+            resettype = None
+            if 'GracefulRestart' in valid:
+                resettype = 'GracefulRestart'
+            elif 'ForceRestart' in valid:
+                resettype = 'ForceRestart'
+            elif 'ColdReset' in valid:
+                resettype = 'ColdReset'
+            self._varresetbmcurl = url, resettype
         return self._varresetbmcurl
 
     def reset_bmc(self):
-        self._do_web_request(self._bmcreseturl,
-                             {'ResetType': 'GracefulRestart'})
+        url, action = self._bmcresetinfo
+        if not url:
+            raise Exception('BMC does not provide reset action')
+        if not action:
+            raise Exception('BMC does not accept a recognized reset type')
+        self._do_web_request(url, {'ResetType': action})
 
     def set_identify(self, on=True, blink=None):
         self._do_web_request(
