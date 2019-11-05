@@ -93,7 +93,11 @@ class TsmHandler(generic.OEMHandler):
 
     def get_firmware_inventory(self, components, raisebypass=True):
         wc = self.wc
-        fwinf = wc.grab_json_response('/api/DeviceVersion')
+        fwinf, status = wc.grab_json_response_with_status(
+            '/api/DeviceVersion')
+        gotinfo = False
+        if status < 200 or status >= 300:
+            raise Exception('Error connecting to HTTP API')
         for biosinf in fwinf:
             if biosinf.get('device', None) != 1:
                 continue
@@ -106,6 +110,7 @@ class TsmHandler(generic.OEMHandler):
                 biosres['version'] = '{0}.{1}'.format(
                     biosinf['main'][0], biosinf['main'][1:]),
             yield ('UEFI', biosres)
+            gotinfo = True
             break
         name = 'TSM'
         fwinf = wc.grab_json_response('/api/get-sysfwinfo')
@@ -116,7 +121,10 @@ class TsmHandler(generic.OEMHandler):
                 'date': cinf['builddate'],
             }
             yield (name, bmcinf)
+            gotinfo = True
             name += ' Backup'
+        if not gotinfo:
+            raise Exception("Unable to retrieve firmware information")
         if raisebypass:
             raise exc.BypassGenericBehavior()
 
