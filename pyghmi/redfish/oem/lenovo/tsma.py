@@ -108,7 +108,7 @@ class TsmHandler(generic.OEMHandler):
             }
             if biosinf.get('main', False):
                 biosres['version'] = '{0}.{1}'.format(
-                    biosinf['main'][0], biosinf['main'][1:]),
+                    biosinf['main'][0], biosinf['main'][1:])
             yield ('UEFI', biosres)
             gotinfo = True
             break
