@@ -821,23 +821,7 @@ class XCCClient(IMMClient):
         return {'height': int(dsc['u-height']), 'slot': int(dsc['slot'])}
 
     def get_bmc_configuration(self):
-        try:
-            enclosureinfo = self.ipmicmd.xraw_command(0x3a, 0xf1, data=[0])
-        except pygexc.IpmiException:
-            return {}
-        settings = {
-            'smm': {
-                'default': 'Disable',
-                'possible': ['Enable', 'Disable'],
-                'help': 'Enables or disables the network of the D2 enclosure manager.',
-            }
-        }
-        if enclosureinfo['data'][0] == '\x02':
-            settings['smm']['value'] = 'Disable'
-        elif enclosureinfo['data'][0] == '\x01':
-            settings['smm']['value'] = 'Enable'
-        else:
-            settings['smm']['value'] = None
+        settings = {}
         passrules = self.wc.grab_json_response('/api/dataset/imm_users_global')
         passrules = passrules.get('items', [{}])[0]
         settings['password_reuse_count'] = {'value': passrules.get('pass_min_resuse')}
@@ -847,6 +831,21 @@ class XCCClient(IMMClient):
         settings['password_complexity'] = {'value': passrules.get('pass_complex_required')}
         settings['password_min_length'] = {'value': passrules.get('pass_min_length')}
         settings['password_lockout_period'] = {'value': passrules.get('lockout_period')}
+        try:
+            enclosureinfo = self.ipmicmd.xraw_command(0x3a, 0xf1, data=[0])
+        except pygexc.IpmiException:
+            return settings
+        settings['smm'] = {
+            'default': 'Disable',
+            'possible': ['Enable', 'Disable'],
+            'help': 'Enables or disables the network of the D2 enclosure manager.',
+        }
+        if enclosureinfo['data'][0] == '\x02':
+            settings['smm']['value'] = 'Disable'
+        elif enclosureinfo['data'][0] == '\x01':
+            settings['smm']['value'] = 'Enable'
+        else:
+            settings['smm']['value'] = None
         return settings
 
     rulemap = {
