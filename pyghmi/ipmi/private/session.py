@@ -1775,6 +1775,8 @@ class Session(object):
             return {'success': True}
         if self.cleaningup:
             self.nowait = True
+        if self.sol_handler:
+            self.raw_command(netfn=6, command=0x49, data=(1, 1, 0, 0, 0, 0))
         self.raw_command(command=0x3c,
                          netfn=6,
                          data=struct.unpack("4B",
