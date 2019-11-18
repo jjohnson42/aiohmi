@@ -496,6 +496,10 @@ class Command(object):
         if powerstate == 'boot':
             oldpowerstate = self.get_power()['powerstate']
             powerstate = 'on' if oldpowerstate == 'off' else 'reset'
+        elif powerstate in ('on', 'off'):
+            oldpowerstate = self.get_power()['powerstate']
+            if oldpowerstate == powerstate:
+                return {'powerstate': powerstate}
         reqpowerstate = powerstate
         if powerstate not in powerstates:
             raise exc.InvalidParameterValue(
