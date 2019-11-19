@@ -155,21 +155,36 @@ class TsmHandler(generic.OEMHandler):
         wc = self.wc
         wc.set_header('Content-Type', 'application/json')
         if filename.endswith('.hpm'):
-            self.update_hpm_firmware(filename, progress, wc)
+            return self.update_hpm_firmware(filename, progress, wc)
         elif 'uefi' in filename and filename.endswith('.rom'):
-            self.update_uefi_firmware(filename, progress, wc)
+            return self.update_sys_firmware(filename, progress, wc)
+        elif 'amd-sas' in filename and filename.endswith('.bin'):
+            return self.update_sys_firmware(filename, progress, wc, type='bp')
         else:
             raise Exception('Unsupported filename {0}'.format(filename))
 
-    def update_uefi_firmware(self, filename, progress, wc):
-        rsp = wc.grab_json_response_with_status(
-            '/api/maintenance/BIOSremoteSave', {"tftpip":"","tftpfile":""})
+    def update_sys_firmware(self, filename, progress, wc, type='uefi'):
+        if type == 'bp':
+            rsp = wc.grab_json_response_with_status('/api/chassis-status')
+            if rsp[0]['power_status'] == 1:
+                raise Exception("Cannot update BP firmware while system is on")
+            updatemode = 'BPUploadMode'
+            fileupload = 'BPfileUpload'
+            startit = 'BPUpgradeStart'
+            statusname = 'BPstatus'
+        else:
+            updatemode = 'flash'
+            rsp = wc.grab_json_response_with_status(
+                '/api/maintenance/BIOSremoteSave', {"tftpip":"","tftpfile":""})
+            fileupload = 'firmware/BIOS'
+            startit = 'BIOSstart'
+            statusname = 'BIOSstatus'
         hdrs = wc.stdheaders.copy()
         hdrs['Content-Length'] = 0
         rsp = wc.grab_json_response_with_status(
-            '/api/maintenance/flash', method='PUT', headers=hdrs)
+            '/api/maintenance/{0}'.format(updatemode), method='PUT', headers=hdrs)
         fu = webclient.FileUploader(
-            wc, '/api/maintenance/firmware/BIOS', filename, formname='fwimage')
+            wc, '/api/maintenance/{0}'.format(fileupload), filename, formname='fwimage')
         fu.start()
         while fu.isAlive():
             fu.join(3)
@@ -181,12 +196,12 @@ class TsmHandler(generic.OEMHandler):
             progress({
                         'phase': 'apply',
                         'progress': 0.0})
-        rsp = wc.grab_json_response_with_status('/api/maintenance/BIOSstart')
+        rsp = wc.grab_json_response_with_status('/api/maintenance/{0}'.format(startit))
         applypct = 0.0
         if rsp[1] >= 200 and rsp[1] < 300 and rsp[0]['wRet'] == 0:
             updone = False
             while not updone:
-                rsp = wc.grab_json_response('/api/maintenance/BIOSstatus')
+                rsp = wc.grab_json_response('/api/maintenance/{0}'.format(statusname))
                 if rsp.get('state', 0) == 9:
                     break
                 if rsp.get('state', 0) in (6, 10):
@@ -196,9 +211,18 @@ class TsmHandler(generic.OEMHandler):
                     progress({
                         'phase': 'apply',
                         'progress': 70 + float(rsp.get('progress', 0))/100*30})
+                elif type == 'bp' and rsp.get('state', 0) == 1:
+                    break
                 elif progress and applypct < 70:
                     applypct += 1.4
                     progress({'phase': 'apply', 'progress': applypct})
+            if type == 'bp':
+                rsp = wc.grab_json_response('/api/maintenance/BPfinish')
+                hdrs = wc.stdheaders.copy()
+                hdrs['Content-Length'] = 0
+                rsp = wc.grab_json_response_with_status(
+                    '/api/maintenance/Outofflash', method='PUT', headers=hdrs)
+                return 'complete'
             return 'pending'
         raise Exception('Update Failure')
 
