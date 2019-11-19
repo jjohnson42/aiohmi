@@ -773,6 +773,12 @@ class Command(object):
                                                  {})
             url = resetinf.get('target', '')
             valid = resetinf.get('ResetType@Redfish.AllowableValues', [])
+            if not valid:
+                tmpurl = resetinf.get('@Redfish.ActionInfo', None)
+                if tmpurl:
+                    resetinf = self._do_web_request(tmpurl)
+                    valid = resetinf.get('Parameters', [{}])[0].get(
+                        'AllowableValues')
             resettype = None
             if 'GracefulRestart' in valid:
                 resettype = 'GracefulRestart'
@@ -792,10 +798,11 @@ class Command(object):
         self._do_web_request(url, {'ResetType': action})
 
     def set_identify(self, on=True, blink=None):
+        thetag = self.sysinfo.get('@odata.etag', None)
         self._do_web_request(
             self.sysurl,
             {'IndicatorLED': 'Blinking' if blink else 'Lit' if on else 'Off'},
-            method='PATCH')
+            method='PATCH', etag=thetag)
 
     _idstatemap = {
         'Blinking': 'blink',
@@ -1499,7 +1506,7 @@ class Command(object):
                         unavailable=unavail)
         elif sensor['type'] == 'Temperature':
             for temp in reading['Temperatures']:
-                if temp['Name'] == sensor['name'] and 'ReadingCelsius' in temp:
+                if temp['Name'] == sensor['name']:
                     val = temp.get('ReadingCelsius', None)
                     unavail = val is None
                     return SensorReading(
