@@ -1022,7 +1022,7 @@ class Command(object):
             channel = self.get_network_channel()
         rqdata = (channel, 0x11, 0, 0)
         rsp = self.xraw_command(netfn=0xc, command=2, data=rqdata)
-        return ord(rsp['data'][1])
+        return bytearray(rsp['data'])[1]
 
     def get_alert_destination(self, destination=0, channel=None):
         """Get alert destination
@@ -1054,10 +1054,10 @@ class Command(object):
         destinfo['retries'] = retries
         rqdata = (channel, 19, destination, 0)
         rsp = self.xraw_command(netfn=0xc, command=2, data=rqdata)
-        if ord(rsp['data'][2]) & 0b11110000 == 0:
+        if bytearray(rsp['data'])[2] & 0b11110000 == 0:
             destinfo['address_format'] = 'ipv4'
             destinfo['address'] = socket.inet_ntoa(rsp['data'][4:8])
-        elif ord(rsp['data'][2]) & 0b11110000 == 0b10000:
+        elif bytearray(rsp['data'])[2] & 0b11110000 == 0b10000:
             destinfo['address_format'] = 'ipv6'
             destinfo['address'] = socket.inet_ntop(socket.AF_INET6,
                                                    rsp['data'][3:])
@@ -1103,7 +1103,7 @@ class Command(object):
         # of entries.  We have no guarantee that the meaningful data will
         # be contiguous
         rsp = self.xraw_command(netfn=4, command=0x13, data=(8, 0, 0))
-        numpol = ord(rsp['data'][1])
+        numpol = bytearray(rsp['data'])[1]
         desiredchandest = (channel << 4) | destination
         availpolnum = None
         for polnum in range(1, numpol + 1):
