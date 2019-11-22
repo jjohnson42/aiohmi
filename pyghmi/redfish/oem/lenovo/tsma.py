@@ -112,7 +112,10 @@ class TsmHandler(generic.OEMHandler):
             gotinfo = True
             break
         name = 'TSM'
-        fwinf = wc.grab_json_response('/api/get-sysfwinfo')
+        fwinf, status = wc.grab_json_response_with_status('/api/get-sysfwinfo')
+        if status != 200:
+            raise Exception('Error {0} retrieving TSM version: {1}'.format(
+                status, fwinf))
         for cinf in fwinf:
             bmcinf = {
                 'version': cinf['fw_ver'],
