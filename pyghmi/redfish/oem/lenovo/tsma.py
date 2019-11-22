@@ -77,7 +77,6 @@ class TsmHandler(generic.OEMHandler):
         self._wc = None
         self.username = None
         self.password = None
-        self._wc = None
         self.csrftok = None
         self.fish = fish
         super(TsmHandler, self).__init__(sysinfo, sysurl, webclient, cache)
@@ -132,7 +131,9 @@ class TsmHandler(generic.OEMHandler):
     def wc(self):
         self.fwid = None
         if self._wc:
-            return self._wc
+            rsp, status = self._wc.grab_json_response_with_status('/api/chassis-status')
+            if status == 200:
+                return self._wc
         authdata = {
             'username': self.username,
             'password': self.password,
@@ -342,4 +343,5 @@ class TsmHandler(generic.OEMHandler):
         hdrs = wc.stdheaders.copy()
         hdrs['Content-Length'] = 0
         rsp = wc.grab_json_response_with_status('/api/maintenance/reset', method='POST', headers=hdrs)
+        self._wc = None
         return 'complete'
