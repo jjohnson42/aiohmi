@@ -16,6 +16,7 @@
 
 import pyghmi.redfish.oem.generic as generic
 import pyghmi.exceptions as exc
+import pyghmi.media as media
 import pyghmi.util.webclient as webclient
 import struct
 import time
@@ -35,7 +36,7 @@ def read_hpm(filename):
     with open(filename, 'rb') as hpmfile:
         hpmfile.seek(0x20)
         skip = struct.unpack('>H', hpmfile.read(2))[0]
-        hpmfile.seek(skip + 1, 1) 
+        hpmfile.seek(skip + 1, 1)
         sectype, compid = struct.unpack('BB', hpmfile.read(2))
         while sectype == 2:
             currsec = HpmSection()
@@ -53,7 +54,7 @@ def read_hpm(filename):
             if hashpresent != 1:
                 hashpresent = 0
             currsec.hash_size = hashpresent * (256 * blocks + hdrsize)
-            hpmfile.seek(5, 1) 
+            hpmfile.seek(5, 1)
             currsec.data = hpmfile.read(currlen)
             hpminfo.append(currsec)
             sectype, compid = struct.unpack('BB', hpmfile.read(2))
@@ -154,7 +155,7 @@ class TsmHandler(generic.OEMHandler):
         wc.set_header('X-CSRFTOKEN', self.csrftok)
         self._wc = wc
         return wc
-    
+
     def update_firmware(self, filename, data=None, progress=None, bank=None):
         wc = self.wc
         wc.set_header('Content-Type', 'application/json')
@@ -348,3 +349,188 @@ class TsmHandler(generic.OEMHandler):
         rsp = wc.grab_json_response_with_status('/api/maintenance/reset', method='POST', headers=hdrs)
         self._wc = None
         return 'complete'
+
+    def _detach_all_media(self, wc, slots):
+        for slot in slots:  # Stop all active redirections to reconfigure
+            if slot['redirection_status'] != 0:
+                wc.grab_json_response(
+                    '/api/settings/media/remote/stop-media',
+                    {'image_name': slot['image_name'],
+                     'image_type': slot['media_type'],
+                     'image_index': slot['media_index']})
+
+    def detach_remote_media(self):
+        wc = self.wc
+        slots = wc.grab_json_response('/api/settings/media/remote/configurations')
+        self._detach_all_media(wc, slots)
+
+    def _allocate_slot(self, slots, filetype, wc, server, path):
+        currhdds = []
+        currisos = []
+        for slot in slots:
+            if slot['image_name']:
+                if slot['media_type'] == 1:
+                    currisos.append(slot['image_name'])
+                elif slot['media_type'] == 4:
+                    currhdds.append(slot['image_name'])
+                else:
+                    raise exc.UnsupportedFunctionality(
+                        'Unrecognized mounted image: ' + repr(slot))
+        hddslots = len(currhdds)
+        cdslots = len(currisos)
+        if filetype == 1:
+            cdslots += 1
+        elif filetype == 4:
+            hddslots += 1
+        else:
+            raise exc.UnsupportedFunctionality('Unknown slot type requested')
+        gensettings = wc.grab_json_response('/api/settings/media/general')
+        samesettings = gensettings['same_settings'] == 1
+        if samesettings:
+            hds = gensettings['cd_remote_server_address']
+            hdp = gensettings['cd_remote_source_path'].replace('\\/', '/')
+        else:
+            hds = gensettings['hd_remote_server_address']
+            hdp = gensettings['hd_remote_source_path'].replace('\\/', '/')
+        if filetype == 1 and (currisos or (samesettings and currhdds)):
+            if gensettings['cd_remote_server_address'] != server:
+                raise exc.UnsupportedFunctionality(
+                    'Cannot mount ISO images from multiple '
+                    'servers at a time')
+            if gensettings['cd_remote_source_path'].replace('\\/', '/') != path:
+                raise exc.UnsupportedFunctionality(
+                    'Cannot mount ISO images from different '
+                    'directories at a time')
+        if filetype == 4 and currhdds:
+            if hds != server:
+                raise exc.UnsupportedFunctionality(
+                    'Cannot mount IMG images from multiple servers at a time')
+            if hdp != path:
+                raise exc.UnsupportedFunctionality(
+                    'Cannot mount IMG images from muliple directories at a '
+                    'time')
+        self._detach_all_media(wc, slots)
+        if filetype == 1 or (samesettings and currhdds):
+            gensettings['cd_remote_server_address'] = server
+            gensettings['cd_remote_source_path'] = path #.replace('/', '\\/')
+            gensettings['cd_remote_share_type'] = 'nfs'
+            gensettings['mount_cd'] = 1
+        elif filetype == 4:
+            gensettings['same_settings'] = 0
+            gensettings['hd_remote_server_address'] = server
+            gensettings['hd_remote_source_path'] = path #.replace('/', '\\/')
+            gensettings['hd_remote_share_type'] = 'nfs'
+            gensettings['mount_hd'] = 1
+        gensettings['remote_media_support'] = 1
+        gensettings['cd_remote_password'] = ''
+        gensettings['hd_remote_password'] = ''
+        rsp = wc.grab_json_response_with_status('/api/settings/media/general',
+                                                gensettings, method='PUT')
+        # need to calibrate instances correctly
+        currinfo, status = wc.grab_json_response_with_status('/api/settings/media/instance')
+        currinfo['num_cd'] = cdslots
+        currinfo['num_hd'] = hddslots
+        if currinfo['kvm_num_cd'] > cdslots:
+            currinfo['kvm_num_cd'] = cdslots
+        if currinfo['kvm_num_hd'] > hddslots:
+            currinfo['kvm_num_hd'] = hddslots
+        rsp = wc.grab_json_response_with_status(
+            '/api/settings/media/instance', currinfo, method='PUT')
+        images = wc.grab_json_response('/api/settings/media/remote/images')
+        tries = 20
+        while tries and not images:
+            tries -= 1
+            time.sleep(1)
+            images = wc.grab_json_response('/api/settings/media/remote/images')
+        for iso in currisos:
+            self._exec_mount(iso, images, wc)
+        for iso in currhdds:
+            self._exec_mount(iso, images, wc)
+
+    def _exec_mount(self, name, images, wc):
+        for img in images:
+            if img['image_name'] == name:
+                break
+        else:
+            raise exc.InvalidParameterValue(
+                'Unable to locate image {0}'.format(name))
+        wc.grab_json_response(
+            '/api/settings/media/remote/start-media',
+            {'image_name': name, 'image_type': img['image_type'],
+             'image_index': img['image_index']})
+
+    def upload_media(self, filename, progress=None):
+        raise exc.UnsupportedFunctionality(
+            'Remote media upload not supported on this system')
+
+    def list_media(self):
+        wc = self.wc
+        rsp = wc.grab_json_response('/api/settings/media/general')
+        cds = rsp['cd_remote_server_address']
+        cdpath = rsp['cd_remote_source_path']
+        cdproto = rsp['cd_remote_share_type']
+        if rsp['same_settings'] == 1:
+            hds = cds
+            hdpath = cdpath
+            hdproto = cdproto
+        else:
+            hds = rsp['hd_remote_server_address']
+            hdpath = rsp['cd_remote_source_path']
+            hdproto = rsp['cd_remote_share_type']
+        slots = wc.grab_json_response('/api/settings/media/remote/configurations')
+        for slot in slots:
+            if slot['redirection_status'] == 1:
+                url = None
+                if slot['media_type'] == 1:
+                    url = '{0}://{1}{2}/{3}'.format(
+                        cdproto, cds, cdpath, slot['image_name'])
+                elif slot['media_type'] == 4:
+                    url = '{0}://{1}{2}/{3}'.format(
+                        hdproto, hds, hdpath, slot['image_name'])
+                if url:
+                    yield media.Media(url)
+
+    def attach_remote_media(self, url, user, password, vmurls):
+        if not url.startswith('nfs://'):
+            raise exc.UnsupportedFunctionality(
+                'Only nfs:// urls are supported by this system')
+        path = url.replace('nfs://', '')
+        server, path = path.split('/', 1)
+        path, filename = path.rsplit('/', 1)
+        path = '/' + path
+        filetype = filename.rsplit('.')[-1]
+        if filetype == 'iso':
+            filetype = 1
+        elif filetype == 'img':
+            filetype = 4
+        else:
+            raise exc.UnsupportedFunctionality(
+                'Only iso and img files supported')
+        wc = self.wc
+        mountslots = wc.grab_json_response(
+            '/api/settings/media/remote/configurations')
+        images = wc.grab_json_response('/api/settings/media/remote/images')
+        currtypeenabled = False
+        for slot in mountslots:
+            if slot['image_name'] == filename:
+                return  # Already mounted...
+        for img in images:
+            if img['image_name'] == filename:
+                break
+            if img['image_type'] == filetype:
+                currtypeenabled = True
+        else:
+            if currtypeenabled:
+                raise exc.UnsupportedFunctionality(
+                    'This system cannot mount images from different locations at the same time')
+            img = None
+        myslot = None
+        for slot in mountslots:
+            if slot['media_type'] != filetype:
+                continue
+            if slot['redirection_status'] == 0:
+                break
+        else:
+            self._allocate_slot(mountslots, filetype, wc, server, path)
+        images = wc.grab_json_response('/api/settings/media/remote/images')
+        self._exec_mount(filename, images, wc)

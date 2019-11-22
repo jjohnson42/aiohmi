@@ -289,6 +289,8 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
             del headers['Content-Type']
         if method == 'POST' and body and 'Content-Type' not in headers:
             headers['Content-Type'] = 'application/x-www-form-urlencoded'
+        if body and 'Content-Length' not in headers:
+            headers['Content-Length'] = len(body)
         if self.cookies:
             cookies = []
             for ckey in self.cookies:

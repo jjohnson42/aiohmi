@@ -919,6 +919,9 @@ class OEMHandler(generic.OEMHandler):
     def attach_remote_media(self, url, username, password):
         if self.has_imm:
             self.immhandler.attach_remote_media(url, username, password)
+        elif self.has_tsma:
+            return self.tsmahandler.attach_remote_media(
+                url, username, password, None)
         elif self.has_megarac:
             proto, host, path = util.urlsplit(url)
             if proto == 'smb':
@@ -1002,6 +1005,8 @@ class OEMHandler(generic.OEMHandler):
     def detach_remote_media(self):
         if self.has_imm:
             self.immhandler.detach_remote_media()
+        elif self.has_tsma:
+            self.tsmahandler.detach_remote_media()
         elif self.has_megarac:
             self.ipmicmd.xraw_command(
                 netfn=0x32, command=0x9f, data=(8, 10, 0, 0))
@@ -1015,6 +1020,8 @@ class OEMHandler(generic.OEMHandler):
     def list_media(self):
         if self.has_xcc or self.has_imm:
             return self.immhandler.list_media()
+        if self.has_tsma:
+            return self.tsmahandler.list_media()
         return super(OEMHandler, self).list_media()
 
     def get_health(self, summary):
