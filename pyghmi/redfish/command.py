@@ -28,7 +28,6 @@ import struct
 import time
 import pyghmi.exceptions as exc
 import pyghmi.constants as const
-import pyghmi.media as media
 import pyghmi.util.webclient as webclient
 from pyghmi.util.parse import parse_time
 import pyghmi.redfish.oem.lookup as oem
@@ -721,7 +720,6 @@ class Command(object):
         return self._varbmcnicurl
 
     def list_network_interface_names(self):
-        bmcinfo = self._do_web_request(self._bmcurl)
         nicurl = bmcinfo.get('EthernetInterfaces', {}).get('@odata.id',
                                                             None)
         if not nicurl:
@@ -1522,19 +1520,7 @@ class Command(object):
                         unavailable=unavail)
 
     def list_media(self):
-        bmcinfo = self._do_web_request(self._bmcurl)
-        vmcoll = bmcinfo.get('VirtualMedia', {}).get('@odata.id', None)
-        if vmcoll:
-            vmlist = self._do_web_request(vmcoll)
-            vmurls = [x['@odata.id'] for x in vmlist.get('Members', [])]
-            for vminfo in self._do_bulk_requests(vmurls):
-                vminfo = vminfo[0]
-                if vminfo['Image']:
-                    imageurl = vminfo['Image'].replace('/' + vminfo['ImageName'], '')
-                    yield media.Media(vminfo['ImageName'], imageurl)
-                elif vminfo['Inserted'] and vminfo['ImageName']:
-                    yield media.Media(vminfo['ImageName'])
-
+        return self.oem.list_media(self)
 
     def get_storage_configuration(self):
         """"Get storage configuration data
@@ -1602,6 +1588,10 @@ class Command(object):
     def detach_remote_media(self):
         bmcinfo = self._do_web_request(self._bmcurl)
         vmcoll = bmcinfo.get('VirtualMedia', {}).get('@odata.id', None)
+        try:
+            self.oem.detach_remote_media()
+        except exc.BypassGenericBehavior:
+            return
         if vmcoll:
             vmlist = self._do_web_request(vmcoll)
             vmurls = [x['@odata.id'] for x in vmlist.get('Members', [])]

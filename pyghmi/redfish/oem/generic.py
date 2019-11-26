@@ -15,6 +15,7 @@
 import json
 import os
 import pyghmi.exceptions as exc
+import pyghmi.media as media
 
 
 class OEMHandler(object):
@@ -45,6 +46,20 @@ class OEMHandler(object):
     def set_credentials(self, username, password):
         self.username = username
         self.password = password
+
+    def list_media(self, fishclient):
+        bmcinfo = fishclient._do_web_request(fishclient._bmcurl)
+        vmcoll = bmcinfo.get('VirtualMedia', {}).get('@odata.id', None)
+        if vmcoll:
+            vmlist = fishclient._do_web_request(vmcoll)
+            vmurls = [x['@odata.id'] for x in vmlist.get('Members', [])]
+            for vminfo in fishclient._do_bulk_requests(vmurls):
+                vminfo = vminfo[0]
+                if vminfo['Image']:
+                    imageurl = vminfo['Image'].replace('/' + vminfo['ImageName'], '')
+                    yield media.Media(vminfo['ImageName'], imageurl)
+                elif vminfo['Inserted'] and vminfo['ImageName']:
+                    yield media.Media(vminfo['ImageName'])
 
     def get_storage_configuration(self):
         raise exc.UnsupportedFunctionality(

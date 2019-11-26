@@ -79,6 +79,7 @@ class TsmHandler(generic.OEMHandler):
         self.username = None
         self.password = None
         self.csrftok = None
+        self.isipmi = bool(fish)
         self.fish = fish
         super(TsmHandler, self).__init__(sysinfo, sysurl, webclient, cache)
         self.tsm = webclient.thehost
@@ -363,6 +364,8 @@ class TsmHandler(generic.OEMHandler):
         wc = self.wc
         slots = wc.grab_json_response('/api/settings/media/remote/configurations')
         self._detach_all_media(wc, slots)
+        if not self.isipmi:
+            raise exc.BypassGenericBehavior()
 
     def _allocate_slot(self, slots, filetype, wc, server, path):
         currhdds = []
@@ -463,7 +466,7 @@ class TsmHandler(generic.OEMHandler):
         raise exc.UnsupportedFunctionality(
             'Remote media upload not supported on this system')
 
-    def list_media(self):
+    def list_media(self, fishclient):
         wc = self.wc
         rsp = wc.grab_json_response('/api/settings/media/general')
         cds = rsp['cd_remote_server_address']
@@ -482,13 +485,13 @@ class TsmHandler(generic.OEMHandler):
             if slot['redirection_status'] == 1:
                 url = None
                 if slot['media_type'] == 1:
-                    url = '{0}://{1}{2}/{3}'.format(
-                        cdproto, cds, cdpath, slot['image_name'])
+                    url = '{0}://{1}{2}'.format(
+                        cdproto, cds, cdpath)
                 elif slot['media_type'] == 4:
-                    url = '{0}://{1}{2}/{3}'.format(
-                        hdproto, hds, hdpath, slot['image_name'])
+                    url = '{0}://{1}{2}'.format(
+                        hdproto, hds, hdpath)
                 if url:
-                    yield media.Media(url)
+                    yield media.Media(slot['image_name'], url)
 
     def attach_remote_media(self, url, user, password, vmurls):
         if not url.startswith('nfs://'):
@@ -534,3 +537,5 @@ class TsmHandler(generic.OEMHandler):
             self._allocate_slot(mountslots, filetype, wc, server, path)
         images = wc.grab_json_response('/api/settings/media/remote/images')
         self._exec_mount(filename, images, wc)
+        if not self.isipmi:
+            raise exc.BypassGenericBehavior()
