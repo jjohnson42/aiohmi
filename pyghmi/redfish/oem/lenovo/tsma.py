@@ -88,6 +88,33 @@ class TsmHandler(generic.OEMHandler):
     def get_uefi_configuration(self, hideadvanced=True):
         return self.fishclient.get_system_configuration(hideadvanced)
 
+    def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
+        wc = self.wc
+        wc.grab_json_response('/api/mini_ffdc', {'action': 'trigger'})
+        status = 1
+        percent = 0
+        while status == 1:
+            time.sleep(5)
+            check = wc.grab_json_response('/api/mini_ffdc', {'action': 'check'})
+            status = check.get('status', -1)
+            if progress:
+                progress({'phase': 'initializing', 'progress': float(percent)})
+            percent += 1
+        if status != 2:
+            raise Exception("Unknown error generating service data")
+        if autosuffix and not savefile.endswith('.tar'):
+            savefile += '.tar'
+        fd = webclient.FileDownloader(wc, '/api/mini_ffdc/package', savefile)
+        fd.start()
+        while fd.isAlive():
+            fd.join(1)
+            if progress and self.wc.get_download_progress():
+                progress({'phase': 'download',
+                          'progress': 100 * self.wc.get_download_progress()})
+        if progress:
+            progress({'phase': 'complete'})
+        return savefile
+
     def init_redfish(self):
         self.fishclient = self.fish.Command(self.tsm, self.username, self.password,
             verifycallback=self._certverify)

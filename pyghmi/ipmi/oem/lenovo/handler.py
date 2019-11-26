@@ -643,6 +643,8 @@ class OEMHandler(generic.OEMHandler):
             return self.immhandler.get_diagnostic_data(savefile, progress, autosuffix)
         if self.is_fpc:
             return self.smmhandler.get_diagnostic_data(savefile, progress, autosuffix)
+        if self.has_tsma:
+            return self.tsmahandler.get_diagnostic_data(savefile, progress, autosuffix)
 
     def get_oem_capping_enabled(self):
         if self.has_tsm:

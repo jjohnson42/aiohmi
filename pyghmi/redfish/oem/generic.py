@@ -118,7 +118,7 @@ class OEMHandler(object):
         :return:
         """
         raise exc.UnsupportedFunctionality(
-            'Do not know how to get diagnostic data for this platform')
+            'Retrieving diagnostic data is not implemented for this platform')
 
     def get_licenses(self):
         raise exc.UnsupportedFunctionality()
