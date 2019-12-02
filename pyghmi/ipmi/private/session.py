@@ -107,7 +107,7 @@ def define_worker():
                 if timeout < 0:
                     timeout = 0
                 selectdeadline = _monotonic_time() + timeout
-                tmplist, _, _ = select.select(iosockets, (), (), timeout)
+                select.select(iosockets, (), (), timeout)
                 # pessimistically move out the deadline
                 # doing it this early (before ioqueue is evaluated)
                 # this avoids other threads making a bad assumption
