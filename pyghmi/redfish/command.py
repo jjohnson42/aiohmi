@@ -246,6 +246,8 @@ class Command(object):
         self.username = userid
         self.password = password
         self.wc.set_header('Content-Type', 'application/json')
+        if 'Systems' not in overview:
+            raise exc.PyghmiException('Redfish not ready')
         systems = overview['Systems']['@odata.id']
         res = self.wc.grab_json_response_with_status(systems)
         if res[1] == 401:
