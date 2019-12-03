@@ -493,7 +493,7 @@ class TsmHandler(generic.OEMHandler):
         raise exc.UnsupportedFunctionality(
             'Remote media upload not supported on this system')
 
-    def list_media(self, fishclient):
+    def list_media(self, fishclient=None):
         wc = self.wc
         rsp = wc.grab_json_response('/api/settings/media/general')
         cds = rsp['cd_remote_server_address']
