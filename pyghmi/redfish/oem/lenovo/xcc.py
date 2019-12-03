@@ -565,6 +565,8 @@ class OEMHandler(generic.OEMHandler):
             raise Exception('Update image not intended for this system')
         elif rsp.get('return', -1) == 108:
             raise Exception('Temporary error validating update, try again')
+        elif rsp.get('return', -1) == 109:
+            raise Exception('Invalid update file or component does not support remote update')
         elif rsp.get('return', -1) != 0:
             errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
             raise Exception('Unexpected return to verify: ' + errmsg)
