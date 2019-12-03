@@ -101,16 +101,18 @@ class TsmHandler(generic.OEMHandler):
                 progress({'phase': 'initializing', 'progress': float(percent)})
             percent += 1
         if status != 2:
-            raise Exception("Unknown error generating service data")
+            raise Exception("Unknown error generating service data: " + repr(check))
         if autosuffix and not savefile.endswith('.tar'):
             savefile += '.tar'
         fd = webclient.FileDownloader(wc, '/api/mini_ffdc/package', savefile)
         fd.start()
         while fd.isAlive():
             fd.join(1)
-            if progress and self.wc.get_download_progress():
-                progress({'phase': 'download',
-                          'progress': 100 * self.wc.get_download_progress()})
+            if progress:
+                currprog = self.wc.get_download_progress()
+                if currprog:
+                    progress({'phase': 'download',
+                              'progress': 100 * currprog})
         if progress:
             progress({'phase': 'complete'})
         return savefile
