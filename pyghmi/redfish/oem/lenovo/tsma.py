@@ -507,8 +507,8 @@ class TsmHandler(generic.OEMHandler):
             hdproto = cdproto
         else:
             hds = rsp['hd_remote_server_address']
-            hdpath = rsp['cd_remote_source_path']
-            hdproto = rsp['cd_remote_share_type']
+            hdpath = rsp['hd_remote_source_path']
+            hdproto = rsp['hd_remote_share_type']
         slots = wc.grab_json_response('/api/settings/media/remote/configurations')
         for slot in slots:
             if slot['redirection_status'] == 1:
