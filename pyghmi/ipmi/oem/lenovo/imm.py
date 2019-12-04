@@ -1681,6 +1681,8 @@ class XCCClient(IMMClient):
                 # The XCC firmware predates the FileStatus api
                 verifyuploadfilersp = rsp
                 break
+            if rsp.get('return', -1) == 109:
+                raise Exception('Invalid update file or component does not support remote update')
             if rsp.get('return', -1) != 0:
                 errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
                 raise Exception(
