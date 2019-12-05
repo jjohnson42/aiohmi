@@ -208,7 +208,14 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
             if not method:
                 method = 'GET'
             webclient.request(method, url, referer=referer, headers=headers)
-        rsp = webclient.getresponse()
+        try:
+            rsp = webclient.getresponse()
+        except httplib.BadStatusLine:
+            return 'Target Unavailable', 500
+        except ssl.SSLError as e:
+            if 'timed out' in str(e):
+                return 'Target Unavailable', 500
+            raise
         body = rsp.read()
         if rsp.getheader('Content-Encoding', None) == 'gzip':
             body = gzip.GzipFile(fileobj=io.BytesIO(body)).read()
