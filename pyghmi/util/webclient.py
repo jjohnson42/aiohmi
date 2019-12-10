@@ -292,6 +292,8 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
     def request(self, method, url, body=None, headers=None, referer=None):
         if headers is None:
             headers = self.stdheaders.copy()
+        else:
+            headers = headers.copy()
         if method == 'GET' and 'Content-Type' in headers:
             del headers['Content-Type']
         if method == 'POST' and body and 'Content-Type' not in headers:
