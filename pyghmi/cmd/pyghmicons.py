@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # Copyright 2013 IBM Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,21 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# """
-# @author: Jarrod Johnson <jbjohnso@us.ibm.com>
-# """
-#
-# """A simple little script to exemplify/test ipmi.console module
-# """
+""" A simple little script to exemplify/test ipmi.console module """
+
 import fcntl
 import os
 import select
 import sys
 import termios
+import threading
 import tty
 
+from six import string_types
+
 from pyghmi.ipmi import console
-import threading
 
 
 def _doinput(sol):
@@ -45,7 +42,7 @@ def _doinput(sol):
 
 def _print(data):
     bailout = False
-    if type(data) not in (str, unicode):
+    if not isinstance(data, string_types):
         bailout = True
         data = repr(data)
     sys.stdout.write(data)
@@ -74,8 +71,8 @@ def main():
             with open(passwd_file, "r") as f:
                 passwd = f.read()
 
-        sol = console.Console(bmc=sys.argv[1], userid=sys.argv[2], password=passwd,
-                              iohandler=_print, force=True)
+        sol = console.Console(bmc=sys.argv[1], userid=sys.argv[2],
+                              password=passwd, iohandler=_print, force=True)
         inputthread = threading.Thread(target=_doinput, args=(sol,))
         inputthread.daemon = True
         inputthread.start()

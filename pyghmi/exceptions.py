@@ -1,6 +1,3 @@
-
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 IBM Corporation
 # Copyright 2015-2017 Lenovo
 #
@@ -64,6 +61,7 @@ class BypassGenericBehavior(PyghmiException):
     # Indicates that an OEM handler wants to abort any standards based
     # follow up
     pass
+
 
 class FallbackData(PyghmiException):
     # Indicates the OEM handler has data to be used if the generic

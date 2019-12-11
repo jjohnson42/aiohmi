@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # Copyright 2013 IBM Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,14 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# """
-# @author: Jarrod Johnson <jbjohnso@us.ibm.com>
-# """
 
-# """This is an example of using the library in a synchronous fashion. For now,
-# it isn't conceived as a general utility to actually use, just help developers
-# understand how the ipmi_command class workes.
-# """
+"""This is an example of using the library in a synchronous fashion. For now,
+it isn't conceived as a general utility to actually use, just help developers
+understand how the ipmi_command class workes.
+"""
+
 import functools
 import os
 import string
@@ -71,7 +68,8 @@ def docommand(args, result, ipmisession):
 def main():
     if (len(sys.argv) < 3) or 'IPMIPASSWORD' not in os.environ:
         print("Usage:")
-        print(" IPMIPASSWORD=password %s bmc username <cmd> <optarg>" % sys.argv[0])
+        print(" IPMIPASSWORD=password %s bmc username <cmd> <optarg>" %
+              sys.argv[0])
         return 1
 
     password = os.environ['IPMIPASSWORD']

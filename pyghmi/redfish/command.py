@@ -1,6 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-# coding=utf8
-
 # Copyright 2019 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,25 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# The command module for redfish systems.  Provides https-only support
-# for redfish compliant endpoints
+"""
+The command module for redfish systems.  Provides https-only support
+for redfish compliant endpoints
+"""
 
 import base64
-from datetime import datetime, timedelta
+from datetime import datetime
+from datetime import timedelta
 from fnmatch import fnmatch
 import json
 import os
 import socket
 import struct
+import sys
 import time
-import pyghmi.exceptions as exc
-import pyghmi.constants as const
-import pyghmi.util.webclient as webclient
-from pyghmi.util.parse import parse_time
-import pyghmi.redfish.oem.lookup as oem
-# import pyghmi.storage as storage
-import re
+
 from dateutil import tz
+import re
+
+import pyghmi.constants as const
+import pyghmi.exceptions as exc
+import pyghmi.redfish.oem.lookup as oem
+from pyghmi.util.parse import parse_time
+import pyghmi.util.webclient as webclient
 
 
 numregex = re.compile('([0-9]+)')
@@ -130,9 +132,8 @@ class SensorReading(object):
             self.name = sensor['name']
         else:
             self.name = healthinfo['Name']
-            self.health = _healthmap.get(
-                            healthinfo.get('Status', {}).get(
-                            'Health', None), const.Health.Warning)
+            self.health = _healthmap.get(healthinfo.get(
+                'Status', {}).get('Health', None), const.Health.Warning)
             self.states = [healthinfo.get('Status', {}).get('Health',
                                                             'Unknown')]
             self.health = _healthmap[healthinfo['Status']['Health']]
@@ -281,7 +282,8 @@ class Command(object):
     @property
     def _validroles(self):
         okroles = set([])
-        roleurl = self._do_web_request(self._accountserviceurl).get('Roles', {}).get('@odata.id', None)
+        roleurl = self._do_web_request(self._accountserviceurl).get(
+            'Roles', {}).get('@odata.id', None)
         if roleurl:
             roles = self._do_web_request(roleurl).get('Members', [])
             for role in roles:
@@ -324,11 +326,15 @@ class Command(object):
                     currname = accinfo.get('UserName', '')
                     currid = accinfo.get('Id', None)
                     if currname:
-                        names[currid] = {'name': currname, 'uid': currid,
+                        names[currid] = {
+                            'name': currname,
+                            'uid': currid,
                             'expiration': self.oem.get_user_expiration(currid),
                             'access': {
-                                'privilege_level': accinfo.get(
-                                    'RoleId', 'Unknown')}}
+                                'privilege_level': accinfo.get('RoleId',
+                                                               'Unknown')
+                            }
+                        }
         return names
 
     def _account_url_info_by_id(self, uid):
@@ -343,7 +349,8 @@ class Command(object):
                     accinfo = self._do_web_request(account['@odata.id'])
                     currid = accinfo.get('Id', None)
                     if str(currid) == str(uid):
-                        accinfo['expiration'] = self.oem.get_user_expiration(uid)
+                        accinfo['expiration'] = self.oem.get_user_expiration(
+                            uid)
                         return account['@odata.id'], accinfo
 
     def get_user(self, uid):
@@ -360,7 +367,8 @@ class Command(object):
                     currid = accinfo.get('Id', None)
                     if str(currid) == str(uid):
                         return {'name': currname, 'uid': uid,
-                                'expiration': self.oem.get_user_expiration(uid),
+                                'expiration': self.oem.get_user_expiration(
+                                    uid),
                                 'access': {
                                     'privilege_level': accinfo.get(
                                         'RoleId', 'Unknown')}}
@@ -387,11 +395,14 @@ class Command(object):
             raise Exception("No such account found")
         etag = accinfo[1].get('@odata.etag', None)
         if mode == 'set_password':
-            self._do_web_request(accinfo[0], {'Password': password}, method='PATCH', etag=etag)
-        elif mode=='disable':
-            self._do_web_request(accinfo[0], {'Enabled': False}, method='PATCH', etag=etag)
+            self._do_web_request(accinfo[0], {'Password': password},
+                                 method='PATCH', etag=etag)
+        elif mode == 'disable':
+            self._do_web_request(accinfo[0], {'Enabled': False},
+                                 method='PATCH', etag=etag)
         elif mode == 'enable':
-            self._do_web_request(accinfo[0], {'Enabled': True}, method='PATCH', etag=etag)
+            self._do_web_request(accinfo[0], {'Enabled': True},
+                                 method='PATCH', etag=etag)
         return True
 
     def disable_user(self, uid, mode):
@@ -413,22 +424,24 @@ class Command(object):
         if not accinfo:
             raise Exception("Unable to find indicated uid")
         etag = accinfo[1].get('@odata.etag', None)
-        for role in  self._validroles:
+        for role in self._validroles:
             if role.lower() == privilege_level.lower():
                 privilege_level = role
                 break
-        self._do_web_request(accinfo[0], {'RoleId': privilege_level}, method='PATCH', etag=etag)
+        self._do_web_request(accinfo[0], {'RoleId': privilege_level},
+                             method='PATCH', etag=etag)
 
     def create_user(self, uid, name, password, privilege_level='ReadOnly'):
         """create/ensure a user is created with provided settings
 
         :param privilege_level:
-            User Privilege level.  Redfish role, commonly Administrator, Operator, and ReadOnly
+            User Privilege level.  Redfish role, commonly Administrator,
+            Operator, and ReadOnly
         """
         accinfo = self._account_url_info_by_id(uid)
         if not accinfo:
             raise Exception("Unable to find indicated uid")
-        for role in  self._validroles:
+        for role in self._validroles:
             if role.lower() == privilege_level.lower():
                 privilege_level = role
                 break
@@ -442,10 +455,10 @@ class Command(object):
         return True
 
     def user_delete(self, uid):
-        # Redfish doesn't do so well with Deleting users either...  Blanking the username seems to be the
-        # convention
-        # First, set a bogus password in case the implementation does honor blank user, at least render such
-        # an account harmless
+        # Redfish doesn't do so well with Deleting users either...
+        # Blanking the username seems to be the convention
+        # First, set a bogus password in case the implementation does honor
+        # blank user, at least render such an account harmless
         self.set_user_password(uid, base64.b64encode(os.urandom(15)))
         self.set_user_name(uid, '')
         return True
@@ -460,7 +473,8 @@ class Command(object):
         if not accinfo:
             raise Exception("No such account found")
         etag = accinfo[1].get('@odata.etag', None)
-        self._do_web_request(accinfo[0], {'UserName': name}, method='PATCH', etag=etag)
+        self._do_web_request(accinfo[0], {'UserName': name}, method='PATCH',
+                             etag=etag)
         return True
 
     @property
@@ -514,8 +528,8 @@ class Command(object):
             if reqpowerstate in ('softoff', 'shutdown'):
                 reqpowerstate = 'off'
             timeout = os.times()[4] + 300
-            while (self.get_power()['powerstate'] != reqpowerstate
-                   and os.times()[4] < timeout):
+            while (self.get_power()['powerstate'] != reqpowerstate and
+                   os.times()[4] < timeout):
                 time.sleep(1)
             if self.get_power()['powerstate'] != reqpowerstate:
                 raise exc.PyghmiException(
@@ -543,7 +557,8 @@ class Command(object):
                                 cache=True):
         return self._do_web_request(url, payload, method, cache), url
 
-    def _do_web_request(self, url, payload=None, method=None, cache=True, etag=None):
+    def _do_web_request(self, url, payload=None, method=None, cache=True,
+                        etag=None):
         res = None
         if cache and payload is None and method is None:
             res = self._get_cache(url, cache)
@@ -590,8 +605,8 @@ class Command(object):
         elif overridestate == 'Continuous':
             persistent = True
         else:
-            raise exc.PyghmiException('Unrecognized Boot state: '
-                                      + repr(overridestate))
+            raise exc.PyghmiException('Unrecognized Boot state: ' +
+                                      repr(overridestate))
         uefimode = result.get('Boot', {}).get('BootSourceOverrideMode', None)
         if uefimode == 'UEFI':
             uefimode = True
@@ -601,8 +616,8 @@ class Command(object):
             raise exc.PyghmiException('Unrecognized mode: ' + uefimode)
         bootdev = result.get('Boot', {}).get('BootSourceOverrideTarget', None)
         if bootdev not in boot_devices_read:
-            raise exc.PyghmiException('Unrecognized boot target: '
-                                      + repr(bootdev))
+            raise exc.PyghmiException('Unrecognized boot target: ' +
+                                      repr(bootdev))
         bootdev = boot_devices_read[bootdev]
         return {'bootdev': bootdev, 'persistent': persistent,
                 'uefimode': uefimode}
@@ -627,10 +642,10 @@ class Command(object):
         :returns: dict or True -- If callback is not provided, the response
         """
         reqbootdev = bootdev
-        if (bootdev not in boot_devices_write
-                and bootdev not in boot_devices_read):
-            raise exc.InvalidParameterValue('Unsupported device '
-                                            + repr(bootdev))
+        if (bootdev not in boot_devices_write and
+                bootdev not in boot_devices_read):
+            raise exc.InvalidParameterValue('Unsupported device ' +
+                                            repr(bootdev))
         bootdev = boot_devices_write.get(bootdev, bootdev)
         if bootdev == 'None':
             payload = {'Boot': {'BootSourceOverrideEnabled': 'Disabled'}}
@@ -722,8 +737,8 @@ class Command(object):
         return self._varbmcnicurl
 
     def list_network_interface_names(self):
-        nicurl = bmcinfo.get('EthernetInterfaces', {}).get('@odata.id',
-                                                            None)
+        bmcinfo = self._do_web_request(self._bmcurl)
+        nicurl = bmcinfo.get('EthernetInterfaces', {}).get('@odata.id', None)
         if not nicurl:
             return
         niclist = self._do_web_request(nicurl)
@@ -735,8 +750,7 @@ class Command(object):
 
     def _get_bmc_nic_url(self, name=None):
         bmcinfo = self._do_web_request(self._bmcurl)
-        nicurl = bmcinfo.get('EthernetInterfaces', {}).get('@odata.id',
-                                                            None)
+        nicurl = bmcinfo.get('EthernetInterfaces', {}).get('@odata.id', None)
         niclist = self._do_web_request(nicurl)
         foundnics = 0
         lastnicurl = None
@@ -748,7 +762,8 @@ class Command(object):
                 if curl.endswith('/{0}'.format(name)):
                     return curl
                 continue
-            if self.oem.hostnic and curl.endswith('/{0}'.format(self.oem.hostnic)):
+            if self.oem.hostnic and curl.endswith('/{0}'.format(
+                    self.oem.hostnic)):
                 continue
             nicinfo = self._do_web_request(curl)
             if nicinfo.get('Links', {}).get('HostInterface', None):
@@ -769,8 +784,7 @@ class Command(object):
     def _bmcresetinfo(self):
         if not self._varresetbmcurl:
             bmcinfo = self._do_web_request(self._bmcurl)
-            resetinf = bmcinfo.get('Actions', {}).get('#Manager.Reset',
-                                                 {})
+            resetinf = bmcinfo.get('Actions', {}).get('#Manager.Reset', {})
             url = resetinf.get('target', '')
             valid = resetinf.get('ResetType@Redfish.AllowableValues', [])
             if not valid:
@@ -823,15 +837,21 @@ class Command(object):
         if health > 0 and verbose:
             # now have to manually peruse all psus, fans, processors, ram,
             # storage
-            procsumstatus = self.sysinfo.get('ProcessorSummary', {}).get('Status', {})
-            procsumstatus = procsumstatus.get('HealthRollup', procsumstatus.get('Health', None))
+            procsumstatus = self.sysinfo.get('ProcessorSummary', {}).get(
+                'Status', {})
+            procsumstatus = procsumstatus.get('HealthRollup',
+                                              procsumstatus.get('Health',
+                                                                None))
             if procsumstatus != 'OK':
                 procfound = False
-                procurl = self.sysinfo.get('Processors', {}).get('@odata.id', None)
+                procurl = self.sysinfo.get('Processors', {}).get('@odata.id',
+                                                                 None)
                 if procurl:
-                    for cpu in self._do_web_request(procurl).get('Members', []):
+                    for cpu in self._do_web_request(procurl).get(
+                            'Members', []):
                         cinfo = self._do_web_request(cpu['@odata.id'])
-                        if cinfo.get('Status', {}).get('State', None) == 'Absent':
+                        if cinfo.get('Status', {}).get(
+                                'State', None) == 'Absent':
                             continue
                         if cinfo.get('Status', {}).get(
                                 'Health', None) not in ('OK', None):
@@ -841,14 +861,17 @@ class Command(object):
                     procinfo = self.sysinfo['ProcessorSummary']
                     procinfo['Name'] = 'Processors'
                     summary['badreadings'].append(SensorReading(procinfo))
-            memsumstatus = self.sysinfo.get('MemorySummary', {}).get('Status', {})
-            memsumstatus = memsumstatus.get('HealthRollup', memsumstatus.get('Health', None))
+            memsumstatus = self.sysinfo.get(
+                'MemorySummary', {}).get('Status', {})
+            memsumstatus = memsumstatus.get('HealthRollup',
+                                            memsumstatus.get('Health', None))
             if memsumstatus != 'OK':
                 dimmfound = False
                 for mem in self._do_web_request(
                         self.sysinfo['Memory']['@odata.id'])['Members']:
                     dimminfo = self._do_web_request(mem['@odata.id'])
-                    if dimminfo.get('Status', {}).get('State', None) == 'Absent':
+                    if dimminfo.get('Status', {}).get(
+                            'State', None) == 'Absent':
                         continue
                     if dimminfo.get('Status', {}).get(
                             'Health', None) not in ('OK', None):
@@ -867,7 +890,8 @@ class Command(object):
                 if funinfo['Status']['Health'] not in ('OK', None):
                     summary['badreadings'].append(SensorReading(funinfo))
         if warnunknown and not summary['badreadings']:
-            unkinf = SensorReading({'Name': 'BMC', 'Status': {'Health': 'Unknown'}})
+            unkinf = SensorReading({'Name': 'BMC',
+                                    'Status': {'Health': 'Unknown'}})
             unkinf.states = ['System does not provide health information']
             summary['badreadings'].append(unkinf)
         return summary
@@ -961,7 +985,8 @@ class Command(object):
                     regurl = cand
                     break
             if not regurl:
-                # Workaround a vendor bug where they link to a non-existant name
+                # Workaround a vendor bug where they link to a
+                # non-existant name
                 for cand in reglist.get('Members', []):
                     cand = cand.get('@odata.id', '')
                     candname = cand.split('/')[-1]
@@ -975,7 +1000,7 @@ class Command(object):
                 for reg in reginfo.get('Location', []):
                     if reg.get('Language', 'en').startswith('en'):
                         reguri = reg['Uri']
-                        reginfo =  self._get_biosreg(reguri)
+                        reginfo = self._get_biosreg(reguri)
                         extrainfo, valtodisplay, _, self.attrdeps = reginfo
         currsettings = {}
         try:
@@ -1015,7 +1040,8 @@ class Command(object):
         pendingsettings = self._do_web_request(self._setbiosurl)
         etag = pendingsettings.get('@odata.etag', None)
         pendingsettings = pendingsettings.get('Attributes', {})
-        dephandler = AttrDependencyHandler(self.attrdeps, rawsettings, pendingsettings)
+        dephandler = AttrDependencyHandler(self.attrdeps, rawsettings,
+                                           pendingsettings)
         for change in list(changeset):
             if change not in currsettings:
                 found = False
@@ -1037,11 +1063,12 @@ class Command(object):
             if meta.get('ReadOnly', False) or meta.get('GrayOut', False):
                 errstr = '{0} is read only'.format(change)
                 if blameattrs:
-                    errstr += ' due to one of the following settings: ' \
-                        '{0}'.format(','.join(sorted(blameattrs)))
+                    errstr += (' due to one of the following settings: '
+                               '{0}'.format(','.join(sorted(blameattrs)))
+                               )
                 raise exc.InvalidParameterValue(errstr)
-            if (currsettings.get(change, {}).get('possible', [])
-                    and changeval not in currsettings[change]['possible']):
+            if (currsettings.get(change, {}).get('possible', []) and
+                    changeval not in currsettings[change]['possible']):
                 normval = changeval.lower()
                 normval = re.sub(r'\s+', ' ', normval)
                 if not normval.endswith('*'):
@@ -1052,15 +1079,14 @@ class Command(object):
                         break
                 else:
                     raise exc.InvalidParameterValue(
-                                '{0} is not a valid value for {1} '
-                                '({2})'.format(
-                                    changeval, change,
-                                    ','.join(currsettings[change]['possible'])))
+                        '{0} is not a valid value for {1} ({2})'.format(
+                            changeval, change, ','.join(
+                                currsettings[change]['possible'])))
             if changeset[change] in reginfo[2].get(change, {}):
                 changeset[change] = reginfo[2][change][changeset[change]]
             for regentry in reginfo[3].get('Attributes', []):
                 if change in (regentry.get('AttributeName', ''),
-                        regentry.get('DisplayName', '')):
+                              regentry.get('DisplayName', '')):
                     if regentry.get('Type', None) == 'Integer':
                         changeset[change] = int(changeset[change])
         redfishsettings = {'Attributes': changeset}
@@ -1087,8 +1113,8 @@ class Command(object):
         if ipv4_configuration.lower() == 'dhcp':
             dodhcp = True
             patch['DHCPv4'] = {'DHCPEnabled': True}
-        elif (ipv4_configuration == 'static'
-              or 'IPv4StaticAddresses' in patch):
+        elif (ipv4_configuration == 'static' or
+              'IPv4StaticAddresses' in patch):
             dodhcp = False
             patch['DHCPv4'] = {'DHCPEnabled': False}
         if patch:
@@ -1165,7 +1191,7 @@ class Command(object):
         currinf['date'] = parse_time(fwi.get('ReleaseDate', ''))
         if not (currinf['version'] or currinf['date']):
             return None, None
-        # TODO: OEM extended data with buildid
+        # TODO(Jarrod Johnson): OEM extended data with buildid
         currstate = fwi.get('Status', {}).get('State', 'Unknown')
         if currstate == 'StandbyOffline':
             currinf['state'] = 'pending'
@@ -1188,12 +1214,12 @@ class Command(object):
     def get_inventory_of_component(self, component):
         if component.lower() == 'system':
             sysinfo = {
-            'UUID': self.sysinfo.get('UUID', ''),
-            'Serial Number': self.sysinfo.get('SerialNumber', ''),
-            'Manufacturer': self.sysinfo.get('Manufacturer', ''),
-            'Product Name': self.sysinfo.get('Model', ''),
-            'Model': self.sysinfo.get(
-                'SKU', self.sysinfo.get('PartNumber', '')),
+                'UUID': self.sysinfo.get('UUID', ''),
+                'Serial Number': self.sysinfo.get('SerialNumber', ''),
+                'Manufacturer': self.sysinfo.get('Manufacturer', ''),
+                'Product Name': self.sysinfo.get('Model', ''),
+                'Model': self.sysinfo.get(
+                    'SKU', self.sysinfo.get('PartNumber', '')),
             }
             return sysinfo
         else:
@@ -1260,7 +1286,8 @@ class Command(object):
                     if not nicname:
                         nicname = 'NIC'
                     if nicinfo:
-                        yield (nicname, {'MAC Address {0}'.format(aidx): nicinfo})
+                        yield (nicname,
+                               {'MAC Address {0}'.format(aidx): nicinfo})
                         aidx += 1
                 return
         for inf in self._do_bulk_requests(urls):
@@ -1351,7 +1378,7 @@ class Command(object):
                 yield name
                 continue
             cpuinfo = {'Model': currcpuinfo.get('Model', None)}
-            yield (name, cpuinfo)
+            yield name, cpuinfo
 
     def _get_disk_urls(self):
         storurl = self.sysinfo.get('Storage', {}).get('@odata.id', None)
@@ -1458,7 +1485,8 @@ class Command(object):
                         entries = self._do_web_request(entriesurl, cache=False)
                         newloginfo = self._do_web_request(lurl, cache=False)
                     try:
-                        self._do_web_request(clearurl, method='POST', etag=logtag)
+                        self._do_web_request(clearurl, method='POST',
+                                             etag=logtag)
                         clearurl = False
                     except exc.PyghmiException as e:
                         if 'EtagPreconditionalFailed' not in str(e):
@@ -1567,9 +1595,10 @@ class Command(object):
                          '\' syntax.
         :param password: Password for endpoint to use when accessing the URL.
         """
-        # At the moment, there isn't a viable way to identify the correct resource
-        # ahead of time.  As such it's OEM specific until the standard provides a better
-        # way.
+        # At the moment, there isn't a viable way to
+        # identify the correct resource ahead of time.
+        # As such it's OEM specific until the standard
+        # provides a better way.
         bmcinfo = self._do_web_request(self._bmcurl)
         vmcoll = bmcinfo.get('VirtualMedia', {}).get('@odata.id', None)
         vmurls = None
@@ -1584,7 +1613,8 @@ class Command(object):
             vminfo = self._do_web_request(vmurl, cache=False)
             if vminfo['ConnectedVia'] != 'NotConnected':
                 continue
-            self._do_web_request(vmurl, {'Image': url, 'Inserted': True}, 'PATCH')
+            self._do_web_request(vmurl, {'Image': url, 'Inserted': True},
+                                 'PATCH')
             break
 
     def detach_remote_media(self):
@@ -1600,7 +1630,10 @@ class Command(object):
             for vminfo in self._do_bulk_requests(vmurls):
                 vminfo, currl = vminfo
                 if vminfo['Image']:
-                    self._do_web_request(currl, {'Image': None, 'Inserted': False}, method='PATCH')
+                    self._do_web_request(currl,
+                                         {'Image': None,
+                                          'Inserted': False},
+                                         method='PATCH')
 
     def upload_media(self, filename, progress=None):
         """Upload a file to be hosted on the target BMC
@@ -1644,8 +1677,6 @@ class Command(object):
 
 
 if __name__ == '__main__':
-    import os
-    import sys
     print(repr(
         Command(sys.argv[1], os.environ['BMCUSER'], os.environ['BMCPASS'],
                 verifycallback=lambda x: True).get_power()))

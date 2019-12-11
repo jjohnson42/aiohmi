@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2017 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +17,6 @@ class Disk(object):
     def __init__(self, name, description=None, id=None, status=None,
                  serial=None, fru=None, stripsize=None):
         """
-
         :param name: A name descripbing the disk in human readable terms
         :param description: A description of the device
         :param id: Identifier used by the controller
