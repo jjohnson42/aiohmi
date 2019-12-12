@@ -37,7 +37,10 @@ import random
 import re
 import socket
 import struct
-import urllib
+try:
+    from urllib import urlencode
+except ImportError:
+    from urllib.parse import urlencode
 import weakref
 
 
@@ -319,10 +322,10 @@ class IMMClient(object):
             if se.errno != errno.ECONNREFUSED:
                 raise
             return None
-        adata = urllib.urlencode({'user': self.username,
-                                  'password': self.password,
-                                  'SessionTimeout': 60
-                                  })
+        adata = urlencode({'user': self.username,
+                           'password': self.password,
+                           'SessionTimeout': 60
+                          })
         headers = {'Connection': 'keep-alive',
                    'Referer': 'https://{0}/designs/imm/index.php'.format(
                        self.imm),
@@ -425,7 +428,7 @@ class IMMClient(object):
 
     def attach_remote_media(self, url, user, password):
         url = url.replace(':', '\:')
-        params = urllib.urlencode({
+        params = urlencode({
             'RP_VmAllocateMountUrl({0},{1},1,,)'.format(
                 self.username, url): ''
         })
@@ -464,7 +467,7 @@ class IMMClient(object):
                             uload['slotId']))
         for url in removeurls:
             url = url.replace(':', '\:')
-            params = urllib.urlencode({
+            params = urlencode({
                 'RP_VmAllocateUnMountUrl({0},{1},0,)'.format(
                     self.username, url): ''})
             result = self.wc.grab_json_response('/data?set', params,

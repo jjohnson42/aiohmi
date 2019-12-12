@@ -20,7 +20,10 @@ import pyghmi.ipmi.private.session as ipmisession
 import pyghmi.ipmi.sdr as sdr
 import pyghmi.util.webclient as webclient
 import struct
-import urllib
+try:
+    from urllib import urlencode
+except ImportError:
+    from urllib.parse import urlencode
 import weakref
 from xml.etree.ElementTree import fromstring
 import zipfile
@@ -386,7 +389,7 @@ class SMMClient(object):
         cv = self.ipmicmd.certverify
         wc = webclient.SecureHTTPConnection(self.smm, 443, verifycallback=cv)
         wc.connect()
-        loginform = urllib.urlencode({'user': self.username,
+        loginform = urlencode({'user': self.username,
                                       'password': self.password})
         wc.request('POST', '/data/login', loginform)
         rsp = wc.getresponse()

@@ -17,7 +17,10 @@
 import base64
 import binascii
 import traceback
-import urllib
+try:
+    from urllib import urlencode
+except ImportError:
+    from urllib.parse import urlencode
 
 import pyghmi.constants as pygconst
 import pyghmi.exceptions as pygexc
@@ -739,7 +742,7 @@ class OEMHandler(generic.OEMHandler):
         conn = wc.SecureHTTPConnection(bmc, 443,
                                        verifycallback=self.ipmicmd.certverify)
         conn.connect()
-        params = urllib.urlencode({
+        params = urlencode({
             'WEBVAR_USERNAME': username,
             'WEBVAR_PASSWORD': password
         })
