@@ -14,6 +14,7 @@
 
 import json
 import os
+
 import pyghmi.exceptions as exc
 import pyghmi.media as media
 
@@ -59,7 +60,8 @@ class OEMHandler(object):
             for vminfo in fishclient._do_bulk_requests(vmurls):
                 vminfo = vminfo[0]
                 if vminfo['Image']:
-                    imageurl = vminfo['Image'].replace('/' + vminfo['ImageName'], '')
+                    imageurl = vminfo['Image'].replace(
+                        '/' + vminfo['ImageName'], '')
                     yield media.Media(vminfo['ImageName'], imageurl)
                 elif vminfo['Inserted'] and vminfo['ImageName']:
                     yield media.Media(vminfo['ImageName'])

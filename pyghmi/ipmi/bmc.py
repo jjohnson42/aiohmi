@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2015 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import struct
+import traceback
+
 import pyghmi.ipmi.command as ipmicommand
 import pyghmi.ipmi.console as console
 import pyghmi.ipmi.private.serversession as serversession
 import pyghmi.ipmi.private.session as ipmisession
-import struct
-import traceback
+
 
 __author__ = 'jjohnson2@lenovo.com'
 

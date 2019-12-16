@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2015-2017 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pyghmi.redfish.oem.generic as generic
-import pyghmi.exceptions as exc
-import pyghmi.media as media
-import pyghmi.util.webclient as webclient
 import struct
 import time
 try:
     from urllib import urlencode
 except ImportError:
     from urllib.parse import urlencode
-import weakref
+
+import pyghmi.exceptions as exc
+import pyghmi.media as media
+import pyghmi.redfish.oem.generic as generic
+import pyghmi.util.webclient as webclient
 
 hpm_by_filename = {}
 
+
 class HpmSection(object):
-    __slots__ = ['comp_id', 'comp_ver', 'comp_name', 'section_flash', 'data', 'hash_size', 'combo_image']
+    __slots__ = ['comp_id', 'comp_ver', 'comp_name', 'section_flash', 'data',
+                 'hash_size', 'combo_image']
+
 
 def read_hpm(filename):
     hpminfo = []
@@ -48,9 +49,11 @@ def read_hpm(filename):
             currlen = struct.unpack('<I', hpmfile.read(4))[0] - 16
             oemstr = hpmfile.read(4)
             if oemstr != b'OEM\x00':
-                raise Exception('Unrecognized HPM field near {0}'.format(hpmfile.tell()))
+                raise Exception(
+                    'Unrecognized HPM field near {0}'.format(hpmfile.tell()))
             currsec.section_flash = struct.unpack('<I', hpmfile.read(4))[0]
-            hashpresent, hdrsize, blocks = struct.unpack('BBB', hpmfile.read(3))
+            hashpresent, hdrsize, blocks = struct.unpack('BBB',
+                                                         hpmfile.read(3))
             if hashpresent != 1:
                 hashpresent = 0
             currsec.hash_size = hashpresent * (256 * blocks + hdrsize)
@@ -58,7 +61,8 @@ def read_hpm(filename):
             currsec.data = hpmfile.read(currlen)
             hpminfo.append(currsec)
             sectype, compid = struct.unpack('BB', hpmfile.read(2))
-        upimg = hpminfo[1].data[:-hpminfo[1].hash_size] + hpminfo[2].data[:-hpminfo[2].hash_size]
+        upimg = (hpminfo[1].data[:-hpminfo[1].hash_size] +
+                 hpminfo[2].data[:-hpminfo[2].hash_size])
         hpminfo[2].combo_image = upimg
         hpminfo[1].combo_image = upimg
         currpos = hpmfile.tell()
@@ -69,9 +73,9 @@ def read_hpm(filename):
     return hpminfo
 
 
-
 class TsmHandler(generic.OEMHandler):
     hostnic = 'usb0'
+
     def __init__(self, sysinfo, sysurl, webclient, cache=None, fish=None):
         if cache is None:
             cache = {}
@@ -95,13 +99,15 @@ class TsmHandler(generic.OEMHandler):
         percent = 0
         while status == 1:
             time.sleep(5)
-            check = wc.grab_json_response('/api/mini_ffdc', {'action': 'check'})
+            check = wc.grab_json_response('/api/mini_ffdc',
+                                          {'action': 'check'})
             status = check.get('status', -1)
             if progress:
                 progress({'phase': 'initializing', 'progress': float(percent)})
             percent += 1
         if status != 2:
-            raise Exception("Unknown error generating service data: " + repr(check))
+            raise Exception(
+                "Unknown error generating service data: " + repr(check))
         if autosuffix and not savefile.endswith('.tar'):
             savefile += '.tar'
         fd = webclient.FileDownloader(wc, '/api/mini_ffdc/package', savefile)
@@ -118,7 +124,8 @@ class TsmHandler(generic.OEMHandler):
         return savefile
 
     def init_redfish(self):
-        self.fishclient = self.fish.Command(self.tsm, self.username, self.password,
+        self.fishclient = self.fish.Command(
+            self.tsm, self.username, self.password,
             verifycallback=self._certverify)
 
     def get_firmware_inventory(self, components, raisebypass=True):
@@ -165,19 +172,24 @@ class TsmHandler(generic.OEMHandler):
     def wc(self):
         self.fwid = None
         if self._wc:
-            rsp, status = self._wc.grab_json_response_with_status('/api/chassis-status')
+            rsp, status = self._wc.grab_json_response_with_status(
+                '/api/chassis-status')
             if status == 200:
                 return self._wc
         authdata = {
             'username': self.username,
             'password': self.password,
         }
-        wc = webclient.SecureHTTPConnection(self.tsm, 443, verifycallback=self._certverify, timeout=180)
+        wc = webclient.SecureHTTPConnection(self.tsm, 443,
+                                            verifycallback=self._certverify,
+                                            timeout=180)
         wc.set_header('Content-Type', 'application/json')
-        rsp, status = wc.grab_json_response_with_status('/api/session', authdata)
+        rsp, status = wc.grab_json_response_with_status('/api/session',
+                                                        authdata)
         if status == 403:
             wc.set_header('Content-Type', 'application/x-www-form-urlencoded')
-            rsp, status = wc.grab_json_response_with_status('/api/session', urlencode(authdata))
+            rsp, status = wc.grab_json_response_with_status(
+                '/api/session', urlencode(authdata))
 
         if status < 200 or status >= 300:
             raise Exception('Error establishing web session')
@@ -210,16 +222,21 @@ class TsmHandler(generic.OEMHandler):
         else:
             updatemode = 'flash'
             rsp = wc.grab_json_response_with_status(
-                '/api/maintenance/BIOSremoteSave', {"tftpip":"","tftpfile":""})
+                '/api/maintenance/BIOSremoteSave',
+                {"tftpip": "",
+                 "tftpfile": ""}
+            )
             fileupload = 'firmware/BIOS'
             startit = 'BIOSstart'
             statusname = 'BIOSstatus'
         hdrs = wc.stdheaders.copy()
         hdrs['Content-Length'] = 0
         rsp = wc.grab_json_response_with_status(
-            '/api/maintenance/{0}'.format(updatemode), method='PUT', headers=hdrs)
+            '/api/maintenance/{0}'.format(updatemode),
+            method='PUT', headers=hdrs)
         fu = webclient.FileUploader(
-            wc, '/api/maintenance/{0}'.format(fileupload), filename, formname='fwimage')
+            wc, '/api/maintenance/{0}'.format(fileupload), filename,
+            formname='fwimage')
         fu.start()
         while fu.isAlive():
             fu.join(3)
@@ -229,23 +246,27 @@ class TsmHandler(generic.OEMHandler):
                     'progress': 100 * wc.get_upload_progress()})
         if progress:
             progress({
-                        'phase': 'apply',
-                        'progress': 0.0})
-        rsp = wc.grab_json_response_with_status('/api/maintenance/{0}'.format(startit))
+                'phase': 'apply',
+                'progress': 0.0}
+            )
+        rsp = wc.grab_json_response_with_status(
+            '/api/maintenance/{0}'.format(startit))
         applypct = 0.0
         if rsp[1] >= 200 and rsp[1] < 300 and rsp[0]['wRet'] == 0:
             updone = False
             while not updone:
-                rsp = wc.grab_json_response('/api/maintenance/{0}'.format(statusname))
+                rsp = wc.grab_json_response(
+                    '/api/maintenance/{0}'.format(statusname))
                 if rsp.get('state', 0) == 9:
                     break
                 if rsp.get('state', 0) in (6, 10):
                     raise Exception('Update Failure')
-                if (rsp.get('state', 0) == 8 and rsp.get('progress', 0) > 0
-                        and progress):
+                if (rsp.get('state', 0) == 8 and
+                        rsp.get('progress', 0) > 0 and progress):
                     progress({
                         'phase': 'apply',
-                        'progress': 70 + float(rsp.get('progress', 0))/100*30})
+                        'progress': 70 + float(rsp.get(
+                            'progress', 0)) / 100 * 30})
                 elif type == 'bp' and rsp.get('state', 0) == 1:
                     break
                 elif progress and applypct < 70:
@@ -290,7 +311,7 @@ class TsmHandler(generic.OEMHandler):
         rsp, status = wc.grab_json_response_with_status(
             '/api/maintenance/hpm/preparecomponents', payload, method='PUT')
         if status < 200 or status >= 300:
-            err = wc.grab_json_response_with_status(
+            wc.grab_json_response_with_status(
                 '/api/maintenance/hpm/exitupdatemode', {'FWUPDATEID': uid},
                 method='PUT')
             raise Exception(rsp)
@@ -336,7 +357,7 @@ class TsmHandler(generic.OEMHandler):
             percent = rsp['PROGRESS']
             if progress:
                 progress({
-                    'phase': 'validating', 
+                    'phase': 'validating',
                     'progress': 0.5 * percent})
             if percent < 100:
                 time.sleep(3)
@@ -344,7 +365,7 @@ class TsmHandler(generic.OEMHandler):
             '/api/maintenance/hpm/exitupdatemode', {'FWUPDATEID': uid},
             method='PUT')
         fu = webclient.FileUploader(wc, '/api/maintenance/firmware/firmware',
-                                   'blob', hpminfo[1].combo_image, 'fwimage')
+                                    'blob', hpminfo[1].combo_image, 'fwimage')
         fu.start()
         while fu.isAlive():
             fu.join(3)
@@ -376,7 +397,8 @@ class TsmHandler(generic.OEMHandler):
             time.sleep(3)
         hdrs = wc.stdheaders.copy()
         hdrs['Content-Length'] = 0
-        rsp = wc.grab_json_response_with_status('/api/maintenance/reset', method='POST', headers=hdrs)
+        rsp = wc.grab_json_response_with_status(
+            '/api/maintenance/reset', method='POST', headers=hdrs)
         self._wc = None
         return 'complete'
 
@@ -391,7 +413,8 @@ class TsmHandler(generic.OEMHandler):
 
     def detach_remote_media(self):
         wc = self.wc
-        slots = wc.grab_json_response('/api/settings/media/remote/configurations')
+        slots = wc.grab_json_response(
+            '/api/settings/media/remote/configurations')
         self._detach_all_media(wc, slots)
         if not self.isipmi:
             raise exc.BypassGenericBehavior()
@@ -429,7 +452,8 @@ class TsmHandler(generic.OEMHandler):
                 raise exc.UnsupportedFunctionality(
                     'Cannot mount ISO images from multiple '
                     'servers at a time')
-            if gensettings['cd_remote_source_path'].replace('\\/', '/') != path:
+            if gensettings['cd_remote_source_path'].replace(
+                    '\\/', '/') != path:
                 raise exc.UnsupportedFunctionality(
                     'Cannot mount ISO images from different '
                     'directories at a time')
@@ -444,29 +468,30 @@ class TsmHandler(generic.OEMHandler):
         self._detach_all_media(wc, slots)
         if filetype == 1 or (samesettings and currhdds):
             gensettings['cd_remote_server_address'] = server
-            gensettings['cd_remote_source_path'] = path #.replace('/', '\\/')
+            gensettings['cd_remote_source_path'] = path
             gensettings['cd_remote_share_type'] = 'nfs'
             gensettings['mount_cd'] = 1
         elif filetype == 4:
             gensettings['same_settings'] = 0
             gensettings['hd_remote_server_address'] = server
-            gensettings['hd_remote_source_path'] = path #.replace('/', '\\/')
+            gensettings['hd_remote_source_path'] = path
             gensettings['hd_remote_share_type'] = 'nfs'
             gensettings['mount_hd'] = 1
         gensettings['remote_media_support'] = 1
         gensettings['cd_remote_password'] = ''
         gensettings['hd_remote_password'] = ''
-        rsp = wc.grab_json_response_with_status('/api/settings/media/general',
-                                                gensettings, method='PUT')
+        wc.grab_json_response_with_status('/api/settings/media/general',
+                                          gensettings, method='PUT')
         # need to calibrate instances correctly
-        currinfo, status = wc.grab_json_response_with_status('/api/settings/media/instance')
+        currinfo, status = wc.grab_json_response_with_status(
+            '/api/settings/media/instance')
         currinfo['num_cd'] = cdslots
         currinfo['num_hd'] = hddslots
         if currinfo['kvm_num_cd'] > cdslots:
             currinfo['kvm_num_cd'] = cdslots
         if currinfo['kvm_num_hd'] > hddslots:
             currinfo['kvm_num_hd'] = hddslots
-        rsp = wc.grab_json_response_with_status(
+        wc.grab_json_response_with_status(
             '/api/settings/media/instance', currinfo, method='PUT')
         images = wc.grab_json_response('/api/settings/media/remote/images')
         tries = 20
@@ -509,7 +534,8 @@ class TsmHandler(generic.OEMHandler):
             hds = rsp['hd_remote_server_address']
             hdpath = rsp['hd_remote_source_path']
             hdproto = rsp['hd_remote_share_type']
-        slots = wc.grab_json_response('/api/settings/media/remote/configurations')
+        slots = wc.grab_json_response(
+            '/api/settings/media/remote/configurations')
         for slot in slots:
             if slot['redirection_status'] == 1:
                 url = None
@@ -554,9 +580,9 @@ class TsmHandler(generic.OEMHandler):
         else:
             if currtypeenabled:
                 raise exc.UnsupportedFunctionality(
-                    'This system cannot mount images from different locations at the same time')
+                    'This system cannot mount images '
+                    'from different locations at the same time')
             img = None
-        myslot = None
         for slot in mountslots:
             if slot['media_type'] != filetype:
                 continue

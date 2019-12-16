@@ -23,14 +23,13 @@ from datetime import timedelta
 from fnmatch import fnmatch
 import json
 import os
+import re
 import socket
 import struct
 import sys
 import time
 
 from dateutil import tz
-import re
-
 import pyghmi.constants as const
 import pyghmi.exceptions as exc
 import pyghmi.redfish.oem.lookup as oem

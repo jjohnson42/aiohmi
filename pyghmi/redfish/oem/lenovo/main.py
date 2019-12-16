@@ -13,8 +13,8 @@
 # limitations under the License.
 
 import pyghmi.redfish.oem.generic as generic
-from pyghmi.redfish.oem.lenovo import xcc
 from pyghmi.redfish.oem.lenovo import tsma
+from pyghmi.redfish.oem.lenovo import xcc
 
 
 def get_handler(sysinfo, sysurl, webclient, cache):

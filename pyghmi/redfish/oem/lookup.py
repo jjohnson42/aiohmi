@@ -19,6 +19,7 @@ OEMMAP = {
     'Lenovo': lenovo,
 }
 
+
 def get_oem_handler(sysinfo, sysurl, webclient, cache):
     for oem in sysinfo.get('Oem', {}):
         if oem in OEMMAP:
