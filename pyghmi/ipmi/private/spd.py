@@ -1,6 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-# coding=utf8
-
 # Copyright 2015 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,17 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This implements parsing of DDR SPD data.  This is offered up in a pass
-# through fashion by some service processors.
+"""This implements parsing of DDR SPD data.  This is offered up in a pass
+through fashion by some service processors.
 
-# For now, just doing DDR3 and DDR4
+For now, just doing DDR3 and DDR4
 
-# In many cases, astute readers will note that some of the lookup tables
-# should be a matter of math rather than lookup.  However the SPD
-# specification explicitly reserves values not in the lookup tables for
-# future use.  It has happened, for example, that a spec was amended
-# with discontinuous values for a field that was until that point
-# possible to derive in a formulaic way
+In many cases, astute readers will note that some of the lookup tables
+should be a matter of math rather than lookup.  However the SPD
+specification explicitly reserves values not in the lookup tables for
+future use.  It has happened, for example, that a spec was amended
+with discontinuous values for a field that was until that point
+possible to derive in a formulaic way
+"""
 
 import struct
 
@@ -721,9 +719,9 @@ class SPD(object):
         if fineoffset & 0b10000000:
             # Take two's complement for negative offset
             fineoffset = 0 - ((fineoffset ^ 0xff) + 1)
-        fineoffset = (finetime * fineoffset) * 10**-3
+        fineoffset = (finetime * fineoffset) * 10 ** -3
         mtb = spd[10] / float(spd[11])
-        clock = 2 // ((mtb * spd[12] + fineoffset)*10**-3)
+        clock = 2 // ((mtb * spd[12] + fineoffset) * 10 ** -3)
         self.info['speed'] = speed_from_clock(clock)
         self.info['ecc'] = (spd[8] & 0b11000) != 0
         self.info['module_type'] = module_types.get(spd[3] & 0xf, 'Unknown')

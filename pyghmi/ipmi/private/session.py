@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 IBM Corporation
 # Copyright 2015-2017 Lenovo
 #
@@ -14,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# This represents the low layer message framing portion of IPMI
+
+"""This represents the low layer message framing portion of IPMI"""
 
 import collections
 import hashlib
@@ -29,12 +28,15 @@ import threading
 
 
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.ciphers import algorithms, Cipher, modes
+from cryptography.hazmat.primitives.ciphers import algorithms
+from cryptography.hazmat.primitives.ciphers import Cipher
+from cryptography.hazmat.primitives.ciphers import modes
 
 import pyghmi.exceptions as exc
 from pyghmi.ipmi.private import constants
 from pyghmi.ipmi.private import util
-from pyghmi.ipmi.private.util import get_ipmi_error, _monotonic_time
+from pyghmi.ipmi.private.util import _monotonic_time
+from pyghmi.ipmi.private.util import get_ipmi_error
 
 
 KEEPALIVE_SESSIONS = threading.RLock()
@@ -250,8 +252,9 @@ def _poller(timeout=0):
 
 
 def _aespad(data):
-    """ipmi demands a certain pad scheme,
-    per table 13-20 AES-CBC encrypted payload fields.
+    """ipmi demands a certain pad scheme, per table 13-20 AES-CBC encrypted
+
+    payload fields.
     """
     currlen = len(data) + 1  # need to count the pad length field as well
     neededpad = currlen % 16
@@ -399,9 +402,7 @@ class Session(object):
         return tmpsocket
 
     def _sync_login(self, response):
-        """Handle synchronous callers in liue of
-        a client-provided callback.
-        """
+        """Handle synchronous callers in lieu of a client-provided callback"""
         # Be a stub, the __init__ will catch and respond to ensure response
         # is given in the same thread as was called
         return
@@ -621,6 +622,7 @@ class Session(object):
 
     def _make_bridge_request_msg(self, channel, netfn, command):
         """This function generate message for bridge request. It is a
+
         part of ipmi payload.
         """
         head = bytearray((constants.IPMI_BMC_ADDRESS,
@@ -636,6 +638,7 @@ class Session(object):
 
     def _add_request_entry(self, entry=()):
         """This function record the request with netfn, sequence number and
+
         command, which will be used in parse_ipmi_payload.
         :param entry: a set of netfn, sequence number and command.
         """
@@ -651,6 +654,7 @@ class Session(object):
 
     def _make_ipmi_payload(self, netfn, command, bridge_request=None, data=()):
         """This function generates the core ipmi payload that would be
+
         applicable for any channel (including KCS)
         """
         bridge_msg = []
@@ -906,9 +910,9 @@ class Session(object):
                 message.append(neededpad)
                 message.append(7)  # reserved, 7 is the required value for the
                 # specification followed
-                message += hmac.new(self.k1,
-                                    bytes(message[4:]),
-                                    self.currhashlib).digest()[:self.currhashlen]
+                message += hmac.new(
+                    self.k1, bytes(message[4:]),
+                    self.currhashlib).digest()[:self.currhashlen]
                 # per RFC2404 truncates to 96 bits
         self.netpacket = message
         # advance idle timer since we don't need keepalive while sending
@@ -1239,8 +1243,8 @@ class Session(object):
         return _keptalive
 
     def _keepalive(self):
-        """Performs a keepalive to avoid idle disconnect
-        """
+        """Performs a keepalive to avoid idle disconnect"""
+
         try:
             keptalive = False
             if self._customkeepalives:
@@ -1267,7 +1271,7 @@ class Session(object):
                     return
                 if self.autokeepalive:
                     self.raw_command(netfn=6, command=1,
-                                    callback=self._keepalive_wrapper(None))
+                                     callback=self._keepalive_wrapper(None))
                 else:
                     self.logout()
         except exc.IpmiException:
@@ -1379,7 +1383,8 @@ class Session(object):
             if self.k1 is None:  # we are in no shape to process a packet now
                 return
             expectedauthcode = hmac.new(
-                self.k1, data[4:-self.currhashlen], self.currhashlib).digest()[:self.currhashlen]
+                self.k1, data[4:-self.currhashlen],
+                self.currhashlib).digest()[:self.currhashlen]
             if authcode != expectedauthcode:
                 return  # BMC failed to assure integrity to us, drop it
             sid = struct.unpack("<I", bytes(data[6:10]))[0]
@@ -1504,11 +1509,13 @@ class Session(object):
         self.remoterandombytes = bytes(data[8:24])
         self.remoteguid = bytes(data[24:40])
         userlen = len(self.userid)
-        hmacdata = struct.pack("<II", localsid, self.pendingsessionid) +\
-            self.randombytes + self.remoterandombytes + self.remoteguid +\
-            struct.pack("2B", self.nameonly | self.privlevel, userlen) +\
-            self.userid
-        expectedhash = hmac.new(self.password, hmacdata, self.currhashlib).digest()
+        hmacdata = (struct.pack("<II", localsid, self.pendingsessionid) +
+                    self.randombytes + self.remoterandombytes +
+                    self.remoteguid + struct.pack(
+                    "2B", self.nameonly | self.privlevel, userlen) +
+                    self.userid)
+        expectedhash = hmac.new(self.password, hmacdata,
+                                self.currhashlib).digest()
         hashlen = len(expectedhash)
         givenhash = struct.pack("%dB" % hashlen, *data[40:hashlen + 40])
         if givenhash != expectedhash:
@@ -1575,8 +1582,8 @@ class Session(object):
         hmacdata = self.randombytes +\
             struct.pack("<I", self.pendingsessionid) +\
             self.remoteguid
-        expectedauthcode = hmac.new(self.sik, hmacdata,
-                                    self.currhashlib).digest()[:self.currhashlen]
+        expectedauthcode = hmac.new(
+            self.sik, hmacdata, self.currhashlib).digest()[:self.currhashlen]
         aclen = len(expectedauthcode)
         authcode = struct.pack("%dB" % aclen, *data[8:aclen + 8])
         if authcode != expectedauthcode:

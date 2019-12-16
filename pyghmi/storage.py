@@ -16,13 +16,15 @@
 class Disk(object):
     def __init__(self, name, description=None, id=None, status=None,
                  serial=None, fru=None, stripsize=None):
-        """
-        :param name: A name descripbing the disk in human readable terms
+        """Define a disk object
+
+        :param name: A name describing the disk in human readable terms
         :param description: A description of the device
         :param id: Identifier used by the controller
         :param status: Controller indicated status of disk
         :param serial: Serial number of the drive
         :param fru: FRU number of the driver
+        :param stripsize: The stripsize of the disk in kibibytes
         """
         self.name = str(name)
         self.description = description
@@ -37,15 +39,17 @@ class Array(object):
     def __init__(self, disks=None, raid=None, status=None, volumes=(), id=None,
                  spans=None, hotspares=(), capacity=None,
                  available_capacity=None):
-        """
+        """Define an array of disks object
 
         :param disks: An array of Disk objects
-        :param layout: The layout of the Array, generally the RAID level
+        :param raid: the RAID level
         :param status: Status of the array according to the controller
         :param id: Unique identifier used by controller to identify
         :param spans: Number of spans for a multi-dimensional array
         :param hotspares: List of Disk objects that are dedicated hot spares
             for this array.
+        :param capacity: the total capacity of the array
+        :param available_capacity: the remaining capacity of the array
         """
         self.disks = disks
         self.raid = raid
@@ -61,12 +65,12 @@ class Array(object):
 class Volume(object):
     def __init__(self, name=None, size=None, status=None, id=None,
                  stripsize=None):
-        """
+        """Define a Volume as an object
 
         :param name: Name of the volume
         :param size: Size of the volume in MB
         :param status: Controller indicated status of the volume
-        :param id: Controller idintefier of a given volume
+        :param id: Controller identifier of a given volume
         :param stripsize: The stripsize of the volume in kibibytes
         """
         self.name = name
@@ -97,7 +101,6 @@ class ConfigSpec(object):
 
         :param disks:  A list of Disk in the configuration not in an array
         :param arrays: A list of Array objects
-        :return:
         """
         self.disks = disks
         self.arrays = arrays

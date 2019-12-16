@@ -32,6 +32,7 @@ except ImportError:
     import http.client as httplib
     import http.cookies as Cookie
 import io
+import six
 
 __author__ = 'jjohnson2'
 
@@ -60,8 +61,9 @@ class FileUploader(threading.Thread):
 
     def run(self):
         try:
-            self.rsp = self.wc.upload(self.url, self.filename, self.data,
-                                    self.formname, otherfields=self.otherfields)
+            self.rsp = self.wc.upload(
+                self.url, self.filename, self.data, self.formname,
+                otherfields=self.otherfields)
         except Exception:
             self.rspstatus = self.wc.rspstatus
             raise
@@ -78,6 +80,7 @@ class FileDownloader(threading.Thread):
     def run(self):
         self.wc.download(self.url, self.savefile)
 
+
 def get_upload_form(filename, data, formname, otherfields):
     if not formname:
         formname = filename
@@ -88,13 +91,18 @@ def get_upload_form(filename, data, formname, otherfields):
             data = data.read()
         except AttributeError:
             pass
-        form = b'--' + BND + '\r\nContent-Disposition: form-data; ' \
-                            'name="{0}"; filename="{1}"\r\n'.format(formname,
-                                                                    filename).encode('utf-8')
+        form = (b'--' +
+                BND +
+                '\r\nContent-Disposition: form-data; '
+                'name="{0}"; filename="{1}"\r\n'.format(
+                    formname, filename).encode('utf-8'))
         form += b'Content-Type: application/octet-stream\r\n\r\n' + data
         for ofield in otherfields:
-            form += b'\r\n--' + BND + '\r\nContent-Disposition: form-data; ' \
-                'name="{0}"\r\n\r\n{1}'.format(ofield, otherfields[ofield]).encode('utf-8')
+            form += (b'\r\n--' +
+                     BND +
+                     '\r\nContent-Disposition: form-data; '
+                     'name="{0}"\r\n\r\n{1}'.format(
+                         ofield, otherfields[ofield]).encode('utf-8'))
         form += b'\r\n--' + BND + b'--\r\n'
         uploadforms[filename] = form
         return form
@@ -188,7 +196,8 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
 
     def grab_json_response(self, url, data=None, referer=None, headers=None):
         self.lastjsonerror = None
-        body, status = self.grab_json_response_with_status(url, data, referer, headers)
+        body, status = self.grab_json_response_with_status(
+            url, data, referer, headers)
         if status == 200:
             return body
         self.lastjsonerror = body
@@ -227,7 +236,7 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         """Download a file to filename or file object
 
         """
-        if isinstance(file, str) or isinstance(file, unicode):
+        if isinstance(file, six.string_types):
             file = open(file, 'wb')
         webclient = self.dupe()
         dlheaders = self.stdheaders.copy()
@@ -260,9 +269,8 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         """
         if data is None:
             data = open(filename, 'rb')
-        self._upbuffer = io.BytesIO(get_upload_form(filename, data,
-                                                           formname,
-                                                           otherfields))
+        self._upbuffer = io.BytesIO(get_upload_form(
+            filename, data, formname, otherfields))
         ulheaders = self.stdheaders.copy()
         ulheaders['Content-Type'] = b'multipart/form-data; boundary=' + BND
         ulheaders['Content-Length'] = len(uploadforms[filename])
