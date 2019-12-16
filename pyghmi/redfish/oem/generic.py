@@ -37,6 +37,9 @@ class OEMHandler(object):
     def attach_remote_media(self, url, username, password, vmurls):
         return None
 
+    def detach_remote_media(self):
+        return None
+
     def get_description(self):
         return {}
 
