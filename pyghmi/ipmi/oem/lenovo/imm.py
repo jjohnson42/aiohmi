@@ -1,6 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-# coding=utf8
-
 # Copyright 2016-2019 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,25 +20,28 @@ import fnmatch
 import json
 import math
 import os.path
+import random
+import re
+import socket
+import struct
+import weakref
+
 import pyghmi.constants as pygconst
 import pyghmi.exceptions as pygexc
 import pyghmi.ipmi.oem.lenovo.config as config
 import pyghmi.ipmi.oem.lenovo.energy as energy
 import pyghmi.ipmi.private.session as ipmisession
 import pyghmi.ipmi.private.util as util
-import pyghmi.ipmi.sdr as sdr
+from pyghmi.ipmi import sdr
 import pyghmi.media as media
 import pyghmi.storage as storage
 import pyghmi.util.webclient as webclient
-import random
-import re
-import socket
-import struct
+import six
+
 try:
     from urllib import urlencode
 except ImportError:
     from urllib.parse import urlencode
-import weakref
 
 
 numregex = re.compile('([0-9]+)')
@@ -55,10 +55,11 @@ funtypes = {
     12: 'Fabric Controller',
 }
 
+
 def naturalize_string(key):
     """Analyzes string in a human way to enable natural sort
 
-    :param nodename: The node name to analyze
+    :param key: string for the split
     :returns: A structure that can be consumed by 'sorted'
     """
     return [int(text) if text.isdigit() else text.lower()
@@ -185,7 +186,8 @@ class IMMClient(object):
         try:
             self.fwo = self.fwc.get_fw_options()
         except Exception:
-            raise Exception(self.bmcname + ' failed to retrieve UEFI configuration')
+            raise Exception(self.bmcname +
+                            ' failed to retrieve UEFI configuration')
         self.fwovintage = util._monotonic_time()
         retcfg = {}
         for opt in self.fwo:
@@ -229,8 +231,7 @@ class IMMClient(object):
                     raise pygexc.InvalidParameterValue(
                         '{0} not a known setting'.format(key))
         for key in changeset:
-            if (isinstance(changeset[key], str) or
-                    isinstance(changeset[key], unicode)):
+            if isinstance(changeset[key], six.string_types):
                 changeset[key] = {'value': changeset[key]}
             newvalue = changeset[key]['value']
             if self.fwo[key]['is_list'] and not isinstance(newvalue, list):
@@ -244,12 +245,12 @@ class IMMClient(object):
                 newvalues = [newvalue]
             newnewvalues = []
             for newvalue in newvalues:
-                newv = re.sub('\s+', ' ', newvalue)
+                newv = re.sub(r'\s+', ' ', newvalue)
                 if (self.fwo[key]['possible'] and
                         newvalue not in self.fwo[key]['possible']):
                     candlist = []
                     for candidate in self.fwo[key]['possible']:
-                        candid = re.sub('\s+', ' ', candidate)
+                        candid = re.sub(r'\s+', ' ', candidate)
                         if newv.lower().startswith(candid.lower()):
                             newvalue = candidate
                             break
@@ -277,7 +278,8 @@ class IMMClient(object):
                 raise
 
     def clear_bmc_configuration(self):
-        self.ipmicmd.xraw_command(0x2e, 0xcc, data=(0x5e, 0x2b, 0, 0xa, 1, 0xff, 0, 0, 0))
+        self.ipmicmd.xraw_command(0x2e, 0xcc,
+                                  data=(0x5e, 0x2b, 0, 0xa, 1, 0xff, 0, 0, 0))
 
     def set_property(self, propname, value):
         if not isinstance(value, int) or value > 255:
@@ -285,7 +287,7 @@ class IMMClient(object):
         propname = propname.encode('utf-8')
         proplen = len(propname) | 0b10000000
         valuelen = 0x11  # The value is always one byte, for now
-        cmdlen = len(propname) + 4 # the flags byte, two tlv bytes, and value
+        cmdlen = len(propname) + 4  # the flags byte, two tlv bytes, and value
         cdata = bytearray([3, 0, cmdlen, 1, proplen]) + propname
         cdata += bytearray([valuelen, value])
         rsp = self.ipmicmd.xraw_command(netfn=0x3a, command=0xc4, data=cdata)
@@ -324,8 +326,7 @@ class IMMClient(object):
             return None
         adata = urlencode({'user': self.username,
                            'password': self.password,
-                           'SessionTimeout': 60
-                          })
+                           'SessionTimeout': 60})
         headers = {'Connection': 'keep-alive',
                    'Referer': 'https://{0}/designs/imm/index.php'.format(
                        self.imm),
@@ -368,7 +369,6 @@ class IMMClient(object):
                 returnit = True
         if returnit:
             return retdata
-
 
     def grab_cacheable_json(self, url, age=30):
         data = self.get_cached_data(url, age)
@@ -427,7 +427,7 @@ class IMMClient(object):
             progress({'phase': 'complete'})
 
     def attach_remote_media(self, url, user, password):
-        url = url.replace(':', '\:')
+        url = url.replace(':', '\\:')
         params = urlencode({
             'RP_VmAllocateMountUrl({0},{1},1,,)'.format(
                 self.username, url): ''
@@ -466,7 +466,7 @@ class IMMClient(object):
                         '/data/set', 'RP_RemoveFile({0}, 0)'.format(
                             uload['slotId']))
         for url in removeurls:
-            url = url.replace(':', '\:')
+            url = url.replace(':', '\\:')
             params = urlencode({
                 'RP_VmAllocateUnMountUrl({0},{1},0,)'.format(
                     self.username, url): ''})
@@ -496,8 +496,8 @@ class IMMClient(object):
                 adapterdata = self.wc.grab_json_response(
                     self.ADP_URL, referer=self.adp_referer)
                 if self.ADP_FU_URL:
-                    fwu = self.wc.grab_json_response(self.ADP_FU_URL,
-                    referer=self.adp_referer)
+                    fwu = self.wc.grab_json_response(
+                        self.ADP_FU_URL, referer=self.adp_referer)
                 else:
                     fwu = {}
                 if adapterdata:
@@ -549,7 +549,7 @@ class IMMClient(object):
         self.weblogout()
 
     def disk_inventory(self, mode=0):
-        if mode==1:
+        if mode == 1:
             # Bypass IMM hardware inventory for now
             return
         storagedata = self.get_cached_data('lenovo_cached_storage')
@@ -647,7 +647,7 @@ class IMMClient(object):
                 'Model': fixup_str(model),
                 'Serial': fixup_str(serial),
             }
-        for disk in self.disk_inventory(mode=1): # hardware mode
+        for disk in self.disk_inventory(mode=1):  # hardware mode
             hwmap[disk[0]] = disk[1]
         adapterdata = self.get_cached_data('lenovo_cached_adapters')
         if not adapterdata:
@@ -716,7 +716,7 @@ class IMMClient(object):
                             for lp in portinfo['logicalPorts']:
                                 ma = lp['networkAddr']
                                 ma = ':'.join(
-                                    [ma[i:i+2] for i in range(
+                                    [ma[i:i + 2] for i in range(
                                         0, len(ma), 2)]).lower()
                                 bdata['MAC Address {0}'.format(
                                     portinfo['portIndex'])] = ma
@@ -827,13 +827,20 @@ class XCCClient(IMMClient):
         settings = {}
         passrules = self.wc.grab_json_response('/api/dataset/imm_users_global')
         passrules = passrules.get('items', [{}])[0]
-        settings['password_reuse_count'] = {'value': passrules.get('pass_min_resuse')}
-        settings['password_change_interval'] = {'value': passrules.get('pass_change_interval')}
-        settings['password_expiration'] = {'value': passrules.get('pass_expire_days')}
-        settings['password_login_failures'] = {'value': passrules.get('max_login_failures')}
-        settings['password_complexity'] = {'value': passrules.get('pass_complex_required')}
-        settings['password_min_length'] = {'value': passrules.get('pass_min_length')}
-        settings['password_lockout_period'] = {'value': passrules.get('lockout_period')}
+        settings['password_reuse_count'] = {
+            'value': passrules.get('pass_min_resuse')}
+        settings['password_change_interval'] = {
+            'value': passrules.get('pass_change_interval')}
+        settings['password_expiration'] = {
+            'value': passrules.get('pass_expire_days')}
+        settings['password_login_failures'] = {
+            'value': passrules.get('max_login_failures')}
+        settings['password_complexity'] = {
+            'value': passrules.get('pass_complex_required')}
+        settings['password_min_length'] = {
+            'value': passrules.get('pass_min_length')}
+        settings['password_lockout_period'] = {
+            'value': passrules.get('lockout_period')}
         try:
             enclosureinfo = self.ipmicmd.xraw_command(0x3a, 0xf1, data=[0])
         except pygexc.IpmiException:
@@ -841,7 +848,8 @@ class XCCClient(IMMClient):
         settings['smm'] = {
             'default': 'Disable',
             'possible': ['Enable', 'Disable'],
-            'help': 'Enables or disables the network of the D2 enclosure manager.',
+            'help': 'Enables or disables the network of the D2 '
+                    'enclosure manager.',
         }
         if bytearray(enclosureinfo['data'])[0] == 2:
             settings['smm']['value'] = 'Disable'
@@ -864,8 +872,7 @@ class XCCClient(IMMClient):
     def set_bmc_configuration(self, changeset):
         ruleset = {}
         for key in changeset:
-            if (isinstance(changeset[key], str) or
-                    isinstance(changeset[key], unicode)):
+            if isinstance(changeset[key], six.string_types):
                 changeset[key] = {'value': changeset[key]}
             currval = changeset[key].get('value', None)
             if 'smm'.startswith(key.lower()):
@@ -880,17 +887,21 @@ class XCCClient(IMMClient):
                     ruleset['USER_GlobalPassExpWarningPeriod'] = warntime
             else:
                 raise pygexc.InvalidParameterValue(
-                        '{0} not a known setting'.format(key))
+                    '{0} not a known setting'.format(key))
         if ruleset:
-            rsp = self.wc.grab_json_response('/api/dataset', ruleset)
+            self.wc.grab_json_response('/api/dataset', ruleset)
 
     def clear_system_configuration(self):
         res = self.wc.grab_json_response_with_status(
-                '/redfish/v1/Systems/1/Bios/Actions/Bios.ResetBios',
-                {'Action': 'Bios.ResetBios'},
-                headers={'Authorization': 'Basic ' + base64.b64encode(
-                    self.username + ':' + self.password),
-                         'Content-Type': 'application/json'})
+            '/redfish/v1/Systems/1/Bios/Actions/Bios.ResetBios',
+            {'Action': 'Bios.ResetBios'},
+            headers={
+                'Authorization': 'Basic ' +
+                                 base64.b64encode(
+                                     self.username + ':' + self.password),
+                'Content-Type': 'application/json'
+            }
+        )
         if res[1] < 200 or res[1] >= 300:
             raise Exception(
                 'Unexpected response to clear configuration: {0}'.format(
@@ -995,21 +1006,21 @@ class XCCClient(IMMClient):
         if storagedata and 'items' in storagedata:
             for adp in storagedata['items']:
                 for diskent in adp.get('disks', ()):
-                    if mode==0:
+                    if mode == 0:
                         yield self.get_disk_firmware(diskent)
-                    elif mode==1:
+                    elif mode == 1:
                         yield self.get_disk_hardware(diskent)
                 for diskent in adp.get('aimDisks', ()):
-                    if mode==0:
+                    if mode == 0:
                         yield self.get_disk_firmware(diskent)
-                    elif mode==1:
+                    elif mode == 1:
                         yield self.get_disk_hardware(diskent)
                 if mode == 1:
                     bdata = {'Description': 'Unmanaged Disk'}
                     if adp.get('m2Type', -1) == 2:
-                        yield ('M.2 Disk', bdata)
+                        yield 'M.2 Disk', bdata
                     for umd in adp.get('unmanagedDisks', []):
-                        yield ('Disk {0}'.format(umd['slotNo']), bdata)
+                        yield 'Disk {0}'.format(umd['slotNo']), bdata
 
     def get_disk_hardware(self, diskent, prefix=''):
         bdata = {}
@@ -1084,7 +1095,8 @@ class XCCClient(IMMClient):
                 'perspan': drivesperspan,
             }
         else:
-            pass  # TODO: adding new volume to existing array would be here
+            # TODO(): adding new volume to existing array would be here
+            pass
 
     def _make_jbod(self, disk, realcfg):
         currstatus = self._get_status(disk, realcfg)
@@ -1252,7 +1264,8 @@ class XCCClient(IMMClient):
 
     def get_oem_sensor_names(self, ipmicmd):
         oemsensornames = super(XCCClient, self).get_oem_sensor_names(ipmicmd)
-        therminfo = self.grab_cacheable_json('/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
+        therminfo = self.grab_cacheable_json(
+            '/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
         if therminfo:
             for name in sorted(therminfo['items'][0]):
                 if 'DIMM' in name and 'Temp' in name:
@@ -1260,9 +1273,10 @@ class XCCClient(IMMClient):
         return oemsensornames
 
     def get_oem_sensor_descriptions(self, ipmicmd):
-        oemdesc = [{'name': x, 'type': 'Energy'
-                 } for x in super(XCCClient, self).get_oem_sensor_names(ipmicmd)]
-        therminfo = self.grab_cacheable_json('/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
+        oemdesc = [{'name': x, 'type': 'Energy'} for x in super(
+            XCCClient, self).get_oem_sensor_names(ipmicmd)]
+        therminfo = self.grab_cacheable_json(
+            '/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
         if therminfo:
             for name in sorted(therminfo['items'][0]):
                 if 'DIMM' in name and 'Temp' in name:
@@ -1272,7 +1286,8 @@ class XCCClient(IMMClient):
     def get_oem_sensor_reading(self, name, ipmicmd):
         if 'Energy' in name:
             return super(XCCClient, self).get_oem_sensor_reading(name, ipmicmd)
-        therminfo = self.grab_cacheable_json('/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
+        therminfo = self.grab_cacheable_json(
+            '/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
         temp = therminfo.get('items', [{}])[0].get(name, None)
         if temp is None:
             raise pygexc.UnsupportedFunctionality('No sunch sensor ' + name)
@@ -1387,10 +1402,8 @@ class XCCClient(IMMClient):
             return
         for psu in psudata.get('items', ()):
             yield ('PSU {0}'.format(psu['slot']),
-                   {
-                       'model': psu['model'],
-                       'version': psu['version'],
-                   })
+                   {'model': psu['model'],
+                    'version': psu['version']})
 
     def get_firmware_inventory(self, bmcver, components):
         # First we fetch the system firmware found in imm properties
@@ -1432,47 +1445,48 @@ class XCCClient(IMMClient):
                 'version': '/v2/ibmc/dm/fw/imm3/primary_pending_build_version',
                 'date': '/v2/ibmc/dm/fw/imm3/primary_pending_build_date'})
             if bdata:
-                yield ('{0} Pending Update'.format(self.bmcname), bdata)
-        if (not components or set(('core', 'uefi', 'bios')) & components):
+                yield '{0} Pending Update'.format(self.bmcname), bdata
+        if not components or set(('core', 'uefi', 'bios')) & components:
             bdata = self.fetch_grouped_properties({
                 'build': '/v2/bios/build_id',
                 'version': '/v2/bios/build_version',
                 'date': '/v2/bios/build_date'})
             if bdata:
-                yield ('UEFI', bdata)
+                yield 'UEFI', bdata
             # Note that the next pending could be pending for either primary
             # or backup, so can't promise where it will go
             bdata = self.fetch_grouped_properties({
                 'build': '/v2/bios/pending_build_id'})
             if bdata:
-                yield ('UEFI Pending Update', bdata)
+                yield 'UEFI Pending Update', bdata
         if not components or set(('lxpm', 'core')) & components:
             bdata = self.fetch_grouped_properties({
                 'build': '/v2/tdm/build_id',
                 'version': '/v2/tdm/build_version',
                 'date': '/v2/tdm/build_date'})
             if bdata:
-                yield ('LXPM', bdata)
+                yield 'LXPM', bdata
             bdata = self.fetch_grouped_properties({
                 'build': '/v2/drvwn/build_id',
                 'version': '/v2/drvwn/build_version',
                 'date': '/v2/drvwn/build_date',
             })
             if bdata:
-                yield ('LXPM Windows Driver Bundle', bdata)
+                yield 'LXPM Windows Driver Bundle', bdata
             bdata = self.fetch_grouped_properties({
                 'build': '/v2/drvln/build_id',
                 'version': '/v2/drvln/build_version',
                 'date': '/v2/drvln/build_date',
             })
             if bdata:
-                yield ('LXPM Linux Driver Bundle', bdata)
+                yield 'LXPM Linux Driver Bundle', bdata
         if not components or set(('core', 'fpga')) in components:
             try:
                 fpga = self.ipmicmd.xraw_command(netfn=0x3a, command=0x6b,
                                                  data=(0,))
-                fpga = '{0}.{1}.{2}'.format(*struct.unpack('BBB', fpga['data']))
-                yield ('FPGA', {'version': fpga})
+                fpga = '{0}.{1}.{2}'.format(
+                    *struct.unpack('BBB', fpga['data']))
+                yield 'FPGA', {'version': fpga}
             except pygexc.IpmiException as ie:
                 if ie.ipmicode != 193:
                     raise
@@ -1633,7 +1647,8 @@ class XCCClient(IMMClient):
                 progress({'phase': 'upload',
                           'progress': 100.0 * rsp['received'] / rsp['size']})
             elif rsp['state'] != 'done':
-                if rsp.get('status', None) == 413 or uploadthread.rspstatus == 413:
+                if (rsp.get('status', None) == 413 or
+                    uploadthread.rspstatus == 413):
                     raise Exception('File is larger than supported')
                 raise Exception('Unexpected result:' + repr(rsp))
             uploadstate = rsp['state']
@@ -1669,7 +1684,8 @@ class XCCClient(IMMClient):
         elif rsp.get('return', -1) == 108:
             raise Exception('Temporary error validating update, try again')
         elif rsp.get('return', -1) == 109:
-            raise Exception('Invalid update file or component does not support remote update')
+            raise Exception('Invalid update file or component does '
+                            'not support remote update')
         elif rsp.get('return', -1) != 0:
             errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
             raise Exception('Unexpected return to verify: ' + errmsg)
@@ -1680,12 +1696,13 @@ class XCCClient(IMMClient):
             rsp, status = self.wc.grab_json_response_with_status(
                 '/api/providers/fwupdate',
                 json.dumps({'UPD_WebVerifyUploadFileStatus': 1}))
-            if not rsp or status != 200  or rsp.get('return', -1) == 2:
+            if not rsp or status != 200 or rsp.get('return', -1) == 2:
                 # The XCC firmware predates the FileStatus api
                 verifyuploadfilersp = rsp
                 break
             if rsp.get('return', -1) == 109:
-                raise Exception('Invalid update file or component does not support remote update')
+                raise Exception('Invalid update file or component does '
+                                'not support remote update')
             if rsp.get('return', -1) != 0:
                 errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
                 raise Exception(
@@ -1714,7 +1731,7 @@ class XCCClient(IMMClient):
                 'TDM', 'WINDOWS DRIV', 'LINUX DRIVER', 'UEFI', 'IMM'):
             # adapter firmware
             webid = rsp['items'][0]['webfile_build_id']
-            locations = webid[webid.find('[')+1:webid.find(']')]
+            locations = webid[webid.find('[') + 1:webid.find(']')]
             locations = locations.split(':')
             validselectors = set([])
             for loc in locations:
@@ -1801,7 +1818,8 @@ class XCCClient(IMMClient):
     def augment_psu_info(self, info, psuname):
         psud = self.get_cached_data('lenovo_cached_psuhwinfo')
         if not psud:
-            psud = self.wc.grab_json_response('/api/dataset/imm_power_supplies')
+            psud = self.wc.grab_json_response(
+                '/api/dataset/imm_power_supplies')
             if not psud:
                 return
             self.datacache['lenovo_cached_psuhwinfo'] = (
@@ -1818,7 +1836,7 @@ class XCCClient(IMMClient):
         except (socket.timeout, socket.error) as e:
             wc = None
         if not wc:
-            summary['health'] = pygconst.Health.Critical;
+            summary['health'] = pygconst.Health.Critical
             summary['badreadings'].append(
                 sdr.SensorReading({'name': 'HTTPS Service',
                                    'states': ['Unreachable'],
@@ -1848,7 +1866,8 @@ class XCCClient(IMMClient):
             # while usually the ipmi interrogation shall explain things,
             # just in case there is a gap, make sure at least the
             # health field is accurately updated
-            itemseverity = hmap.get(item.get('severity', 'E'), pygconst.Health.Critical)
+            itemseverity = hmap.get(item.get('severity', 'E'),
+                                    pygconst.Health.Critical)
             if (summary['health'] < itemseverity):
                 summary['health'] = itemseverity
             if item['cmnid'] == 'FQXSPPW0104J':
@@ -1896,7 +1915,8 @@ class XCCClient(IMMClient):
             if lic['status'] == 0:
                 yield {'name': lic['feature'], 'state': 'Active'}
             elif lic['status'] == 10:
-                yield {'name': lic['feature'], 'state': 'Missing required license'}
+                yield {'name': lic['feature'],
+                       'state': 'Missing required license'}
 
     def save_licenses(self, directory):
         licdata = self.wc.grab_json_response('/api/providers/imm_fod')
@@ -1938,8 +1958,8 @@ class XCCClient(IMMClient):
         rsp = json.loads(uploadthread.rsp)
         licpath = rsp.get('items', [{}])[0].get('path', None)
         if licpath:
-            rsp = self.wc.grab_json_response('/api/providers/imm_fod',
-                                       {'FOD_LicenseKeyInstall': licpath})
+            rsp = self.wc.grab_json_response(
+                '/api/providers/imm_fod', {'FOD_LicenseKeyInstall': licpath})
             if rsp.get('return', 0) in license_errors:
                 raise pygexc.InvalidParameterValue(
                     license_errors[rsp['return']])

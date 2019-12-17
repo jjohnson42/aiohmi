@@ -1,6 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-# coding=utf8
-
 # Copyright 2014 IBM Corporation
 # Copyright 2015 Lenovo
 #
@@ -16,28 +13,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This module provides access to SDR offered by a BMC
-# This data is common between 'sensors' and 'inventory' modules since SDR
-# is both used to enumerate sensors for sensor commands and FRU ids for FRU
-# commands
+"""This module provides access to SDR offered by a BMC
 
-# For now, we will not offer persistent SDR caching as we do in xCAT's IPMI
-# code.  Will see if it is adequate to advocate for high object reuse in a
-# persistent process for the moment.
+This data is common between 'sensors' and 'inventory' modules since SDR
+is both used to enumerate sensors for sensor commands and FRU ids for FRU
+commands
 
-# Focus is at least initially on the aspects that make the most sense for a
-# remote client to care about.  For example, smbus information is being
-# skipped for now
+For now, we will not offer persistent SDR caching as we do in xCAT's IPMI
+code.  Will see if it is adequate to advocate for high object reuse in a
+persistent process for the moment.
+
+Focus is at least initially on the aspects that make the most sense for a
+remote client to care about.  For example, smbus information is being
+skipped for now
+"""
 
 import math
 import os
-import pyghmi.constants as const
-import pyghmi.exceptions as exc
-import pyghmi.ipmi.private.constants as ipmiconst
 import random
 import string
 import struct
+import sys
 import weakref
+
+import pyghmi.constants as const
+import pyghmi.exceptions as exc
+import pyghmi.ipmi.command as ipmicmd
+import pyghmi.ipmi.private.constants as ipmiconst
+import six
+
 try:
     import cPickle as pickle
 except ImportError:
@@ -48,6 +52,7 @@ TYPE_SENSOR = 1
 TYPE_FRU = 2
 
 shared_sdrs = {}
+
 
 def ones_complement(value, bits):
     # utility function to help with the large amount of 2s
@@ -553,18 +558,15 @@ class SDREntry(object):
         elif linearization == 10:
             return math.sqrt(decoded)
         elif linearization == 11:
-            return decoded ** (1.0/3)
+            return decoded ** (1.0 / 3)
         else:
             raise NotImplementedError
 
     def decode_formula(self, entry):
-        self.m = \
-            twos_complement(entry[0] + ((entry[1] & 0b11000000) << 2), 10)
+        self.m = twos_complement(entry[0] + ((entry[1] & 0b11000000) << 2), 10)
         self.tolerance = entry[1] & 0b111111
-        self.b = \
-            twos_complement(entry[2] + ((entry[3] & 0b11000000) << 2), 10)
-        self.accuracy = (entry[3] & 0b111111) + \
-            (entry[4] & 0b11110000) << 2
+        self.b = twos_complement(entry[2] + ((entry[3] & 0b11000000) << 2), 10)
+        self.accuracy = (entry[3] & 0b111111) + (entry[4] & 0b11110000) << 2
         self.accuracyexp = (entry[4] & 0b1100) >> 2
         self.direction = entry[4] & 0b11
         # 0 = n/a, 1 = input, 2 = output
@@ -580,7 +582,8 @@ class SDREntry(object):
             return ""
         if ipmitype == 0:  # Unicode per 43.15 in ipmi 2.0 spec
             # the spec is not specific about encoding, assuming utf8
-            return unicode(struct.pack("%dB" % len(data), *data), "utf_8")
+            return six.text_type(struct.pack("%dB" % len(data), *data),
+                                 "utf_8")
         elif ipmitype == 1:  # BCD '+'
             tmpl = "%02X" * len(data)
             tstr = tmpl % tuple(data)
@@ -811,10 +814,8 @@ class SDR(object):
         # decode information
         return "".join(hex(x) for x in auxdata)
 
+
 if __name__ == "__main__":  # test code
-    import os
-    import pyghmi.ipmi.command as ipmicmd
-    import sys
     password = os.environ['IPMIPASSWORD']
     bmc = sys.argv[1]
     user = sys.argv[2]

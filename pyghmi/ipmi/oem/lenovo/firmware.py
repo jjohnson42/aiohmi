@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2015 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,33 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyghmi.ipmi.oem.lenovo.inventory import EntryField, \
-    parse_inventory_category_entry
+from pyghmi.ipmi.oem.lenovo import inventory
+
 
 firmware_fields = (
-    EntryField("Revision", "B"),
-    EntryField("Bios", "16s"),
-    EntryField("Operational ME", "10s"),
-    EntryField("Recovery ME", "10s"),
-    EntryField("RAID 1", "16s"),
-    EntryField("RAID 2", "16s"),
-    EntryField("Mezz 1", "16s"),
-    EntryField("Mezz 2", "16s"),
-    EntryField("BMC", "16s"),
-    EntryField("LEPT", "16s"),
-    EntryField("PSU 1", "16s"),
-    EntryField("PSU 2", "16s"),
-    EntryField("CPLD", "16s"),
-    EntryField("LIND", "16s"),
-    EntryField("WIND", "16s"),
-    EntryField("DIAG", "16s"))
+    inventory.EntryField("Revision", "B"),
+    inventory.EntryField("Bios", "16s"),
+    inventory.EntryField("Operational ME", "10s"),
+    inventory.EntryField("Recovery ME", "10s"),
+    inventory.EntryField("RAID 1", "16s"),
+    inventory.EntryField("RAID 2", "16s"),
+    inventory.EntryField("Mezz 1", "16s"),
+    inventory.EntryField("Mezz 2", "16s"),
+    inventory.EntryField("BMC", "16s"),
+    inventory.EntryField("LEPT", "16s"),
+    inventory.EntryField("PSU 1", "16s"),
+    inventory.EntryField("PSU 2", "16s"),
+    inventory.EntryField("CPLD", "16s"),
+    inventory.EntryField("LIND", "16s"),
+    inventory.EntryField("WIND", "16s"),
+    inventory.EntryField("DIAG", "16s"))
 
 
 def parse_firmware_info(raw):
-    bytes_read, data = parse_inventory_category_entry(raw, firmware_fields)
+    bytes_read, data = inventory.parse_inventory_category_entry(
+        raw, firmware_fields)
     del data['Revision']
     for key in data:
-        yield(key, {'version': data[key]})
+        yield key, {'version': data[key]}
 
 
 def get_categories():

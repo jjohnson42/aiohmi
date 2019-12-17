@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 IBM Corporation
 # Copyright 2015-2017 Lenovo
 #
@@ -14,15 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# This represents the low layer message framing portion of IPMI
+
+"""This represents the low layer message framing portion of IPMI"""
 
 from itertools import chain
+import socket
+import struct
+import threading
+
 import pyghmi.constants as const
 import pyghmi.exceptions as exc
-
 import pyghmi.ipmi.events as sel
 import pyghmi.ipmi.fru as fru
 from pyghmi.ipmi.oem.lookup import get_oem_handler
+import pyghmi.ipmi.private.util as pygutil
+from pyghmi.ipmi import sdr
 
 try:
     from pyghmi.ipmi.private import session
@@ -32,11 +36,6 @@ try:
     from pyghmi.ipmi.private import localsession
 except ImportError:
     localsession = None
-import pyghmi.ipmi.private.util as pygutil
-import pyghmi.ipmi.sdr as sdr
-import socket
-import struct
-import threading
 
 try:
     range = xrange
@@ -96,6 +95,7 @@ def _mask_to_cidr(mask):
 def _cidr_to_mask(prefix):
     return struct.pack('>I', 2 ** prefix - 1 << (32 - prefix))
 
+
 class Housekeeper(threading.Thread):
     """A Maintenance thread for housekeeping
 
@@ -106,6 +106,7 @@ class Housekeeper(threading.Thread):
     tasks automatically as needed.  This is an alternative to calling
     wait_for_rsp or eventloop in a thread of the callers design.
     """
+
     def run(self):
         Command.eventloop()
 
@@ -130,10 +131,11 @@ class Command(object):
     :param onlogon: function to run when logon completes in an asynchronous
                     fashion.  This will result in a greenthread behavior.
     :param kg: Optional parameter to use if BMC has a particular Kg configured
-    :param verifycallback:  For OEM extensions that use HTTPS, this function
-                            will be used to evaluate the certificate.
-    :param keepalive:  If False, then an idle connection will logout rather than keepalive
-                       unless held open by console or ongoing activity.
+    :param verifycallback: For OEM extensions that use HTTPS, this function
+                           will be used to evaluate the certificate.
+    :param keepalive: If False, then an idle connection will logout rather
+                      than keepalive unless held open by console or ongoing
+                      activity.
     """
 
     def __init__(self, bmc=None, userid=None, password=None, port=623,
@@ -338,7 +340,7 @@ class Command(object):
         if not isinstance(wait, bool):
             waitattempts = wait
         if (wait and
-           newpowerstate in ('on', 'off', 'shutdown', 'softoff')):
+                newpowerstate in ('on', 'off', 'shutdown', 'softoff')):
             if newpowerstate in ('softoff', 'shutdown'):
                 waitpowerstate = 'off'
             else:
@@ -368,8 +370,8 @@ class Command(object):
         return self._oem.get_video_launchdata()
 
     def reset_bmc(self):
-        """Do a cold reset in BMC
-        """
+        """Do a cold reset in BMC"""
+
         response = self.raw_command(netfn=6, command=2)
         if 'error' in response:
             raise exc.IpmiException(response['error'])
@@ -626,8 +628,8 @@ class Command(object):
         for fruid in self._sdr.fru:
             if self._sdr.fru[fruid].fru_name == component:
                 return self._oem.process_fru(fru.FRU(
-                    ipmicmd=self, fruid=fruid, sdr=self._sdr.fru[fruid]).info,
-                                             component)
+                    ipmicmd=self, fruid=fruid,
+                    sdr=self._sdr.fru[fruid]).info, component)
         return self._oem.get_inventory_of_component(component)
 
     def _get_zero_fru(self):
@@ -1913,8 +1915,8 @@ class Command(object):
         return True
 
     def get_firmware(self, components=()):
-        """Retrieve OEM Firmware information
-        """
+        """Retrieve OEM Firmware information"""
+
         self.oem_init()
         mcinfo = self.xraw_command(netfn=6, command=1)
         major, minor = struct.unpack('BB', mcinfo['data'][2:4])
@@ -1938,14 +1940,14 @@ class Command(object):
         return self._oem.set_oem_capping_enabled(enable)
 
     def get_remote_kvm_available(self):
-        """Get remote KVM availability
-        """
+        """Get remote KVM availability"""
+
         self.oem_init()
         return self._oem.get_oem_remote_kvm_available()
 
     def get_domain_name(self):
-        """Get Domain name
-        """
+        """Get Domain name"""
+
         self.oem_init()
         return self._oem.get_oem_domain_name()
 
@@ -1962,20 +1964,21 @@ class Command(object):
         self.oem_init()
         return self._oem.get_graphical_console()
 
-    def update_firmware(self, file, data=None, progress=None, bank=None):
+    def update_firmware(self, filename, data=None, progress=None, bank=None):
         """Send file to BMC to perform firmware update
 
-         :param filename:  The filename to upload to the target BMC
-         :param data:  The payload of the firmware.  Default is to read from
-                       specified filename.
-         :param progress:  A callback that will be given a dict describing
-                           update process.  Provide if
+         :param filename: The filename to upload to the target BMC
+         :param data: The payload of the firmware.  Default is to read from
+                      specified filename.
+         :param progress: A callback that will be given a dict describing
+                          update process.  Provide if
          :param bank: Indicate a target 'bank' of firmware if supported
         """
+
         self.oem_init()
         if progress is None:
             progress = lambda x: True
-        return self._oem.update_firmware(file, data, progress, bank)
+        return self._oem.update_firmware(filename, data, progress, bank)
 
     def attach_remote_media(self, url, username=None, password=None):
         """Attach remote media by url

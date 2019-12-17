@@ -12,19 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pyghmi.redfish.oem.generic as generic
-from pyghmi.util.parse import parse_time
+
 import errno
 import json
 import math
 import os
+import random
 import socket
 import time
-import pyghmi.ipmi.private.util as util
+
 import pyghmi.exceptions as pygexc
+import pyghmi.ipmi.private.util as util
+import pyghmi.redfish.oem.generic as generic
 import pyghmi.storage as storage
+from pyghmi.util.parse import parse_time
 import pyghmi.util.webclient as webclient
-import random
 
 
 class OEMHandler(generic.OEMHandler):
@@ -50,7 +52,8 @@ class OEMHandler(generic.OEMHandler):
         return {'height': u_height, 'slot': slot}
 
     def _get_agentless_firmware(self, components):
-        adata = self.wc.grab_json_response('/api/dataset/imm_adapters?params=pci_GetAdapters')
+        adata = self.wc.grab_json_response(
+            '/api/dataset/imm_adapters?params=pci_GetAdapters')
         anames = set()
         for adata in adata.get('items', []):
             baseaname = adata['adapterName']
@@ -93,6 +96,7 @@ class OEMHandler(generic.OEMHandler):
             'productName'].rstrip()
         bdata['version'] = diskent['fwVersion']
         return (diskname, bdata)
+
     def _get_disk_firmware(self, coponents):
         storagedata = storagedata = self.wc.grab_json_response(
             '/api/function/raid_alldevices?params=storage_GetAllDisks')
@@ -300,7 +304,9 @@ class OEMHandler(generic.OEMHandler):
                 'perspan': drivesperspan,
             }
         else:
-            pass  # TODO: adding new volume to existing array would be here
+            # TODO(Jarrod Johnson): adding new volume to
+            #  existing array would be here
+            pass
 
     def _create_array(self, pool):
         params = self._parse_array_spec(pool)
@@ -435,7 +441,8 @@ class OEMHandler(generic.OEMHandler):
             vminfo = self._do_web_request(vmurl, cache=False)
             if vminfo['ConnectedVia'] != 'NotConnected':
                 continue
-            self._do_web_request(vmurl, {'Image': url, 'Inserted': True}, 'PATCH')
+            self._do_web_request(vmurl, {'Image': url, 'Inserted': True},
+                                 'PATCH')
             raise pygexc.BypassGenericBehavior()
             break
         else:
@@ -485,7 +492,6 @@ class OEMHandler(generic.OEMHandler):
             raise Exception('Unrecognized return: ' + errmsg)
         if progress:
             progress({'phase': 'complete'})
-        #self.weblogout()
 
     def update_firmware(self, filename, data=None, progress=None, bank=None):
         result = None
@@ -501,15 +507,12 @@ class OEMHandler(generic.OEMHandler):
             self._refresh_token()
             self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
                 {'UPD_WebCancel': 1}))
-            #self.weblogout()
             raise
         self.updating = False
-        #self.weblogout()
         return result
 
     def update_firmware_backend(self, filename, data=None, progress=None,
                                 bank=None):
-        #self.weblogout()
         self._refresh_token()
         rsv = self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
             {'UPD_WebReserve': 1}))
@@ -530,7 +533,8 @@ class OEMHandler(generic.OEMHandler):
                 progress({'phase': 'upload',
                           'progress': 100.0 * rsp['received'] / rsp['size']})
             elif rsp['state'] != 'done':
-                if rsp.get('status', None) == 413 or uploadthread.rspstatus == 413:
+                if (rsp.get('status', None) == 413 or
+                        uploadthread.rspstatus == 413):
                     raise Exception('File is larger than supported')
                 raise Exception('Unexpected result:' + repr(rsp))
             uploadstate = rsp['state']
@@ -566,7 +570,8 @@ class OEMHandler(generic.OEMHandler):
         elif rsp.get('return', -1) == 108:
             raise Exception('Temporary error validating update, try again')
         elif rsp.get('return', -1) == 109:
-            raise Exception('Invalid update file or component does not support remote update')
+            raise Exception('Invalid update file or component '
+                            'does not support remote update')
         elif rsp.get('return', -1) != 0:
             errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
             raise Exception('Unexpected return to verify: ' + errmsg)
@@ -577,12 +582,13 @@ class OEMHandler(generic.OEMHandler):
             rsp, status = self.wc.grab_json_response_with_status(
                 '/api/providers/fwupdate',
                 json.dumps({'UPD_WebVerifyUploadFileStatus': 1}))
-            if not rsp or status != 200  or rsp.get('return', -1) == 2:
+            if not rsp or status != 200 or rsp.get('return', -1) == 2:
                 # The XCC firmware predates the FileStatus api
                 verifyuploadfilersp = rsp
                 break
             if rsp.get('return', -1) == 109:
-                raise Exception('Invalid update file or component does not support remote update')
+                raise Exception('Invalid update file or component '
+                                'does not support remote update')
             if rsp.get('return', -1) != 0:
                 errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
                 raise Exception(
@@ -611,7 +617,7 @@ class OEMHandler(generic.OEMHandler):
                 'TDM', 'WINDOWS DRIV', 'LINUX DRIVER', 'UEFI', 'IMM'):
             # adapter firmware
             webid = rsp['items'][0]['webfile_build_id']
-            locations = webid[webid.find('[')+1:webid.find(']')]
+            locations = webid[webid.find('[') + 1:webid.find(']')]
             locations = locations.split(':')
             validselectors = set([])
             for loc in locations:
@@ -721,7 +727,10 @@ class OEMHandler(generic.OEMHandler):
             if lic['status'] == 0:
                 yield {'name': lic['feature'], 'state': 'Active'}
             if lic['status'] == 10:
-                yield {'name': lic['feature'], 'state': 'Missing required license'}
+                yield {
+                    'name': lic['feature'],
+                    'state': 'Missing required license'
+                }
 
     def delete_license(self, name):
         licdata = self.wc.grab_json_response('/api/providers/imm_fod')
@@ -729,7 +738,11 @@ class OEMHandler(generic.OEMHandler):
             if lic.get('feature', None) == name:
                 licid = ','.join((str(lic['type']), str(lic['id'])))
                 self.wc.grab_json_response(
-                    '/api/providers/imm_fod', {'FOD_LicenseKeyDelete': licid})
+                    '/api/providers/imm_fod',
+                    {
+                        'FOD_LicenseKeyDelete': licid
+                    }
+                )
                 break
 
     def save_licenses(self, directory):
@@ -763,8 +776,12 @@ class OEMHandler(generic.OEMHandler):
         rsp = json.loads(uploadthread.rsp)
         licpath = rsp.get('items', [{}])[0].get('path', None)
         if licpath:
-            rsp = self.wc.grab_json_response('/api/providers/imm_fod',
-                                             {'FOD_LicenseKeyInstall': licpath})
+            rsp = self.wc.grab_json_response(
+                '/api/providers/imm_fod',
+                {
+                    'FOD_LicenseKeyInstall': licpath
+                }
+            )
             if rsp.get('return', 0) in license_errors:
                 raise pygexc.InvalidParameterValue(
                     license_errors[rsp['return']])

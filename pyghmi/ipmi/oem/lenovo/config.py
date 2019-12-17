@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2017-2019 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,21 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# from Matthew Garret's 'firmware_config' project.
+"""from Matthew Garret's 'firmware_config' project.
 
-# This contains functions to manage the firmware configuration of Lenovo
-# servers
+This contains functions to manage the firmware configuration of Lenovo servers
+"""
 
 import ast
-import struct
 import random
-import pyghmi.exceptions as pygexc
+import struct
 
+import pyghmi.exceptions as pygexc
 from pyghmi.ipmi.oem.lenovo import EfiDecompressor
+import six
 
 try:
-    from lxml import etree
     import EfiCompressor
+    from lxml import etree
 except ImportError:
     etree = None
     EfiCompressor = None
@@ -168,7 +167,7 @@ class LenovoFirmwareConfig(object):
             data.append(0)
 
         while retries:
-            retries = retries-1
+            retries = retries - 1
             response = run_command_with_retry(self.connection, data=data)
             try:
                 if response['code'] == 0 or retries == 0:
@@ -207,7 +206,7 @@ class LenovoFirmwareConfig(object):
                 amount = remaining
             else:
                 amount = blocksize
-            data.extend(inputdata[offset:offset+amount])
+            data.extend(inputdata[offset:offset + amount])
             remaining -= blocksize
             offset += blocksize
             run_command_with_retry(self.connection, data=data)
@@ -378,24 +377,25 @@ class LenovoFirmwareConfig(object):
                             instidx = 1
                             for inst in current:
                                 optname = '{0}.{1}'.format(optionname, instidx)
-                                options[optname] = dict(current=inst,
-                                               default=default,
-                                               possible=possible,
-                                               pending=None,
-                                               new_value=None,
-                                               help=help,
-                                               is_list=is_list,
-                                               lenovo_value=lenovo_value,
-                                               lenovo_id=lenovo_id,
-                                               lenovo_group=lenovo_group,
-                                               lenovo_setting=lenovo_setting,
-                                               lenovo_reboot=reset,
-                                               lenovo_protect=protect,
-                                               lenovo_instance=instidx,
-                                               readonly_expression=readonly,
-                                               hide_expression=hide,
-                                               sortid=sortid,
-                                               alias=alias)
+                                options[optname] = dict(
+                                    current=inst,
+                                    default=default,
+                                    possible=possible,
+                                    pending=None,
+                                    new_value=None,
+                                    help=help,
+                                    is_list=is_list,
+                                    lenovo_value=lenovo_value,
+                                    lenovo_id=lenovo_id,
+                                    lenovo_group=lenovo_group,
+                                    lenovo_setting=lenovo_setting,
+                                    lenovo_reboot=reset,
+                                    lenovo_protect=protect,
+                                    lenovo_instance=instidx,
+                                    readonly_expression=readonly,
+                                    hide_expression=hide,
+                                    sortid=sortid,
+                                    alias=alias)
                                 sortid += 1
                                 instidx += 1
                             continue
@@ -405,24 +405,25 @@ class LenovoFirmwareConfig(object):
                         for currid in sorted(instancetochoicemap):
                             optname = '{0}.{1}'.format(optionname, currid)
                             current = instancetochoicemap[currid]
-                            options[optname] = dict(current=current,
-                                               default=default,
-                                               possible=possible,
-                                               pending=None,
-                                               new_value=None,
-                                               help=help,
-                                               is_list=is_list,
-                                               lenovo_value=lenovo_value,
-                                               lenovo_id=lenovo_id,
-                                               lenovo_group=lenovo_group,
-                                               lenovo_setting=lenovo_setting,
-                                               lenovo_reboot=reset,
-                                               lenovo_protect=protect,
-                                               lenovo_instance=currid,
-                                               readonly_expression=readonly,
-                                               hide_expression=hide,
-                                               sortid=sortid,
-                                               alias=alias)
+                            options[optname] = dict(
+                                current=current,
+                                default=default,
+                                possible=possible,
+                                pending=None,
+                                new_value=None,
+                                help=help,
+                                is_list=is_list,
+                                lenovo_value=lenovo_value,
+                                lenovo_id=lenovo_id,
+                                lenovo_group=lenovo_group,
+                                lenovo_setting=lenovo_setting,
+                                lenovo_reboot=reset,
+                                lenovo_protect=protect,
+                                lenovo_instance=currid,
+                                readonly_expression=readonly,
+                                hide_expression=hide,
+                                sortid=sortid,
+                                alias=alias)
                             sortid += 1
                         continue
                     lenovoinstance = ""
@@ -481,8 +482,7 @@ class LenovoFirmwareConfig(object):
                         ','.join(sorted(options[option]['readonly_why'])))
                     errstr += ea
                 raise pygexc.InvalidParameterValue(errstr)
-            if (isinstance(options[option]['new_value'], str) or
-                    isinstance(options[option]['new_value'], unicode)):
+            if isinstance(options[option]['new_value'], six.string_types):
                 # Coerce a simple string parameter to the expected list format
                 options[option]['new_value'] = [options[option]['new_value']]
             options[option]['pending'] = options[option]['new_value']
@@ -495,7 +495,8 @@ class LenovoFirmwareConfig(object):
             setting = etree.Element('setting',
                                     ID=options[option]['lenovo_setting'])
             if options[option]['lenovo_group'] is not None:
-                group = etree.Element('group', ID=options[option]['lenovo_group'])
+                group = etree.Element('group',
+                                      ID=options[option]['lenovo_group'])
                 config.append(group)
                 group.append(setting)
             else:

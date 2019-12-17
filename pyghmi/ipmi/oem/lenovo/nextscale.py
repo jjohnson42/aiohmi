@@ -17,7 +17,7 @@
 import pyghmi.constants as pygconst
 import pyghmi.exceptions as pygexc
 import pyghmi.ipmi.private.session as ipmisession
-import pyghmi.ipmi.sdr as sdr
+from pyghmi.ipmi import sdr
 import pyghmi.util.webclient as webclient
 import struct
 try:

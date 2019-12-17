@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2015 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,24 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyghmi.ipmi.oem.lenovo.inventory import EntryField, \
-    parse_inventory_category_entry
+from pyghmi.ipmi.oem.lenovo import inventory
 
 cpu_fields = (
-    EntryField("index", "B"),
-    EntryField("Cores", "B"),
-    EntryField("Threads", "B"),
-    EntryField("Manufacturer", "13s"),
-    EntryField("Family", "30s"),
-    EntryField("Model", "30s"),
-    EntryField("Stepping", "3s"),
-    EntryField("Maximum Frequency", "<I",
-               valuefunc=lambda v: str(v) + " MHz"),
-    EntryField("Reserved", "h", include=False))
+    inventory.EntryField("index", "B"),
+    inventory.EntryField("Cores", "B"),
+    inventory.EntryField("Threads", "B"),
+    inventory.EntryField("Manufacturer", "13s"),
+    inventory.EntryField("Family", "30s"),
+    inventory.EntryField("Model", "30s"),
+    inventory.EntryField("Stepping", "3s"),
+    inventory.EntryField("Maximum Frequency", "<I",
+                         valuefunc=lambda v: str(v) + " MHz"),
+    inventory.EntryField("Reserved", "h", include=False))
 
 
 def parse_cpu_info(raw):
-    return parse_inventory_category_entry(raw, cpu_fields)
+    return inventory.parse_inventory_category_entry(raw, cpu_fields)
 
 
 def get_categories():

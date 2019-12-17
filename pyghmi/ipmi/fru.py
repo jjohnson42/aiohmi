@@ -1,6 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-# coding=utf8
-
 # Copyright 2015 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,27 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This module provides access to SDR offered by a BMC
-# This data is common between 'sensors' and 'inventory' modules since SDR
-# is both used to enumerate sensors for sensor commands and FRU ids for FRU
-# commands
+"""This module provides access to SDR offered by a BMC
 
-# For now, we will not offer persistent SDR caching as we do in xCAT's IPMI
-# code.  Will see if it is adequate to advocate for high object reuse in a
-# persistent process for the moment.
+This data is common between 'sensors' and 'inventory' modules since SDR
+is both used to enumerate sensors for sensor commands and FRU ids for FRU
+commands
 
-# Focus is at least initially on the aspects that make the most sense for a
-# remote client to care about.  For example, smbus information is being
-# skipped for now
+For now, we will not offer persistent SDR caching as we do in xCAT's IPMI
+code.  Will see if it is adequate to advocate for high object reuse in a
+persistent process for the moment.
 
-# This file handles parsing of fru format records as presented by IPMI
-# devices.  This format is documented in the 'Platform Management FRU
-# Information Storage Definition (Document Revision 1.2)
+Focus is at least initially on the aspects that make the most sense for a
+remote client to care about.  For example, smbus information is being
+skipped for now
+
+This file handles parsing of fru format records as presented by IPMI
+devices.  This format is documented in the 'Platform Management FRU
+Information Storage Definition (Document Revision 1.2)
+"""
+
+import struct
+import time
 
 import pyghmi.exceptions as iexc
 import pyghmi.ipmi.private.spd as spd
-import struct
-import time
+
 
 fruepoch = 820454400  # 1/1/1996, 0:00
 
@@ -242,7 +243,7 @@ class FRU(object):
             # removing trailing spaces and nulls like makes sense for text
             # and rely on vendors to workaround deviations in their OEM
             # module
-            #retinfo = retinfo.rstrip(b'\x00 ')
+            # retinfo = retinfo.rstrip(b'\x00 ')
             return retinfo, newoffset
         elif currtype == 1:  # BCD 'plus'
             retdata = ''

@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2016 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# __author__ = 'jjohnson2@lenovo.com'
+import struct
+import time
 
 import pyghmi.constants as pygconst
 import pyghmi.exceptions as pygexc
 import pyghmi.ipmi.private.constants as ipmiconst
-import struct
-import time
 
 try:
     range = xrange

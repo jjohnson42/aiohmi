@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2015-2017 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,22 +14,17 @@
 
 import base64
 import binascii
+import socket
+import struct
 import traceback
-try:
-    from urllib import urlencode
-except ImportError:
-    from urllib.parse import urlencode
+import weakref
 
 import pyghmi.constants as pygconst
 import pyghmi.exceptions as pygexc
 import pyghmi.ipmi.oem.generic as generic
-import pyghmi.ipmi.private.constants as ipmiconst
-import pyghmi.ipmi.private.util as util
-
 from pyghmi.ipmi.oem.lenovo import cpu
 from pyghmi.ipmi.oem.lenovo import dimm
 from pyghmi.ipmi.oem.lenovo import drive
-
 from pyghmi.ipmi.oem.lenovo import firmware
 from pyghmi.ipmi.oem.lenovo import imm
 from pyghmi.ipmi.oem.lenovo import inventory
@@ -40,15 +33,17 @@ from pyghmi.ipmi.oem.lenovo import pci
 from pyghmi.ipmi.oem.lenovo import psu
 from pyghmi.ipmi.oem.lenovo import raid_controller
 from pyghmi.ipmi.oem.lenovo import raid_drive
-from pyghmi.redfish.oem.lenovo import tsma
+import pyghmi.ipmi.private.constants as ipmiconst
+import pyghmi.ipmi.private.util as util
 import pyghmi.redfish.command as redfishcmd
-
-
+from pyghmi.redfish.oem.lenovo import tsma
 import pyghmi.util.webclient as wc
 
-import socket
-import struct
-import weakref
+try:
+    from urllib import urlencode
+except ImportError:
+    from urllib.parse import urlencode
+
 try:
     range = xrange
 except NameError:
@@ -162,10 +157,11 @@ class OEMHandler(generic.OEMHandler):
         elif self.is_fpc:
             self.smmhandler = nextscale.SMMClient(ipmicmd)
         elif self.has_tsma:
-            conn = wc.SecureHTTPConnection(ipmicmd.bmc, 443,
+            conn = wc.SecureHTTPConnection(
+                ipmicmd.bmc, 443,
                 verifycallback=self.ipmicmd.certverify)
-                #sysinfo, sysurl, webclient, cache=None):
-            self.tsmahandler = tsma.TsmHandler(None, None, conn, fish=redfishcmd)
+            self.tsmahandler = tsma.TsmHandler(None, None, conn,
+                                               fish=redfishcmd)
             self.tsmahandler.set_credentials(
                 ipmicmd.ipmi_session.userid.decode('utf-8'),
                 ipmicmd.ipmi_session.password.decode('utf-8'))
@@ -254,12 +250,12 @@ class OEMHandler(generic.OEMHandler):
                     event['severity'] = pygconst.Health.Ok
                     event['component'] = 'User Privilege'
                     event['component_type'] = ipmiconst.sensor_type_codes[6]
-                    event['event_data'] = \
-                        'User {0} on channel {1} had privilege changed ' \
+                    event['event_data'] = (
+                        'User {0} on channel {1} had privilege changed '
                         'from {2} to {3}'.format(
                             oemdata[2], oemdata[1], oemdata[3] & 0b1111,
-                            (oemdata[3] & 0b11110000) >> 4
-                        )
+                            (oemdata[3] & 0b11110000) >> 4)
+                    )
             else:
                 event['event'] = 'OEM event: {0}'.format(
                     ' '.join(format(x, '02x') for x in event['oemdata']))
@@ -342,13 +338,13 @@ class OEMHandler(generic.OEMHandler):
 
     def set_user_access(self, uid, channel, callback, link_auth, ipmi_msg,
                         privilege_level):
-        if self.is_fpc and  self._fpc_variant == 2:
+        if self.is_fpc and self._fpc_variant == 2:
             self.smmhandler.set_user_priv(uid, privilege_level)
 
     @property
     def is_fpc(self):
-        """True if the target is a Lenovo nextscale fan power controller
-        """
+        """True if the target is a Lenovo nextscale fan power controller"""
+
         if self.has_imm or self.has_xcc:
             return None
         if self._fpc_variant is not None:
@@ -378,8 +374,8 @@ class OEMHandler(generic.OEMHandler):
 
     @property
     def has_tsm(self):
-        """True if this particular server have a TSM based service processor
-        """
+        """True if this particular server have a TSM based service processor"""
+
         if (self.oemid['manufacturer_id'] == 19046 and
                 self.oemid['device_id'] == 32):
             try:
@@ -559,7 +555,7 @@ class OEMHandler(generic.OEMHandler):
                 endidx = len(macs) - 5
                 macprefix = None
                 while idx < endidx:
-                    currmac = macs[idx:idx+6]
+                    currmac = macs[idx:idx + 6]
                     if not isinstance(currmac, bytearray):
                         # invalid vpd format, abort attempts to extract
                         # mac in this way
@@ -638,16 +634,20 @@ class OEMHandler(generic.OEMHandler):
             return nextscale.get_fpc_firmware(bmcver, self.ipmicmd,
                                               self._fpc_variant)
         elif self.has_tsma:
-            return self.tsmahandler.get_firmware_inventory(components, raisebypass=False)
+            return self.tsmahandler.get_firmware_inventory(components,
+                                                           raisebypass=False)
         return super(OEMHandler, self).get_oem_firmware(bmcver, components)
 
     def get_diagnostic_data(self, savefile, progress, autosuffix=False):
         if self.has_xcc:
-            return self.immhandler.get_diagnostic_data(savefile, progress, autosuffix)
+            return self.immhandler.get_diagnostic_data(savefile, progress,
+                                                       autosuffix)
         if self.is_fpc:
-            return self.smmhandler.get_diagnostic_data(savefile, progress, autosuffix)
+            return self.smmhandler.get_diagnostic_data(savefile, progress,
+                                                       autosuffix)
         if self.has_tsma:
-            return self.tsmahandler.get_diagnostic_data(savefile, progress, autosuffix)
+            return self.tsmahandler.get_diagnostic_data(savefile, progress,
+                                                        autosuffix)
 
     def get_oem_capping_enabled(self):
         if self.has_tsm:
@@ -706,9 +706,9 @@ class OEMHandler(generic.OEMHandler):
             # set the domain name content
             name = name.ljust(256, "\x00")
             for i in range(0, 4):
-                data = [4, i+1]
-                offset = i*64
-                data.extend([ord(x) for x in name[offset:offset+64]])
+                data = [4, i + 1]
+                offset = i * 64
+                data.extend([ord(x) for x in name[offset:offset + 64]])
                 self.ipmicmd.xraw_command(netfn=0x32, command=0x6c, data=data)
 
             self._restart_dns()
@@ -799,7 +799,7 @@ class OEMHandler(generic.OEMHandler):
             else:
                 # fall back to a dumber, but more universal formatter
                 ipv6str = binascii.b2a_hex(ipv6_addr)
-                ipv6str = ':'.join([ipv6str[x:x+4] for x in range(0, 32, 4)])
+                ipv6str = ':'.join([ipv6str[x:x + 4] for x in range(0, 32, 4)])
             netdata['ipv6_addresses'] = [
                 '{0}/{1}'.format(ipv6str, ipv6_prefix)]
 
@@ -858,7 +858,7 @@ class OEMHandler(generic.OEMHandler):
                                   data=(1, selector, 0, 1))
         # now do the set
         for x in range(0, 256, 64):
-            currdata = padded[x:x+64]
+            currdata = padded[x:x + 64]
             currchunk = x // 64 + 1
             cmddata = [1, selector, currchunk] + currdata
             self.ipmicmd.xraw_command(netfn=0x32, command=0x9f, data=cmddata)
@@ -872,7 +872,7 @@ class OEMHandler(generic.OEMHandler):
         imgnames = rsp['data'][1:]
         shortnames = []
         for idx in range(0, len(imgnames), 22):
-            shortnames.append(imgnames[idx+2:idx+22].rstrip('\0'))
+            shortnames.append(imgnames[idx + 2:idx + 22].rstrip('\0'))
         return shortnames
 
     def _megarac_media_waitforready(self, imagename):

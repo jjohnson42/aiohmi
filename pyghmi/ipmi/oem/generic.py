@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2015 Lenovo Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -190,8 +188,8 @@ class OEMHandler(object):
         return fru
 
     def get_oem_firmware(self, bmcver, components):
-        """Get Firmware information.
-        """
+        """Get Firmware information."""
+
         # Here the bmc version is passed into the OEM handler, to allow
         # the handler to enrich the data. For the generic case, just
         # provide the generic BMC version, which is all that is possible
@@ -201,7 +199,7 @@ class OEMHandler(object):
         # code to know whether it cares or not.  The main purpose of the
         # components argument is to indicate when certain performance
         # optimizations can be performed.
-        yield ('BMC Version', {'version': bmcver})
+        yield 'BMC Version', {'version': bmcver}
 
     def get_oem_capping_enabled(self):
         """Get PSU based power capping status
@@ -218,13 +216,11 @@ class OEMHandler(object):
         return ()
 
     def get_oem_remote_kvm_available(self):
-        """Get remote KVM availability
-        """
+        """Get remote KVM availability"""
         return False
 
     def get_oem_domain_name(self):
-        """Get Domain name
-        """
+        """Get Domain name"""
         return ()
 
     def set_oem_domain_name(self, name):
@@ -309,15 +305,11 @@ class OEMHandler(object):
         return []
 
     def set_hostname(self, hostname):
-        """OEM specific hook to specify name information
-
-        """
+        """OEM specific hook to specify name information"""
         raise exc.UnsupportedFunctionality()
 
     def get_hostname(self):
-        """OEM specific hook to specify name information
-
-        """
+        """OEM specific hook to specify name information"""
         raise exc.UnsupportedFunctionality()
 
     def set_user_access(self, uid, channel, callback, link_auth, ipmi_msg,
@@ -343,7 +335,8 @@ class OEMHandler(object):
         return {}
 
     def set_bmc_configuration(self, changeset):
-        raise exc.UnsupportedFunctionality('Platform does not support setting bmc attributes')
+        raise exc.UnsupportedFunctionality(
+            'Platform does not support setting bmc attributes')
 
     def get_system_configuration(self, hideadvanced):
         """Retrieve system configuration

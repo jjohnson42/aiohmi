@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2014 IBM Corporation
 # Copyright 2015-2019 Lenovo
 #
@@ -15,12 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# This represents the low layer message framing portion of IPMI
+"""This represents the low layer message framing portion of IPMI"""
 
-import pyghmi.exceptions as exc
 import struct
 import threading
 
+import pyghmi.exceptions as exc
 from pyghmi.ipmi.private import constants
 from pyghmi.ipmi.private import session
 from pyghmi.ipmi.private.util import _monotonic_time
@@ -75,8 +73,8 @@ class Console(object):
             self.callgotsession = None
 
     def _got_session(self, response):
-        """Private function to navigate SOL payload activation
-        """
+        """Private function to navigate SOL payload activation"""
+
         if 'error' in response:
             self._print_error(response['error'])
             return
@@ -190,15 +188,15 @@ class Console(object):
                     self.pendingoutput[-1] += data
 
     def _got_cons_input(self, handle):
-        """Callback for handle events detected by ipmi session
-        """
+        """Callback for handle events detected by ipmi session"""
+
         self._addpendingdata(handle.read())
         if not self.awaitingack:
             self._sendpendingoutput()
 
     def close(self):
-        """Shut down an SOL session,
-        """
+        """Shut down an SOL session"""
+
         if self.ipmi_session:
             self.ipmi_session.unregister_keepalive(self.keepaliveid)
         if self.activated:
@@ -331,8 +329,8 @@ class Console(object):
         self.out_handler(data)
 
     def _got_sol_payload(self, payload):
-        """SOL payload callback
-        """
+        """SOL payload callback"""
+
         # TODO(jbjohnso) test cases to throw some likely scenarios at functions
         # for example, retry with new data, retry with no new data
         # retry with unexpected sequence number
@@ -457,8 +455,8 @@ class ServerConsole(Console):
         session.Session.wait_for_rsp(0)
 
     def _got_sol_payload(self, payload):
-        """SOL payload callback
-        """
+        """SOL payload callback"""
+
         # TODO(jbjohnso) test cases to throw some likely scenarios at functions
         # for example, retry with new data, retry with no new data
         # retry with unexpected sequence number
@@ -540,6 +538,6 @@ class ServerConsole(Console):
                                        needskeepalive=needskeepalive)
 
     def close(self):
-        """Shut down an SOL session,
-        """
+        """Shut down an SOL session"""
+
         self.activated = False
