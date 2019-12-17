@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 IBM Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1879,9 +1877,9 @@ ipmi_completion_codes = {
 }
 
 priv_levels = {
-     'callback': 1,
-     'user': 2,
-     'operator': 3,
-     'admin': 4,
-     'oem': 5,
+    'callback': 1,
+    'user': 2,
+    'operator': 3,
+    'admin': 4,
+    'oem': 5,
 }

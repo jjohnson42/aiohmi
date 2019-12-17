@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2016-2017 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,19 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import struct
+import weakref
+from xml.etree.ElementTree import fromstring
+import zipfile
+
 import pyghmi.constants as pygconst
 import pyghmi.exceptions as pygexc
 import pyghmi.ipmi.private.session as ipmisession
 from pyghmi.ipmi import sdr
 import pyghmi.util.webclient as webclient
-import struct
+import six
+
 try:
     from urllib import urlencode
 except ImportError:
     from urllib.parse import urlencode
-import weakref
-from xml.etree.ElementTree import fromstring
-import zipfile
 
 try:
     range = xrange
@@ -280,8 +281,9 @@ class SMMClient(object):
         self.wc.request(
             'POST', '/data',
             ('get=passwordMinLength,passwordForceChange,passwordDurationDays,'
-            'passwordExpireWarningDays,passwordChangeInterval,'
-            'passwordReuseCheckNum,passwordFailAllowdNum,passwordLockoutTimePeriod'))
+             'passwordExpireWarningDays,passwordChangeInterval,'
+             'passwordReuseCheckNum,passwordFailAllowdNum,'
+             'passwordLockoutTimePeriod'))
         rsp = self.wc.getresponse()
         rspbody = rsp.read()
         accountinfo = fromstring(rspbody)
@@ -301,12 +303,10 @@ class SMMClient(object):
             'possible': [self.fanmodes[x] for x in self.fanmodes]}
         return settings
 
-
     def set_bmc_configuration(self, changeset):
         rules = []
         for key in changeset:
-            if (isinstance(changeset[key], str) or
-                    isinstance(changeset[key], unicode)):
+            if isinstance(changeset[key], six.string_types):
                 changeset[key] = {'value': changeset[key]}
             if key.lower() in self.rulemap:
                 rules.append('{0}:{1}'.format(
@@ -321,8 +321,8 @@ class SMMClient(object):
                         break
                 else:
                     raise pygexc.InvalidParameterValue(
-                            '{0} not a valid mode for fanspeed'.format(
-                                changeset[key]['value']))
+                        '{0} not a valid mode for fanspeed'.format(
+                            changeset[key]['value']))
         if rules:
             rules = 'set={0}'.format(','.join(rules))
             self.wc.request('POST', '/data', rules)
@@ -352,7 +352,7 @@ class SMMClient(object):
         rsp['data'] = b'\x01'
         initpct = 1.0
         if progress:
-                progress({'phase': 'initializing', 'progress': initpct})
+            progress({'phase': 'initializing', 'progress': initpct})
         while bytearray(rsp['data'])[0] != 0:
             ipmisession.Session.pause(3)
             initpct += 3.0
@@ -389,8 +389,12 @@ class SMMClient(object):
         cv = self.ipmicmd.certverify
         wc = webclient.SecureHTTPConnection(self.smm, 443, verifycallback=cv)
         wc.connect()
-        loginform = urlencode({'user': self.username,
-                                      'password': self.password})
+        loginform = urlencode(
+            {
+                'user': self.username,
+                'password': self.password
+            }
+        )
         wc.request('POST', '/data/login', loginform)
         rsp = wc.getresponse()
         if rsp.status != 200:

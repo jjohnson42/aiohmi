@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2015 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyghmi.ipmi.oem.lenovo.inventory import EntryField, \
-    parse_inventory_category_entry
+from pyghmi.ipmi.oem.lenovo import inventory
 
 pci_fields = (
-    EntryField("index", "B"),
-    EntryField("PCIType", "B", mapper={
+    inventory.EntryField("index", "B"),
+    inventory.EntryField("PCIType", "B", mapper={
         0x0: "On board slot",
         0x1: "Riser Type 1",
         0x2: "Riser Type 2",
@@ -31,23 +28,23 @@ pci_fields = (
         0x8: "ROC",
         0x9: "Mezz"
     }),
-    EntryField("BusNumber", "B"),
-    EntryField("DeviceFunction", "B"),
-    EntryField("VendorID", "<H"),
-    EntryField("DeviceID", "<H"),
-    EntryField("SubSystemVendorID", "<H"),
-    EntryField("SubSystemID", "<H"),
-    EntryField("InterfaceType", "B"),
-    EntryField("SubClassCode", "B"),
-    EntryField("BaseClassCode", "B"),
-    EntryField("LinkSpeed", "B"),
-    EntryField("LinkWidth", "B"),
-    EntryField("Reserved", "h")
+    inventory.EntryField("BusNumber", "B"),
+    inventory.EntryField("DeviceFunction", "B"),
+    inventory.EntryField("VendorID", "<H"),
+    inventory.EntryField("DeviceID", "<H"),
+    inventory.EntryField("SubSystemVendorID", "<H"),
+    inventory.EntryField("SubSystemID", "<H"),
+    inventory.EntryField("InterfaceType", "B"),
+    inventory.EntryField("SubClassCode", "B"),
+    inventory.EntryField("BaseClassCode", "B"),
+    inventory.EntryField("LinkSpeed", "B"),
+    inventory.EntryField("LinkWidth", "B"),
+    inventory.EntryField("Reserved", "h")
 )
 
 
 def parse_pci_info(raw):
-    return parse_inventory_category_entry(raw, pci_fields)
+    return inventory.parse_inventory_category_entry(raw, pci_fields)
 
 
 def get_categories():

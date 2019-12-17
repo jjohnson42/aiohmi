@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2015 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -55,16 +53,15 @@ class EntryField(object):
 
 # General parameter parsing functions
 def parse_inventory_category(name, info, countable=True):
-    """Parses every entry in an inventory category (CPU, memory, PCI, drives,
-    etc).
+    """Parses every entry in an inventory category
 
+    For example: CPU, memory, PCI, drives
     Expects the first byte to be a count of the number of entries, followed
     by a list of elements to be parsed by a dedicated parser (below).
 
     :param name: the name of the parameter (e.g.: "cpu")
     :param info: a list of integers with raw data read from an IPMI requests
     :param countable: whether the data have an entries count field
-
     :returns: dict -- a list of entries in the category.
     """
     raw = info["data"][1:]

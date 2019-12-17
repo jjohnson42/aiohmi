@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2017 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,53 +12,55 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ctypes import addressof, c_int, c_long, c_short, c_ubyte, c_uint
-from ctypes import cast, create_string_buffer, POINTER, pointer, sizeof
-from ctypes import Structure
+import ctypes
 import fcntl
-import pyghmi.ipmi.private.util as iutil
 from select import select
 
-
-class IpmiMsg(Structure):
-    _fields_ = [('netfn', c_ubyte),
-                ('cmd', c_ubyte),
-                ('data_len', c_short),
-                ('data', POINTER(c_ubyte))]
+import pyghmi.ipmi.private.util as iutil
 
 
-class IpmiSystemInterfaceAddr(Structure):
-    _fields_ = [('addr_type', c_int),
-                ('channel', c_short),
-                ('lun', c_ubyte)]
+class IpmiMsg(ctypes.Structure):
+    _fields_ = [('netfn', ctypes.c_ubyte),
+                ('cmd', ctypes.c_ubyte),
+                ('data_len', ctypes.c_short),
+                ('data', ctypes.POINTER(ctypes.c_ubyte))]
 
 
-class IpmiRecv(Structure):
-    _fields_ = [('recv_type', c_int),
-                ('addr', POINTER(IpmiSystemInterfaceAddr)),
-                ('addr_len', c_uint),
-                ('msgid', c_long),
+class IpmiSystemInterfaceAddr(ctypes.Structure):
+    _fields_ = [('addr_type', ctypes.c_int),
+                ('channel', ctypes.c_short),
+                ('lun', ctypes.c_ubyte)]
+
+
+class IpmiRecv(ctypes.Structure):
+    _fields_ = [('recv_type', ctypes.c_int),
+                ('addr', ctypes.POINTER(IpmiSystemInterfaceAddr)),
+                ('addr_len', ctypes.c_uint),
+                ('msgid', ctypes.c_long),
                 ('msg', IpmiMsg)]
 
 
-class IpmiReq(Structure):
-    _fields_ = [('addr', POINTER(IpmiSystemInterfaceAddr)),
-                ('addr_len', c_uint),
-                ('msgid', c_long),
+class IpmiReq(ctypes.Structure):
+    _fields_ = [('addr', ctypes.POINTER(IpmiSystemInterfaceAddr)),
+                ('addr_len', ctypes.c_uint),
+                ('msgid', ctypes.c_long),
                 ('msg', IpmiMsg)]
 
 
 _IONONE = 0
 _IOWRITE = 1
 _IOREAD = 2
-IPMICTL_SET_MY_ADDRESS_CMD = _IOREAD << 30 | sizeof(c_uint) << 16 | \
-    ord('i') << 8 | 17  # from ipmi.h
-IPMICTL_SEND_COMMAND = _IOREAD << 30 | sizeof(IpmiReq) << 16 | \
-    ord('i') << 8 | 13  # from ipmi.h
+IPMICTL_SET_MY_ADDRESS_CMD = (_IOREAD << 30 |
+                              ctypes.sizeof(ctypes.c_uint) << 16 |
+                              ord('i') << 8 | 17)  # from ipmi.h
+IPMICTL_SEND_COMMAND = (_IOREAD << 30 |
+                        ctypes.sizeof(IpmiReq) << 16 |
+                        ord('i') << 8 | 13)  # from ipmi.h
 # next is really IPMICTL_RECEIVE_MSG_TRUNC, but will only use that
-IPMICTL_RECV = (_IOWRITE | _IOREAD) << 30 | sizeof(IpmiRecv) << 16 | \
-    ord('i') << 8 | 11  # from ipmi.h
-BMC_SLAVE_ADDR = c_uint(0x20)
+IPMICTL_RECV = ((_IOWRITE | _IOREAD) << 30 |
+                ctypes.sizeof(IpmiRecv) << 16 |
+                ord('i') << 8 | 11)  # from ipmi.h
+BMC_SLAVE_ADDR = ctypes.c_uint(0x20)
 CURRCHAN = 0xf
 ADDRTYPE = 0xc
 
@@ -74,11 +74,13 @@ class Session(object):
         self.ipmidev = open(devnode, 'rw')
         fcntl.ioctl(self.ipmidev, IPMICTL_SET_MY_ADDRESS_CMD, BMC_SLAVE_ADDR)
         # the interface is initted, create some reusable memory for our session
-        self.databuffer = create_string_buffer(4096)
+        self.datactypes.buffer = ctypes.create_string_ctypes.buffer(4096)
         self.req = IpmiReq()
         self.rsp = IpmiRecv()
         self.addr = IpmiSystemInterfaceAddr()
-        self.req.msg.data = cast(addressof(self.databuffer), POINTER(c_ubyte))
+        self.req.msg.data = ctypes.cast(
+            ctypes.addressof(self.datactypes.buffer),
+            ctypes.POINTER(ctypes.c_ubyte))
         self.rsp.msg.data = self.req.msg.data
         self.userid = None
         self.password = None
@@ -91,9 +93,9 @@ class Session(object):
     @property
     def parsed_rsp(self):
         response = {'netfn': self.rsp.msg.netfn, 'command': self.rsp.msg.cmd,
-                    'code': ord(self.databuffer.raw[0]),
+                    'code': ord(self.datactypes.buffer.raw[0]),
                     'data': list(bytearray(
-                        self.databuffer.raw[1:self.rsp.msg.data_len]))}
+                        self.datactypes.buffer.raw[1:self.rsp.msg.data_len]))}
         errorstr = iutil.get_ipmi_error(response)
         if errorstr:
             response['error'] = errorstr
@@ -110,18 +112,18 @@ class Session(object):
                     waitall=False):
         self.addr.channel = CURRCHAN
         self.addr.addr_type = ADDRTYPE
-        self.req.addr_len = sizeof(IpmiSystemInterfaceAddr)
-        self.req.addr = pointer(self.addr)
+        self.req.addr_len = ctypes.sizeof(IpmiSystemInterfaceAddr)
+        self.req.addr = ctypes.pointer(self.addr)
         self.req.msg.netfn = netfn
         self.req.msg.cmd = command
-        data = buffer(bytearray(data))
-        self.databuffer[:len(data)] = data[:len(data)]
+        data = ctypes.buffer(bytearray(data))
+        self.datactypes.buffer[:len(data)] = data[:len(data)]
         self.req.msg.data_len = len(data)
         fcntl.ioctl(self.ipmidev, IPMICTL_SEND_COMMAND, self.req)
         self.await_reply()
         self.rsp.msg.data_len = 4096
-        self.rsp.addr = pointer(self.addr)
-        self.rsp.addr_len = sizeof(IpmiSystemInterfaceAddr)
+        self.rsp.addr = ctypes.pointer(self.addr)
+        self.rsp.addr_len = ctypes.sizeof(IpmiSystemInterfaceAddr)
         fcntl.ioctl(self.ipmidev, IPMICTL_RECV, self.rsp)
         return self.parsed_rsp
 

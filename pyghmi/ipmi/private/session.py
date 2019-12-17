@@ -26,12 +26,10 @@ import socket
 import struct
 import threading
 
-
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import algorithms
 from cryptography.hazmat.primitives.ciphers import Cipher
 from cryptography.hazmat.primitives.ciphers import modes
-
 import pyghmi.exceptions as exc
 from pyghmi.ipmi.private import constants
 from pyghmi.ipmi.private import util

@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # Copyright 2015 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,23 +11,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# __author__ = 'jjohnson2@lenovo.com'
 
-# this is a quick sample of how to write something that acts like a bmc
-# to play:
-# run fakebmc
-# # ipmitool -I lanplus -U admin -P password -H 127.0.0.1 power status
-# Chassis Power is off
-# # ipmitool -I lanplus -U admin -P password -H 127.0.0.1 power on
-# Chassis Power Control: Up/On
-# # ipmitool -I lanplus -U admin -P password -H 127.0.0.1 power status
-# Chassis Power is on
-# # ipmitool -I lanplus -U admin -P password -H 127.0.0.1 mc reset cold
-# Sent cold reset command to MC
-# (fakebmc exits)
+"""this is a quick sample of how to write something that acts like a bmc
+to play:
+run fakebmc
+# ipmitool -I lanplus -U admin -P password -H 127.0.0.1 power status
+Chassis Power is off
+# ipmitool -I lanplus -U admin -P password -H 127.0.0.1 power on
+Chassis Power Control: Up/On
+# ipmitool -I lanplus -U admin -P password -H 127.0.0.1 power status
+Chassis Power is on
+# ipmitool -I lanplus -U admin -P password -H 127.0.0.1 mc reset cold
+Sent cold reset command to MC
+(fakebmc exits)
+"""
+
 import argparse
-import pyghmi.ipmi.bmc as bmc
 import sys
+
+import pyghmi.ipmi.bmc as bmc
 
 
 class FakeBmc(bmc.Bmc):

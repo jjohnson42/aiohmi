@@ -19,11 +19,14 @@
 import base64
 import copy
 import gzip
+import io
 import json
-import pyghmi.exceptions as pygexc
 import socket
 import ssl
 import threading
+
+import pyghmi.exceptions as pygexc
+import six
 
 try:
     import Cookie
@@ -31,10 +34,6 @@ try:
 except ImportError:
     import http.client as httplib
     import http.cookies as Cookie
-import io
-import six
-
-__author__ = 'jjohnson2'
 
 
 # Used as the separator for form data

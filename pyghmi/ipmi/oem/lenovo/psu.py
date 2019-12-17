@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2015 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyghmi.ipmi.oem.lenovo.inventory import EntryField, \
-    parse_inventory_category_entry
+from pyghmi.ipmi.oem.lenovo import inventory
+
 
 psu_type = {
     0b0001: "Other",
@@ -45,59 +43,49 @@ psu_voltage_range_switch = {
 
 
 def psu_status_word_slice(w, s, e):
-    return int(w[-e-1:-s], 2)
+    return int(w[-e - 1:-s], 2)
 
 
 def psu_status_word_bit(w, b):
-    return int(w[-b-1])
+    return int(w[-b - 1])
 
 
 def psu_status_word_parser(word):
     fields = {}
     word = "{0:016b}".format(word)
 
-    fields["DMTF Power Supply Type"] = \
-        psu_type.get(psu_status_word_slice(word, 10, 13), "Invalid")
+    fields["DMTF Power Supply Type"] = psu_type.get(psu_status_word_slice(
+        word, 10, 13), "Invalid")
 
-    # fields["Status"] = \
-    #    psu_status.get(psu_status_word_slice(word, 7, 9), "Invalid")
-
-    fields["DMTF Input Voltage Range"] = \
-        psu_voltage_range_switch.get(
-            psu_status_word_slice(word, 3, 6),
-            "Invalid"
-        )
+    fields["DMTF Input Voltage Range"] = psu_voltage_range_switch.get(
+        psu_status_word_slice(word, 3, 6), "Invalid")
 
     # Power supply is unplugged from the wall
-    fields["Unplugged"] = \
-        bool(psu_status_word_bit(word, 2))
-
-    # fields["Power supply is present"] = \
-    #    bool(psu_status_word_bit(word, 1))
+    fields["Unplugged"] = bool(psu_status_word_bit(word, 2))
 
     # Power supply is hot-replaceable
-    fields["Hot Replaceable"] = \
-        bool(psu_status_word_bit(word, 0))
+    fields["Hot Replaceable"] = bool(psu_status_word_bit(word, 0))
 
     return fields
 
+
 psu_fields = (
-    EntryField("index", "B"),
-    EntryField("Presence State", "B", presence=True),
-    EntryField("Capacity W", "<H"),
-    EntryField("Board manufacturer", "18s"),
-    EntryField("Board model", "18s"),
-    EntryField("Board manufacture date", "10s"),
-    EntryField("Board serial number", "34s"),
-    EntryField("Board manufacturer revision", "5s"),
-    EntryField("Board product name", "10s"),
-    EntryField("PSU Asset Tag", "10s"),
-    EntryField(
+    inventory.EntryField("index", "B"),
+    inventory.EntryField("Presence State", "B", presence=True),
+    inventory.EntryField("Capacity W", "<H"),
+    inventory.EntryField("Board manufacturer", "18s"),
+    inventory.EntryField("Board model", "18s"),
+    inventory.EntryField("Board manufacture date", "10s"),
+    inventory.EntryField("Board serial number", "34s"),
+    inventory.EntryField("Board manufacturer revision", "5s"),
+    inventory.EntryField("Board product name", "10s"),
+    inventory.EntryField("PSU Asset Tag", "10s"),
+    inventory.EntryField(
         "PSU Redundancy Status",
         "B",
         valuefunc=lambda v: "Not redundant" if v == 0x00 else "Redundant"
     ),
-    EntryField(
+    inventory.EntryField(
         "PSU Status Word",
         "<H",
         valuefunc=psu_status_word_parser, multivaluefunc=True
@@ -106,7 +94,7 @@ psu_fields = (
 
 
 def parse_psu_info(raw):
-    return parse_inventory_category_entry(raw, psu_fields)
+    return inventory.parse_inventory_category_entry(raw, psu_fields)
 
 
 def get_categories():

@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2015 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,41 +12,41 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyghmi.ipmi.oem.lenovo.inventory import EntryField, \
-    parse_inventory_category_entry
+from pyghmi.ipmi.oem.lenovo import inventory
+
 
 raid_drive_fields = (
-    EntryField("index", "B"),
-    EntryField("VendorID", "64s"),
-    EntryField("Size", "I",
-               valuefunc=lambda v: str(v) + " MB"),
-    EntryField("MediaType", "B", mapper={
+    inventory.EntryField("index", "B"),
+    inventory.EntryField("VendorID", "64s"),
+    inventory.EntryField("Size", "I",
+                         valuefunc=lambda v: str(v) + " MB"),
+    inventory.EntryField("MediaType", "B", mapper={
         0x00: "HDD",
         0x01: "SSD",
         0x02: "SSM_FLASH"
     }),
-    EntryField("InterfaceType", "B", mapper={
+    inventory.EntryField("InterfaceType", "B", mapper={
         0x00: "Unknown",
         0x01: "ParallelSCSI",
         0x02: "SAS",
         0x03: "SATA",
         0x04: "FC"
     }),
-    EntryField("FormFactor", "B", mapper={
+    inventory.EntryField("FormFactor", "B", mapper={
         0x00: "Unknown",
         0x01: "2.5in",
         0x02: "3.5in"
     }),
-    EntryField("LinkSpeed", "B", mapper={
+    inventory.EntryField("LinkSpeed", "B", mapper={
         0x00: "Unknown",
         0x01: "1.5 Gb/s",
         0x02: "3.0 Gb/s",
         0x03: "6.0 Gb/s",
         0x04: "12.0 Gb/s"
     }),
-    EntryField("SlotNumber", "B"),
-    EntryField("ControllerIndex", "B"),
-    EntryField("DeviceState", "B", mapper={
+    inventory.EntryField("SlotNumber", "B"),
+    inventory.EntryField("ControllerIndex", "B"),
+    inventory.EntryField("DeviceState", "B", mapper={
         0x00: "active",
         0x01: "stopped",
         0xff: "transitioning"
@@ -56,7 +54,7 @@ raid_drive_fields = (
 
 
 def parse_raid_drive_info(raw):
-    return parse_inventory_category_entry(raw, raid_drive_fields)
+    return inventory.parse_inventory_category_entry(raw, raid_drive_fields)
 
 
 def get_categories():

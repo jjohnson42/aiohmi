@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2015 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,40 +12,41 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyghmi.ipmi.oem.lenovo.inventory import EntryField, \
-    parse_inventory_category_entry
+from pyghmi.ipmi.oem.lenovo import inventory
+
 
 raid_controller_fields = (
-    EntryField("ControllerID", "I"),
-    EntryField("AdapterType", "B", mapper={
+    inventory.EntryField("ControllerID", "I"),
+    inventory.EntryField("AdapterType", "B", mapper={
         0x00: "Unknown",
         0x01: "RAIDController"
     }),
-    EntryField("SupercapPresence", "B", mapper={
+    inventory.EntryField("SupercapPresence", "B", mapper={
         0x00: "Absent",
         0x01: "Present"
     }),
-    EntryField("FlashComponent1Name", "16s"),
-    EntryField("FlashComponent1Version", "64s"),
-    EntryField("FlashComponent2Name", "16s"),
-    EntryField("FlashComponent2Version", "64s"),
-    EntryField("FlashComponent3Name", "16s"),
-    EntryField("FlashComponent3Version", "64s"),
-    EntryField("FlashComponent4Name", "16s"),
-    EntryField("FlashComponent4Version", "64s"),
-    EntryField("FlashComponent5Name", "16s"),
-    EntryField("FlashComponent5Version", "64s"),
-    EntryField("FlashComponent6Name", "16s"),
-    EntryField("FlashComponent6Version", "64s"),
-    EntryField("FlashComponent7Name", "16s"),
-    EntryField("FlashComponent7Version", "64s"),
-    EntryField("FlashComponent8Name", "16s"),
-    EntryField("FlashComponent8Version", "64s")
+    inventory.EntryField("FlashComponent1Name", "16s"),
+    inventory.EntryField("FlashComponent1Version", "64s"),
+    inventory.EntryField("FlashComponent2Name", "16s"),
+    inventory.EntryField("FlashComponent2Version", "64s"),
+    inventory.EntryField("FlashComponent3Name", "16s"),
+    inventory.EntryField("FlashComponent3Version", "64s"),
+    inventory.EntryField("FlashComponent4Name", "16s"),
+    inventory.EntryField("FlashComponent4Version", "64s"),
+    inventory.EntryField("FlashComponent5Name", "16s"),
+    inventory.EntryField("FlashComponent5Version", "64s"),
+    inventory.EntryField("FlashComponent6Name", "16s"),
+    inventory.EntryField("FlashComponent6Version", "64s"),
+    inventory.EntryField("FlashComponent7Name", "16s"),
+    inventory.EntryField("FlashComponent7Version", "64s"),
+    inventory.EntryField("FlashComponent8Name", "16s"),
+    inventory.EntryField("FlashComponent8Version", "64s")
 )
 
 
 def parse_raid_controller_info(raw):
-    return parse_inventory_category_entry(raw, raid_controller_fields)
+    return inventory.parse_inventory_category_entry(
+        raw, raid_controller_fields)
 
 
 def get_categories():

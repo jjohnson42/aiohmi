@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -11,17 +10,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Written by pmartini2, but mostly a clone of fakebmc, written by jjohnson2
-# __author__ = 'pmartini2@bloomberg.net'
-
-# This is a simple, but working proof of concept of using pyghmi.ipmi.bmc to
-# control a VM
+"""This is a simple, but working proof of concept of using pyghmi.ipmi.bmc to
+control a VM
+"""
 
 import argparse
-import libvirt
-import pyghmi.ipmi.bmc as bmc
 import sys
 import threading
+
+import libvirt
+import pyghmi.ipmi.bmc as bmc
 
 
 def lifecycle_callback(connection, domain, event, detail, console):

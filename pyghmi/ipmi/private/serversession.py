@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2015 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,18 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This represents the server side of a session object
-# Split into a separate file to avoid overly manipulating the as-yet
-# client-centered session object
+"""This represents the server side of a session object
+Split into a separate file to avoid overly manipulating the as-yet
+client-centered session object
+"""
+
 import collections
 import hashlib
 import hmac
 import os
-import pyghmi.ipmi.private.constants as constants
-import pyghmi.ipmi.private.session as ipmisession
 import socket
 import struct
 import uuid
+
+import pyghmi.ipmi.private.constants as constants
+import pyghmi.ipmi.private.session as ipmisession
 
 
 class ServerSession(ipmisession.Session):
