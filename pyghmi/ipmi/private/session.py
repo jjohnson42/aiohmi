@@ -493,6 +493,7 @@ class Session(object):
         else:
             self.privlevel = 4
             self.autopriv = True
+        self.logoutexpiry = None
         self.autokeepalive = keepalive
         self.maxtimeout = 3  # be aggressive about giving up on initial packet
         self.incommand = False
@@ -595,6 +596,7 @@ class Session(object):
         self.authtype = 0
         self.ipmiversion = 1.5
         self.timeout = initialtimeout + (0.5 * random.random())
+        self.logoutexpiry = _monotonic_time() + self._getmaxtimeout()
         self.seqlun = 0
         # NOTE(jbjohnso): per IPMI table 5-4, software ids in the ipmi spec may
         #                 be 0x81 through 0x8d.  We'll stick with 0x81 for now,
@@ -755,6 +757,9 @@ class Session(object):
                     timeout=None,
                     callback=None):
         if not self.logged:
+            if (self.logoutexpiry is not None and
+                    _monotonic_time() > self.logoutexpiry):
+                self._mark_broken()
             raise exc.IpmiException('Session no longer connected')
         self._cmdwait()
         if not self.logged:
@@ -1005,6 +1010,7 @@ class Session(object):
 
     def _req_priv_level(self):
         self.logged = 1
+        self.logoutexpiry = None
         response = self.raw_command(netfn=0x6, command=0x3b,
                                     data=[self.privlevel])
         if response['code']:
