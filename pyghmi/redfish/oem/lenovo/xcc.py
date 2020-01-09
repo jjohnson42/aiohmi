@@ -642,7 +642,6 @@ class OEMHandler(generic.OEMHandler):
                 errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
                 raise Exception(
                     'Unexpected result from PCI select: ' + errmsg)
-            self.set_property('/v2/ibmc/uefi/force-inventory', 1)
         else:
             self._refresh_token()
             rsp = self.wc.grab_json_response(
