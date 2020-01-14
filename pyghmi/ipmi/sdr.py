@@ -1,3 +1,4 @@
+# coding=utf8
 # Copyright 2014 IBM Corporation
 # Copyright 2015 Lenovo
 #
@@ -33,12 +34,10 @@ import os
 import random
 import string
 import struct
-import sys
 import weakref
 
 import pyghmi.constants as const
 import pyghmi.exceptions as exc
-import pyghmi.ipmi.command as ipmicmd
 import pyghmi.ipmi.private.constants as ipmiconst
 import six
 
@@ -813,18 +812,3 @@ class SDR(object):
         # This is where manufacturers can add their own
         # decode information
         return "".join(hex(x) for x in auxdata)
-
-
-if __name__ == "__main__":  # test code
-    password = os.environ['IPMIPASSWORD']
-    bmc = sys.argv[1]
-    user = sys.argv[2]
-    ipmicmd = ipmicmd.Command(bmc=bmc, userid=user, password=password)
-    sdr = SDR(ipmicmd)
-    for number in sdr.get_sensor_numbers():
-        rsp = ipmicmd.raw_command(command=0x2d, netfn=4, data=(number,))
-        if 'error' in rsp:
-            continue
-        reading = sdr.sensors[number].decode_sensor_reading(rsp['data'])
-        if reading is not None:
-            print(repr(reading))

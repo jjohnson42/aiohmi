@@ -1,3 +1,4 @@
+# coding=utf8
 # Copyright 2016-2019 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
