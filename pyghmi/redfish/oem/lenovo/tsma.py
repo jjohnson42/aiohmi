@@ -149,6 +149,19 @@ class TsmHandler(generic.OEMHandler):
             yield ('UEFI', biosres)
             gotinfo = True
             break
+        for lxpminf in fwinf:
+            if lxpminf.get('device', None) != 2:
+                continue
+            if not lxpminf.get('buildname', False):
+                break
+            lxpmres = {
+                'build': lxpminf['buildname']
+            }
+            if lxpminf.get('main', False):
+                subver = lxpminf.get('sub', 0)
+                lxpmres['version'] = '{0}.{1:02x}'.format(
+                    lxpminf['main'], subver)
+            yield ('LXPM', lxpmres)
         name = 'TSM'
         fwinf, status = wc.grab_json_response_with_status('/api/get-sysfwinfo')
         if status != 200:
@@ -207,8 +220,42 @@ class TsmHandler(generic.OEMHandler):
             return self.update_sys_firmware(filename, progress, wc)
         elif 'amd-sas' in filename and filename.endswith('.bin'):
             return self.update_sys_firmware(filename, progress, wc, type='bp')
+        elif 'lxpm' in filename and filename.endswith('.img'):
+            return self.update_lxpm_firmware(filename, progress, wc)
         else:
             raise Exception('Unsupported filename {0}'.format(filename))
+
+    def update_lxpm_firmware(self, filename, progress, wc):
+        hdrs = wc.stdheaders.copy()
+        hdrs['Content-Length'] = 0
+        rsp = wc.grab_json_response_with_status(
+            '/api/maintenance/LXPMUploadMode',
+            method='PUT', headers=hdrs)
+        # name fwimage filname filename application/x-raw-disk-image...
+        fu = webclient.FileUploader(
+            wc, '/api/maintenance/LXPMUpload',
+            filename, formname='fwimage')
+        fu.start()
+        while fu.isAlive():
+            fu.join(3)
+            if progress:
+                progress({
+                    'phase': 'upload',
+                    'progress': 100 * wc.get_upload_progress()})
+        if progress:
+            progress({
+                'phase': 'apply',
+                'progress': 0.0}
+            )
+        wc.grab_json_response('/api/maintenance/LXPMImageSplit', {'type': 3})
+        completion = False
+        while not completion:
+            rsp = wc.grab_json_response('/api/maintenance/LXPMstatus')
+            if rsp.get('state') == 0 and rsp.get('progress') == 4:
+                break
+        wc.grab_json_response_with_status(
+            '/api/maintenance/Outofflash', method='PUT', headers=hdrs)
+        return 'complete'
 
     def update_sys_firmware(self, filename, progress, wc, type='uefi'):
         if type == 'bp':
