@@ -92,6 +92,9 @@ class TsmHandler(generic.OEMHandler):
     def get_uefi_configuration(self, hideadvanced=True):
         return self.fishclient.get_system_configuration(hideadvanced)
 
+    def set_uefi_configuration(self, changeset):
+        return self.fishclient.set_system_configuration(changeset)
+
     def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
         wc = self.wc
         wc.grab_json_response('/api/mini_ffdc', {'action': 'trigger'})
