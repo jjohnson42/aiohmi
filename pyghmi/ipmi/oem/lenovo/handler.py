@@ -993,6 +993,8 @@ class OEMHandler(generic.OEMHandler):
     def set_system_configuration(self, changeset):
         if self.has_imm or self.has_xcc:
             return self.immhandler.set_system_configuration(changeset)
+        if self.has_tsma:
+            return self.tsmahandler.set_uefi_configuration(changeset)
         return super(OEMHandler, self).set_system_configuration(changeset)
 
     def clear_bmc_configuration(self):
