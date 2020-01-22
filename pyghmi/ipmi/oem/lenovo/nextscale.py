@@ -104,7 +104,7 @@ def fpc_get_nodeperm(ipmicmd, number, sz):
         rsp['data'] = b'\x00' + bytes(rsp['data'])
     elif len(rsp['data']) == 6:  # New FPC format
         rsp['data'] = rsp['data'][:2] + rsp['data'][3:]
-    perminfo = ord(rsp['data'][1])
+    perminfo = bytearray(rsp['data'])[1]
     if sz == 6:  # FPC
         permfail = ('\x02', '\x03')
     elif sz == 2:  # SMM
@@ -291,7 +291,7 @@ class SMMClient(object):
             settings[rule] = {'value': int(
                 accountinfo.find(self.rulemap[rule]).text)}
         rsp = self.ipmicmd.xraw_command(0x34, 3)
-        fanmode = self.fanmodes[ord(rsp['data'][0])]
+        fanmode = self.fanmodes[bytearray(rsp['data'])[0]]
         settings['fanspeed'] = {
             'value': fanmode, 'default': 'Normal',
             'help': ('Adjust the fan speed of the D2 Chassis. Capped settings '
