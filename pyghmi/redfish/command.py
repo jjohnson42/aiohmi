@@ -918,6 +918,9 @@ class Command(object):
                 defaultval, defaultval)
             if attr['Type'] == 'Integer' and defaultval:
                 defaultval = int(defaultval)
+            if attr['Type'] == 'Boolean':
+                vals = [{'ValueDisplayName': 'True'},
+                        {'ValueDisplayName': 'False'}]
             addon[attr['AttributeName']] = {
                 'default': defaultval,
                 'help': attr.get('HelpText', None),
