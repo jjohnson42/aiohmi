@@ -1007,6 +1007,8 @@ class OEMHandler(generic.OEMHandler):
     def clear_system_configuration(self):
         if self.has_xcc:
             return self.immhandler.clear_system_configuration()
+        if self.has_tsma:
+            return self.tsmahandler.clear_uefi_configuration()
         return super(OEMHandler, self).clear_system_configuration()
 
     def detach_remote_media(self):

@@ -89,6 +89,9 @@ class TsmHandler(generic.OEMHandler):
         self.tsm = webclient.thehost
         self._certverify = webclient._certverify
 
+    def clear_uefi_configuration(self):
+        return self.fishclient.clear_system_configuration()
+
     def get_uefi_configuration(self, hideadvanced=True):
         return self.fishclient.get_system_configuration(hideadvanced)
 
