@@ -181,11 +181,11 @@ class IMMClient(object):
             return None
         return cls._parse_builddate(propstr)
 
-    def get_system_configuration(self, hideadvanced=True):
+    def get_system_configuration(self, hideadvanced=True, fetchimm=False):
         if not self.fwc:
             self.fwc = config.LenovoFirmwareConfig(self.ipmicmd)
         try:
-            self.fwo = self.fwc.get_fw_options()
+            self.fwo = self.fwc.get_fw_options(fetchimm=fetchimm)
         except Exception:
             raise Exception(self.bmcname +
                             ' failed to retrieve UEFI configuration')
@@ -211,8 +211,9 @@ class IMMClient(object):
     def set_system_configuration(self, changeset):
         if not self.fwc:
             self.fwc = config.LenovoFirmwareConfig(self.ipmicmd)
+        fetchimm = False
         if not self.fwo or util._monotonic_time() - self.fwovintage > 30:
-            self.fwo = self.fwc.get_fw_options()
+            self.fwo = self.fwc.get_fw_options(fetchimm=fetchimm)
             self.fwovintage = util._monotonic_time()
         for key in list(changeset):
             if key not in self.fwo:
@@ -226,6 +227,23 @@ class IMMClient(object):
                         if fnmatch.fnmatch(calias.lower(), key.lower()):
                             changeset[rkey] = changeset[key]
                             found = True
+                if not found and not fetchimm:
+                    fetchimm = True
+                    self.fwo = self.fwc.get_fw_options(fetchimm=fetchimm)
+                    if key in self.fwo:
+                        continue
+                    else:
+                        found = False
+                        for rkey in self.fwo:
+                            if fnmatch.fnmatch(rkey.lower(), key.lower()):
+                                changeset[rkey] = changeset[key]
+                                found = True
+                            elif self.fwo[rkey].get('alias', None) != rkey:
+                                calias = self.fwo[rkey]['alias']
+                                if fnmatch.fnmatch(
+                                        calias.lower(), key.lower()):
+                                    changeset[rkey] = changeset[key]
+                                    found = True
                 if found:
                     del changeset[key]
                 else:
@@ -824,7 +842,7 @@ class XCCClient(IMMClient):
                 return {}
         return {'height': int(dsc['u-height']), 'slot': int(dsc['slot'])}
 
-    def get_bmc_configuration(self):
+    def get_bmc_configuration(self, extended):
         settings = {}
         passrules = self.wc.grab_json_response('/api/dataset/imm_users_global')
         passrules = passrules.get('items', [{}])[0]
@@ -858,6 +876,11 @@ class XCCClient(IMMClient):
             settings['smm']['value'] = 'Enable'
         else:
             settings['smm']['value'] = None
+        if extended:
+            immsettings = self.get_system_configuration(fetchimm=True)
+            for setting in immsettings:
+                if setting.startswith('IMM.'):
+                    settings[setting] = immsettings[setting]
         return settings
 
     rulemap = {

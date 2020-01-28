@@ -331,7 +331,16 @@ class OEMHandler(object):
         """
         return False
 
-    def get_bmc_configuration(self):
+    def get_bmc_configuration(self, extended):
+        """Get additional BMC parameters
+
+        This allows a bmc to return arbitrary key-value pairs.
+
+        :param extended: In the case of potentially redundant/slow
+                         attributes, this allows the caller to opt
+                        into retrieving unpopular options that may be
+                        redundant or confusing.
+        """
         return {}
 
     def set_bmc_configuration(self, changeset):

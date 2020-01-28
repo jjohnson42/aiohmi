@@ -247,12 +247,16 @@ class LenovoFirmwareConfig(object):
                 options[option]['new_value'] = options[option]['default']
         self.set_fw_options(options)
 
-    def get_fw_options(self):
+    def get_fw_options(self, fetchimm=True):
+        if fetchimm:
+            cfgfilename = "config.efi"
+        else:
+            cfgfilename = "config"
         options = {}
         data = None
         for _ in range(0, 30):
-            filehandle = self.imm_open("config.efi")
-            size = self.imm_size("config.efi")
+            filehandle = self.imm_open(cfgfilename)
+            size = self.imm_size(cfgfilename)
             data = self.imm_read(filehandle, size)
             self.imm_close(filehandle)
             data = EfiDecompressor.decompress(data)
