@@ -842,7 +842,14 @@ class XCCClient(IMMClient):
                 return {}
         return {'height': int(dsc['u-height']), 'slot': int(dsc['slot'])}
 
-    def get_bmc_configuration(self, extended):
+    def get_extended_bmc_configuration(self):
+        immsettings = self.get_system_configuration(fetchimm=True)
+        for setting in immsettings:
+            if not setting.startswith('IMM.'):
+                del immsettings[setting]
+        return immsettings
+
+    def get_bmc_configuration(self):
         settings = {}
         passrules = self.wc.grab_json_response('/api/dataset/imm_users_global')
         passrules = passrules.get('items', [{}])[0]
@@ -876,11 +883,6 @@ class XCCClient(IMMClient):
             settings['smm']['value'] = 'Enable'
         else:
             settings['smm']['value'] = None
-        if extended:
-            immsettings = self.get_system_configuration(fetchimm=True)
-            for setting in immsettings:
-                if setting.startswith('IMM.'):
-                    settings[setting] = immsettings[setting]
         return settings
 
     rulemap = {
