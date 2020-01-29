@@ -844,7 +844,7 @@ class XCCClient(IMMClient):
 
     def get_extended_bmc_configuration(self):
         immsettings = self.get_system_configuration(fetchimm=True)
-        for setting in immsettings:
+        for setting in list(immsettings):
             if not setting.startswith('IMM.'):
                 del immsettings[setting]
         return immsettings
