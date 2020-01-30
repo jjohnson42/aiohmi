@@ -301,17 +301,72 @@ class SMMClient(object):
                      'Boosted adds fanspeed to the Normal response to '
                      'provide more aggressive cooling.'),
             'possible': [self.fanmodes[x] for x in self.fanmodes]}
+        powercfg = self.ipmicmd.xraw_command(0x32, 0xa2)
+        powercfg = bytearray(powercfg['data'])
+        val = powercfg[0]
+        if val == 1:
+            val = 'N+1'
+        elif val == 0:
+            val = 'Disable'
+        settings['power_redundancy'] = {
+            'default': 'N+1',
+            'value': val,
+            'possible': ['N+1', 'Disable'],
+            'help': ('Configures allowed power budget according to expected '
+                     'redundancy. If N+1, power caps will be set to keep '
+                     'servers from using more power than the installed power '
+                     'supplies could supply if one fails.  If disabled, '
+                     'power budget is set to allow nodes to exceed the '
+                     'capacity of a single power supply')
+        }
+        ovs = powercfg[1]
+        if ovs == 1:
+            ovs = 'Enable'
+        elif ovs == 0:
+            ovs = 'Disable'
+        settings['power_oversubscription'] = {
+            'default': 'Enable',
+            'value': ovs,
+            'possible': ['Enable', 'Disable'],
+            'help': ('In redundant power configuration, permit the power '
+                     'budget to exceed the capacity of a single power supply '
+                     'so long as both power supplies are functioning. This '
+                     'excess is limited to an amount that the remaining power '
+                     'supply can sustain for a brief period of time in the '
+                     'event of losing the other. This excess will be removed '
+                     'at the moment a power supply fails so that power '
+                     'delivery is at the sustained capacity of the remaining '
+                     'supplies.')
+        }
         return settings
 
     def set_bmc_configuration(self, changeset):
         rules = []
+        powercfg = [None, None]
         for key in changeset:
+            if not key:
+                raise pygexc.InvalidParameterValue('Empty key is invalid')
             if isinstance(changeset[key], six.string_types):
                 changeset[key] = {'value': changeset[key]}
             if key.lower() in self.rulemap:
                 rules.append('{0}:{1}'.format(
                     self.rulemap[key.lower()], changeset[key]['value']))
-            if key.lower() == 'fanspeed':
+            if key.lower() == 'power_redundancy':
+                if 'n+1'.startswith(changeset[key]['value'].lower()):
+                    powercfg[0] = 1
+                elif 'disable'.startswith(changeset[key]['value'].lower()):
+                    powercfg[0] = 0
+            elif key.lower().startswith('power_oversubscription'):
+                ovs = changeset[key]['value']
+                if 'enable'.startswith(ovs.lower()):
+                    powercfg[1] = 1
+                elif 'disable'.startswith(ovs.lower()):
+                    powercfg[1] = 0
+                else:
+                    raise pygexc.InvalidParameterValue(
+                        '{0} is an invalid setting for '
+                        'power_oversubscription'.format(ovs))
+            elif key.lower() == 'fanspeed':
                 for mode in self.fanmodes:
                     byteval = mode
                     mode = self.fanmodes[mode]
@@ -327,6 +382,15 @@ class SMMClient(object):
             rules = 'set={0}'.format(','.join(rules))
             self.wc.request('POST', '/data', rules)
             self.wc.getresponse().read()
+        if powercfg != [None, None]:
+            if None in powercfg:
+                currcfg = self.ipmicmd.xraw_command(0x32, 0xa2)
+                currcfg = bytearray(currcfg['data'])
+                if powercfg[0] is None:
+                    powercfg[0] = currcfg[0]
+                if powercfg[1] is None:
+                    powercfg[1] = currcfg[1]
+            self.ipmicmd.xraw_command(0x32, 0xa3, data=powercfg)
 
     def set_user_priv(self, uid, priv):
         if priv.lower() == 'administrator':
