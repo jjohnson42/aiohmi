@@ -16,6 +16,7 @@
 """This represents the low layer message framing portion of IPMI"""
 
 from itertools import chain
+import os
 import socket
 import struct
 import threading
@@ -454,6 +455,10 @@ class Command(object):
         return rsp
 
     def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
+        if os.path.exists(savefile) and not os.path.isdir(savefile):
+            raise exc.InvalidParameterValue(
+                'Not allowed to overwrite existing file: {0}'.format(
+                    savefile))
         self.oem_init()
         return self._oem.get_diagnostic_data(savefile, progress, autosuffix)
 
@@ -2034,6 +2039,10 @@ class Command(object):
         return self._oem.delete_license(name)
 
     def save_licenses(self, directory):
+        if os.path.exists(directory) and not os.path.isdir(directory):
+            raise exc.InvalidParameterValue(
+                'Not allowed to overwrite existing file: {0}'.format(
+                    directory))
         self.oem_init()
         return self._oem.save_licenses(directory)
 
