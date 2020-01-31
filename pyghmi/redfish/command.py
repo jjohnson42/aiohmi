@@ -1679,6 +1679,10 @@ class Command(object):
         return self.oem.update_firmware(file, data, progress, bank)
 
     def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
+        if os.path.exists(savefile) and not os.path.isdir(savefile):
+            raise exc.InvalidParameterValue(
+                'Not allowed to overwrite existing file: {0}'.format(
+                    savefile))
         return self.oem.get_diagnostic_data(savefile, progress, autosuffix)
 
     def get_licenses(self):
@@ -1688,6 +1692,10 @@ class Command(object):
         return self.oem.delete_license(name)
 
     def save_licenses(self, directory):
+        if os.path.exists(directory) and not os.path.isdir(directory):
+            raise exc.InvalidParameterValue(
+                'Not allowed to overwrite existing file: {0}'.format(
+                    directory))
         return self.oem.save_licenses(directory)
 
     def apply_license(self, filename, progress=None):
