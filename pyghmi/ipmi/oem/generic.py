@@ -340,7 +340,7 @@ class OEMHandler(object):
         """
         return {}
 
-    def get_bmc_configuration(self, extended):
+    def get_bmc_configuration(self):
         """Get additional BMC parameters
 
         This allows a bmc to return arbitrary key-value pairs.
