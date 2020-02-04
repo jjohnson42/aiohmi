@@ -48,8 +48,14 @@ class OEMHandler(object):
         return []
 
     def set_credentials(self, username, password):
-        self.username = username
-        self.password = password
+        try:
+            self.username = username.decode('utf-8')
+        except AttributeError:
+            self.username = username
+        try:
+            self.password = password.decode('utf-8')
+        except AttributeError:
+            self.password = password
 
     def list_media(self, fishclient):
         bmcinfo = fishclient._do_web_request(fishclient._bmcurl)
