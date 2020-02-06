@@ -393,6 +393,13 @@ class SDREntry(object):
         self.percent = ''
         if entry[15] & 1 == 1:
             self.percent = '% '
+        if self.sensor_type_number == 0xb:
+            if self.unit_mod == '':
+                if entry[16] == 6:
+                    self.sensor_type = 'Power'
+            elif self.unit_mod == ' ':
+                if entry[16] == 6 and entry[17] in (22, 23, 24):
+                    self.sensor_type = 'Energy'
         self.baseunit = unit_types[entry[16]]
         self.modunit = unit_types[entry[17]]
         self.unit_suffix = self.percent + self.baseunit + self.unit_mod + \
