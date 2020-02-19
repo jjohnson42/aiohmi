@@ -71,15 +71,15 @@ class Session(object):
 
         :param: devnode: The path to the ipmi device
         """
-        self.ipmidev = open(devnode, 'rw')
+        self.ipmidev = open(devnode, 'r+')
         fcntl.ioctl(self.ipmidev, IPMICTL_SET_MY_ADDRESS_CMD, BMC_SLAVE_ADDR)
         # the interface is initted, create some reusable memory for our session
-        self.datactypes.buffer = ctypes.create_string_ctypes.buffer(4096)
+        self.databuffer = ctypes.create_string_buffer(4096)
         self.req = IpmiReq()
         self.rsp = IpmiRecv()
         self.addr = IpmiSystemInterfaceAddr()
         self.req.msg.data = ctypes.cast(
-            ctypes.addressof(self.datactypes.buffer),
+            ctypes.addressof(self.databuffer),
             ctypes.POINTER(ctypes.c_ubyte))
         self.rsp.msg.data = self.req.msg.data
         self.userid = None
@@ -93,9 +93,9 @@ class Session(object):
     @property
     def parsed_rsp(self):
         response = {'netfn': self.rsp.msg.netfn, 'command': self.rsp.msg.cmd,
-                    'code': ord(self.datactypes.buffer.raw[0]),
+                    'code': bytearray(self.databuffer.raw)[0],
                     'data': list(bytearray(
-                        self.datactypes.buffer.raw[1:self.rsp.msg.data_len]))}
+                        self.databuffer.raw[1:self.rsp.msg.data_len]))}
         errorstr = iutil.get_ipmi_error(response)
         if errorstr:
             response['error'] = errorstr
@@ -116,8 +116,8 @@ class Session(object):
         self.req.addr = ctypes.pointer(self.addr)
         self.req.msg.netfn = netfn
         self.req.msg.cmd = command
-        data = ctypes.buffer(bytearray(data))
-        self.datactypes.buffer[:len(data)] = data[:len(data)]
+        data = memoryview(bytearray(data))
+        self.databuffer[:len(data)] = data[:len(data)]
         self.req.msg.data_len = len(data)
         fcntl.ioctl(self.ipmidev, IPMICTL_SEND_COMMAND, self.req)
         self.await_reply()
