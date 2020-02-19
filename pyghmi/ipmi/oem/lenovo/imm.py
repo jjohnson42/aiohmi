@@ -756,6 +756,8 @@ class IMMClient(object):
         if not components or set(('imm', 'xcc', 'bmc', 'core')) & components:
             rsp = self.ipmicmd.xraw_command(netfn=0x3a, command=0x50)
             immverdata = self.parse_imm_buildinfo(rsp['data'])
+            bmcmajor, bmcminor = [int(x) for x in bmcver.split('.')]
+            bmcver = '{0}.{1:02d}'.format(bmcmajor, bmcminor)
             bdata = {
                 'version': bmcver, 'build': immverdata[0],
                 'date': immverdata[1]}
@@ -1440,6 +1442,8 @@ class XCCClient(IMMClient):
                 set(('core', 'imm', 'bmc', 'xcc')) & components):
             rsp = self.ipmicmd.xraw_command(netfn=0x3a, command=0x50)
             immverdata = self.parse_imm_buildinfo(rsp['data'])
+            bmcmajor, bmcminor = [int(x) for x in bmcver.split('.')]
+            bmcver = '{0}.{1:02d}'.format(bmcmajor, bmcminor)
             bdata = {'version': bmcver,
                      'build': immverdata[0],
                      'date': immverdata[1]}
