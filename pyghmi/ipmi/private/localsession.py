@@ -15,6 +15,7 @@
 import ctypes
 import fcntl
 from select import select
+import time
 
 import pyghmi.ipmi.private.util as iutil
 
@@ -89,6 +90,9 @@ class Session(object):
         rd, _, _ = select((self.ipmidev,), (), (), 1)
         while not rd:
             rd, _, _ = select((self.ipmidev,), (), (), 1)
+
+    def pause(self, seconds):
+        time.sleep(seconds)
 
     @property
     def parsed_rsp(self):
