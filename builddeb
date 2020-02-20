@@ -6,11 +6,9 @@ cd /tmp/pyghmi
 export PYEXEC=python3
 export DSCARGS="--with-python2=True --with-python3=True"
 if grep wheezy /etc/os-release; then
-    # wheezy is difficult on pyca, use cryptodomex for that platform
-    patch -p1 < wheezy.patch
     # also it's old, use python2 instead of python3
     export PYEXEC=python
-    export DSCARGS="--with-python2=True --with-python3=False"
+    export DSCARGS=""
 fi
 # If not PBR, use the setup.py.tmpl
 $PYEXEC -c 'import pbr' || ./makesetup
