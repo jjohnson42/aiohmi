@@ -125,7 +125,7 @@ class IMMClient(object):
         self.imm = ipmicmd.bmc
         self.adp_referer = 'https://{0}/designs/imm/index-console.php'.format(
             self.imm)
-        if self.password:
+        if ipmicmd.ipmi_session.password:
             self.username = ipmicmd.ipmi_session.userid.decode('utf-8')
             self.password = ipmicmd.ipmi_session.password.decode('utf-8')
         self._wc = None  # The webclient shall be initiated on demand
