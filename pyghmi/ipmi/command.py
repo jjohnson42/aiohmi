@@ -495,8 +495,6 @@ class Command(object):
                                             bridge_request=bridge_request,
                                             data=data, delay_xmit=delay_xmit,
                                             retry=retry, timeout=timeout)
-        if 'data' in rsp:
-            rsp['data'] = list(rsp['data'])
         return rsp
 
     def get_power(self):

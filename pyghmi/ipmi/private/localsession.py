@@ -98,8 +98,8 @@ class Session(object):
     def parsed_rsp(self):
         response = {'netfn': self.rsp.msg.netfn, 'command': self.rsp.msg.cmd,
                     'code': bytearray(self.databuffer.raw)[0],
-                    'data': list(bytearray(
-                        self.databuffer.raw[1:self.rsp.msg.data_len]))}
+                    'data': bytearray(
+                        self.databuffer.raw[1:self.rsp.msg.data_len])}
         errorstr = iutil.get_ipmi_error(response)
         if errorstr:
             response['error'] = errorstr
