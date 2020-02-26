@@ -652,7 +652,8 @@ class Session(object):
         if self._lookup_request_entry(entry):
             self.request_entry.remove(entry)
 
-    def _make_ipmi_payload(self, netfn, command, bridge_request=None, data=()):
+    def _make_ipmi_payload(self, netfn, command, bridge_request=None, data=(),
+                           lun=0):
         """This function generates the core ipmi payload that would be
 
         applicable for any channel (including KCS)
@@ -690,7 +691,7 @@ class Session(object):
         # figure 13-4, first two bytes are rsaddr and
         # netfn, for non-bridge request, rsaddr is always 0x20 since we are
         # addressing BMC while rsaddr is specified forbridge request
-        header = bytearray((rsaddr, netfn << 2))
+        header = bytearray((rsaddr, (netfn << 2) | lun))
 
         reqbody = bytearray((rqaddr, self.seqlun, command)) + data
         headsum = bytearray((_checksum(*header),))
@@ -755,7 +756,8 @@ class Session(object):
                     retry=True,
                     delay_xmit=None,
                     timeout=None,
-                    callback=None):
+                    callback=None,
+                    lun=0):
         if not self.logged:
             if (self.logoutexpiry is not None and
                     _monotonic_time() > self.logoutexpiry):
@@ -773,7 +775,7 @@ class Session(object):
         self._send_ipmi_net_payload(netfn, command, data,
                                     bridge_request=bridge_request,
                                     retry=retry, delay_xmit=delay_xmit,
-                                    timeout=timeout)
+                                    timeout=timeout, lun=lun)
 
         if retry:  # in retry case, let the retry timers indicate wait time
             timeout = None
@@ -799,7 +801,8 @@ class Session(object):
 
     def _send_ipmi_net_payload(self, netfn=None, command=None, data=(), code=0,
                                bridge_request=None,
-                               retry=None, delay_xmit=None, timeout=None):
+                               retry=None, delay_xmit=None, timeout=None,
+                               lun=0):
         if retry is None:
             retry = not self.servermode
         if self.servermode:
@@ -811,7 +814,7 @@ class Session(object):
         else:
             data = bytearray(data)
         ipmipayload = self._make_ipmi_payload(netfn, command, bridge_request,
-                                              data)
+                                              data, lun)
         payload_type = constants.payload_types['ipmi']
         self.send_payload(payload=ipmipayload, payload_type=payload_type,
                           retry=retry, delay_xmit=delay_xmit, timeout=timeout)
