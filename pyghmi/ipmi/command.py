@@ -84,6 +84,11 @@ power_states = {
 }
 
 
+def select_simplesession():
+    global session
+    import pyghmi.ipmi.private.simplesession as session
+
+
 def _mask_to_cidr(mask):
     maskn = struct.unpack_from('>I', mask)[0]
     cidr = 32
