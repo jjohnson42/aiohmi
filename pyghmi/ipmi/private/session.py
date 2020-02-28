@@ -693,7 +693,6 @@ class Session(object):
         # netfn, for non-bridge request, rsaddr is always 0x20 since we are
         # addressing BMC while rsaddr is specified forbridge request
         header = bytearray((rsaddr, (netfn << 2) | lun))
-
         reqbody = bytearray((rqaddr, self.seqlun, command)) + data
         headsum = bytearray((_checksum(*header),))
         bodysum = bytearray((_checksum(*reqbody),))
@@ -1626,7 +1625,7 @@ class Session(object):
             self.clientcommand = payload[5]
             self._parse_payload(payload)
             return
-        entry = (payload[1] >> 2, payload[4], payload[5])
+        entry = (payload[1] >> 2, payload[4] & 0xfc, payload[5])
         if self._lookup_request_entry(entry):
             self._remove_request_entry(entry)
 
