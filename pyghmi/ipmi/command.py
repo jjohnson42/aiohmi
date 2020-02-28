@@ -962,7 +962,10 @@ class Command(object):
         """
         self.init_sdr()
         for sensor in self._sdr.get_sensor_numbers():
-            rsp = self.raw_command(command=0x2d, netfn=4, data=(sensor,))
+            currsensor = self._sdr.sensors[sensor]
+            rsp = self.raw_command(command=0x2d, netfn=4,
+                                   lun=currsensor.sensor_lun,
+                                   data=(currsensor.sensor_number,))
             if 'error' in rsp:
                 if rsp['code'] == 203:  # Sensor does not exist, optional dev
                     continue

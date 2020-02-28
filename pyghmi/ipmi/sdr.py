@@ -804,7 +804,7 @@ class SDR(object):
     def add_sdr(self, sdrbytes):
         newent = SDREntry(sdrbytes, self.ipmicmd)
         if newent.sdrtype == TYPE_SENSOR:
-            id = newent.sensor_number
+            id = '{0}.{1}'.format(newent.sensor_number, newent.sensor_lun)
             if id in self.sensors:
                 self.broken_sensor_ids[id] = True
                 return
