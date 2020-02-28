@@ -644,9 +644,9 @@ class SDR(object):
         self.fw_major = rsp['data'][2] & 0b1111111
         self.fw_minor = "%02X" % rsp['data'][3]  # BCD encoding, oddly enough
         self.ipmiversion = rsp['data'][4]  # 51h = 1.5, 02h = 2.0
-        self.mfg_id = rsp['data'][8] << 16 + rsp['data'][7] << 8 + \
+        self.mfg_id = (rsp['data'][8] << 16) + (rsp['data'][7] << 8) + \
             rsp['data'][6]
-        self.prod_id = rsp['data'][10] << 8 + rsp['data'][9]
+        self.prod_id = (rsp['data'][10] << 8) + rsp['data'][9]
         if len(rsp['data']) > 11:
             self.aux_fw = self.decode_aux(rsp['data'][11:15])
         if rsp['data'][1] & 0b10000000 and rsp['data'][5] & 0b10 == 0:
