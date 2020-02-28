@@ -391,6 +391,7 @@ class Session(object):
             iothreadwaiters.append(initevt)
             _IOWorker = define_worker()
             iothread = _IOWorker()
+            iothread.daemon = True
             iothread.start()
             initevt.wait()
         elif not iothreadready:
