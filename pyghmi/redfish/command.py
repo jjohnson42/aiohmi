@@ -235,9 +235,9 @@ class AttrDependencyHandler(object):
 class Command(object):
 
     def __init__(self, bmc, userid, password, verifycallback, sysurl=None,
-                 bmcurl=None, chassisurl=None, pool=None):
+                 bmcurl=None, chassisurl=None, pool=None, port=443):
         self.wc = webclient.SecureHTTPConnection(
-            bmc, 443, verifycallback=verifycallback)
+            bmc, port, verifycallback=verifycallback)
         self._hwnamemap = {}
         self._fwnamemap = {}
         self._urlcache = {}
