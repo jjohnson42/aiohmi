@@ -349,7 +349,7 @@ class SDREntry(object):
         # event only, compact and full are very similar
         # this function handles the common aspects of compact and full
         # offsets from spec, minus 6
-        self.sensor_lun = entry[1]
+        self.sensor_lun = entry[1] & 0x03
         self.sensor_number = entry[2]
         self.entity = ipmiconst.entity_ids.get(
             entry[3], 'Unknown entity {0}'.format(entry[3]))
