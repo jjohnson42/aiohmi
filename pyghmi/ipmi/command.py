@@ -430,7 +430,7 @@ class Command(object):
         return {'bootdev': bootdev}
 
     def xraw_command(self, netfn, command, bridge_request=(), data=(),
-                     delay_xmit=None, retry=True, timeout=None, lun=0):
+                     delay_xmit=None, retry=True, timeout=None, rslun=0):
         """Send raw ipmi command to BMC, raising exception on error
 
         This is identical to raw_command, except it raises exceptions
@@ -454,7 +454,7 @@ class Command(object):
                                             bridge_request=bridge_request,
                                             data=data, delay_xmit=delay_xmit,
                                             retry=retry, timeout=timeout,
-                                            lun=lun)
+                                            rslun=rslun)
         if 'error' in rsp:
             raise exc.IpmiException(rsp['error'], rsp['code'])
         rsp['data'] = buffer(rsp['data'])
@@ -479,7 +479,7 @@ class Command(object):
         return self._oem.get_description()
 
     def raw_command(self, netfn, command, bridge_request=(), data=(),
-                    delay_xmit=None, retry=True, timeout=None, lun=0):
+                    delay_xmit=None, retry=True, timeout=None, rslun=0):
         """Send raw ipmi command to BMC
 
         This allows arbitrary IPMI bytes to be issued.  This is commonly used
@@ -501,7 +501,7 @@ class Command(object):
                                             bridge_request=bridge_request,
                                             data=data, delay_xmit=delay_xmit,
                                             retry=retry, timeout=timeout,
-                                            lun=lun)
+                                            rslun=rslun)
         return rsp
 
     def get_power(self):
@@ -749,7 +749,7 @@ class Command(object):
             if self._sdr.sensors[sensor].name == sensorname:
                 currsensor = self._sdr.sensors[sensor]
                 rsp = self.raw_command(command=0x2d, netfn=4,
-                                       lun=currsensor.sensor_lun,
+                                       rslun=currsensor.sensor_lun,
                                        data=(currsensor.sensor_number,))
                 if 'error' in rsp:
                     raise exc.IpmiException(rsp['error'], rsp['code'])
@@ -964,7 +964,7 @@ class Command(object):
         for sensor in self._sdr.get_sensor_numbers():
             currsensor = self._sdr.sensors[sensor]
             rsp = self.raw_command(command=0x2d, netfn=4,
-                                   lun=currsensor.sensor_lun,
+                                   rslun=currsensor.sensor_lun,
                                    data=(currsensor.sensor_number,))
             if 'error' in rsp:
                 if rsp['code'] == 203:  # Sensor does not exist, optional dev

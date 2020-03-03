@@ -113,10 +113,10 @@ class Session(object):
                     retry=True,
                     delay_xmit=None,
                     timeout=None,
-                    waitall=False, lun=0):
+                    waitall=False, rslun=0):
         self.addr.channel = CURRCHAN
         self.addr.addr_type = ADDRTYPE
-        self.addr.lun = lun
+        self.addr.lun = rslun
         self.req.addr_len = ctypes.sizeof(IpmiSystemInterfaceAddr)
         self.req.addr = ctypes.pointer(self.addr)
         self.req.msg.netfn = netfn

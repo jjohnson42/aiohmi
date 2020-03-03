@@ -296,6 +296,7 @@ class Session(object):
         self.ipmiversion = 1.5
         self.timeout = initialtimeout + (0.5 * random.random())
         self.logoutexpiry = _monotonic_time() + self._getmaxtimeout()
+        self.rqlun = 0
         self.seqlun = 0
         # NOTE(jbjohnso): per IPMI table 5-4, software ids in the ipmi spec may
         #                 be 0x81 through 0x8d.  We'll stick with 0x81 for now,
@@ -328,8 +329,8 @@ class Session(object):
                           constants.netfn_codes['application'] << 2))
         check_sum = _checksum(*head)
         # NOTE(fengqian): according IPMI Figure 14-11, rqSWID is set to 81h
-        boday = bytearray((0x81, self.seqlun, constants.IPMI_SEND_MESSAGE_CMD,
-                           0x40 | channel))
+        boday = bytearray((0x81, (self.seqlun << 2) | self.rqlun,
+                           constants.IPMI_SEND_MESSAGE_CMD, 0x40 | channel))
         # NOTE(fengqian): Track request
         self._add_request_entry((constants.netfn_codes['application'] + 1,
                                  self.seqlun, constants.IPMI_SEND_MESSAGE_CMD))
@@ -352,7 +353,7 @@ class Session(object):
             self.request_entry.remove(entry)
 
     def _make_ipmi_payload(self, netfn, command, bridge_request=None, data=(),
-                           lun=0):
+                           rslun=0):
         """This function generates the core ipmi payload that would be
 
         applicable for any channel (including KCS)
@@ -370,8 +371,8 @@ class Session(object):
                self.tabooseq[(netfn, command, self.seqlun)] and seqincrement):
             self.tabooseq[(self.expectednetfn, command, self.seqlun)] -= 1
             # Allow taboo to eventually expire after a few rounds
-            self.seqlun += 4  # the last two bits are lun, so add 4 to add 1
-            self.seqlun &= 0xff  # we only have one byte, wrap when exceeded
+            self.seqlun += 1  # the last two bits are lun, so add 4 to add 1
+            self.seqlun &= 0x3f  # we only have one byte, wrap when exceeded
             seqincrement -= 1
 
         if bridge_request:
@@ -390,9 +391,10 @@ class Session(object):
         # figure 13-4, first two bytes are rsaddr and
         # netfn, for non-bridge request, rsaddr is always 0x20 since we are
         # addressing BMC while rsaddr is specified forbridge request
-        header = bytearray((rsaddr, (netfn << 2) | lun))
+        header = bytearray((rsaddr, (netfn << 2) | rslun))
 
-        reqbody = bytearray((rqaddr, self.seqlun, command)) + data
+        reqbody = bytearray((
+            rqaddr, (self.seqlun << 2) | self.rqlun, command)) + data
         headsum = bytearray((_checksum(*header),))
         bodysum = bytearray((_checksum(*reqbody),))
         payload = header + headsum + reqbody + bodysum
@@ -451,7 +453,7 @@ class Session(object):
                     delay_xmit=None,
                     timeout=None,
                     callback=None,
-                    lun=0):
+                    rslun=0):
         if not self.logged:
             if (self.logoutexpiry is not None and
                     _monotonic_time() > self.logoutexpiry):
@@ -469,7 +471,7 @@ class Session(object):
         self._send_ipmi_net_payload(netfn, command, data,
                                     bridge_request=bridge_request,
                                     retry=retry, delay_xmit=delay_xmit,
-                                    timeout=timeout, lun=lun)
+                                    timeout=timeout, rslun=rslun)
 
         if retry:  # in retry case, let the retry timers indicate wait time
             timeout = None
@@ -496,7 +498,7 @@ class Session(object):
     def _send_ipmi_net_payload(self, netfn=None, command=None, data=(), code=0,
                                bridge_request=None,
                                retry=None, delay_xmit=None, timeout=None,
-                               lun=0):
+                               rslun=0):
         if retry is None:
             retry = not self.servermode
         if self.servermode:
@@ -508,7 +510,7 @@ class Session(object):
         else:
             data = bytearray(data)
         ipmipayload = self._make_ipmi_payload(netfn, command, bridge_request,
-                                              data, lun)
+                                              data, rslun)
         payload_type = constants.payload_types['ipmi']
         self.send_payload(payload=ipmipayload, payload_type=payload_type,
                           retry=retry, delay_xmit=delay_xmit, timeout=timeout)
@@ -632,7 +634,7 @@ class Session(object):
             raise exc.IpmiException("Password is too long for ipmi 1.5")
         password += '\x00' * padneeded
         if checkremotecode:
-            seqbytes = struct.pack("<I", self.remsequencenumber)
+            seqbytes = struct.pack("<I", self.remseqnumber)
         else:
             seqbytes = struct.pack("<I", self.sequencenumber)
         sessdata = struct.pack("<I", self.sessionid)
@@ -916,12 +918,12 @@ class Session(object):
             # things off ignore the second reply since we have one
             # satisfactory answer
         if data[4] in (0, 2):  # This is an ipmi 1.5 paylod
-            remsequencenumber = struct.unpack('<I', bytes(data[5:9]))[0]
+            remseqnumber = struct.unpack('<I', bytes(data[5:9]))[0]
             remsessid = struct.unpack("<I", bytes(data[9:13]))[0]
-            if (hasattr(self, 'remsequencenumber') and
-                    remsequencenumber < self.remsequencenumber):
+            if (hasattr(self, 'remseqnumber') and
+                    remseqnumber < self.remseqnumber):
                 return -5  # remote sequence number is too low, reject it
-            self.remsequencenumber = remsequencenumber
+            self.remseqnumber = remseqnumber
             if data[4] != self.authtype:
                 # BMC responded with mismatch authtype, for
                 # mutual authentication reject it. If this causes
@@ -1215,7 +1217,7 @@ class Session(object):
             # since we can't do anything remotely sane with such a packet,
             # drop it and carry about our business.
             return
-        entry = (payload[1] >> 2, payload[4], payload[5])
+        entry = (payload[1] >> 2, payload[4] >> 2, payload[5])
         if self._lookup_request_entry(entry):
             self._remove_request_entry(entry)
 
@@ -1251,8 +1253,8 @@ class Session(object):
         self.expectednetfn = 0x1ff
         self.expectedcmd = 0x1ff
         if not self.servermode:
-            self.seqlun += 4  # prepare seqlun for next transmit
-            self.seqlun &= 0xff  # when overflowing, wrap around
+            self.seqlun += 1  # prepare seqlun for next transmit
+            self.seqlun &= 0x3f  # when overflowing, wrap around
         # render retry mechanism utterly incapable of
         # doing anything, though it shouldn't matter
         self.lastpayload = None
