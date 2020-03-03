@@ -228,6 +228,8 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         if rsp.getheader('Content-Encoding', None) == 'gzip':
             body = gzip.GzipFile(fileobj=io.BytesIO(body)).read()
         if rsp.status >= 200 and rsp.status < 300:
+            if body and not isinstance(body, str):
+                body = body.decode('utf8')
             return json.loads(body) if body else {}, rsp.status
         return body, rsp.status
 
