@@ -1626,6 +1626,7 @@ class Session(object):
             self.seqlun = payload[4] >> 2
             self.clientaddr = payload[3]
             self.clientnetfn = (payload[1] >> 2) + 1
+            self.rqlun = payload[4] & 0b11
             self.clientcommand = payload[5]
             self._parse_payload(payload)
             return

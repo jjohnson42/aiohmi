@@ -72,6 +72,7 @@ class ServerSession(ipmisession.Session):
         self.sessionid = 0
         self.bmc = bmc
         self.lastpayload = None
+        self.rqlun = None  # This will be provided by the client
         self.broken = False
         self.authtype = 6
         self.integrityalgo = 0
