@@ -798,7 +798,7 @@ class IMMClient(object):
             try:
                 fpga = self.ipmicmd.xraw_command(netfn=0x3a, command=0x6b,
                                                  data=(0,))
-                fpga = '{0}.{1}.{2}'.format(*[ord(x) for x in fpga['data']])
+                fpga = '{0}.{1}.{2}'.format(*bytearray(fpga['data']))
                 yield ('FPGA', {'version': fpga})
             except pygexc.IpmiException as ie:
                 if ie.ipmicode != 193:
