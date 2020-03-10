@@ -521,11 +521,11 @@ class LenovoFirmwareConfig(object):
                 if is_list:
                     count += 1
                     instance = etree.Element(
-                        'instance', ID=options[option]['lenovo_instance'],
+                        'instance', ID=str(options[option]['lenovo_instance']),
                         order=str(count))
                 else:
                     instance = etree.Element(
-                        'instance', ID=options[option]['lenovo_instance'])
+                        'instance', ID=str(options[option]['lenovo_instance']))
                 choice.append(instance)
 
         if not changes:
