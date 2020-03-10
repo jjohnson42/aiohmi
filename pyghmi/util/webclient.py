@@ -247,8 +247,10 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         rsp = webclient.getresponse()
         self._currdl = rsp
         self._dlfile = file
-        for chunk in iter(lambda: rsp.read(16384), ''):
+        chunk = rsp.read(16384)
+        while chunk:
             file.write(chunk)
+            chunk = rsp.read(16384)
         self._currdl = None
         file.close()
 
