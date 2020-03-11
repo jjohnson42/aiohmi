@@ -74,10 +74,14 @@ class FileDownloader(threading.Thread):
         self.wc = webclient
         self.url = url
         self.savefile = savefile
+        self.exc = None
         super(FileDownloader, self).__init__()
 
     def run(self):
-        self.wc.download(self.url, self.savefile)
+        try:
+            self.wc.download(self.url, self.savefile)
+        except Exception as e:
+            self.exc = e
 
 
 def get_upload_form(filename, data, formname, otherfields):

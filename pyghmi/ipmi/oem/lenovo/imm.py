@@ -1018,6 +1018,8 @@ class XCCClient(IMMClient):
                 progress({'phase': 'download',
                           'progress': 100 * self.wc.get_download_progress()})
             self._refresh_token()
+        if fd.exc:
+            raise fd.exc
         if progress:
             progress({'phase': 'complete'})
         return savefile
