@@ -298,6 +298,27 @@ class IpmiServer(object):
             pkt = self.pktqueue.popleft()
             self.sessionless_data(pkt[0], pkt[1])
 
+    def send_cipher_suites(self, myaddr, mylun, clientaddr, clientlun,
+                           clientseq, data, sockaddr):
+        # the last two bytes is length of message, fixed at 14 for now
+        # the rest is boilerplate ipmi, follow along in ipmi spec
+        # 'example ipmi over lan' if desired
+        header = bytearray(
+            b'\x06\x00\xff\x07\x06\x00\x00\x00\x00'
+            b'\x00\x00\x00\x00\x00\x0e\x00')
+        # now the generic inner ipmi packet, per figure-13-4,
+        # ipmi lan message formats
+        ipmihdr = bytearray([clientaddr, clientlun | (7 << 2)])
+        hdrsum = ipmisession._checksum(*ipmihdr)
+        ipmihdr.append(hdrsum)
+        rq = bytearray([myaddr, mylun | clientseq << 2, 0x54])
+        # for now, hard code a cipher suite 3 only response
+        rq.extend(bytearray(b'\x00\x01\xc0\x03\x01\x41\x81'))
+        hdrsum = ipmisession._checksum(*rq)
+        rq.append(hdrsum)
+        pkt = header + ipmihdr + rq
+        ipmisession._io_sendto(self.serversocket, pkt, sockaddr)
+
     def sessionless_data(self, data, sockaddr):
         """Examines unsolocited packet and decides appropriate action.
 
@@ -343,6 +364,12 @@ class IpmiServer(object):
                 level &= 0b1111
                 self.send_auth_cap(myaddr, mylun, clientaddr, clientlun,
                                    clientseq, sockaddr)
+            elif data[19] == 0x54:
+                clientaddr, clientlun = data[17:19]
+                clientseq = clientlun >> 2
+                clientlun &= 0b11
+                self.send_cipher_suites(myaddr, mylun, clientaddr, clientlun,
+                                        clientseq, data, sockaddr)
 
     def set_kg(self, kg):
         """Sets the Kg for the BMC to use
