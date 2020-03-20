@@ -372,6 +372,10 @@ class IMMClient(object):
     def wc(self):
         if (not self._wc or (self._wc.vintage and
                              self._wc.vintage < util._monotonic_time() - 30)):
+            if not self.updating and self._wc:
+                # in case the existing session is still valid
+                # dispose of the session
+                self.weblogout()
             self._wc = self.get_webclient()
         return self._wc
 
