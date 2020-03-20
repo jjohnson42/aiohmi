@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import fnmatch
 import struct
 import weakref
 from xml.etree.ElementTree import fromstring
@@ -33,6 +34,20 @@ try:
     range = xrange
 except NameError:
     pass
+
+
+def stringtoboolean(originput, name):
+    input = originput.lower()
+    try:
+        num = int(input)
+    except ValueError:
+        num = None
+    if 'enabled'.startswith(input) or 'yes'.startswith(input) or num == 1:
+        return True
+    elif 'disabled'.startswith(input) or 'no'.startswith(input) or num == 0:
+        return False
+    raise pygexc.InvalidParameterValue('{0} is an invalid setting for '
+                                       '{1}'.format(originput, name))
 
 
 def fpc_read_ac_input(ipmicmd):
@@ -338,35 +353,66 @@ class SMMClient(object):
                      'delivery is at the sustained capacity of the remaining '
                      'supplies.')
         }
+        try:
+            dhcpsendname = self.ipmicmd.xraw_command(0xc, 0x2,
+                                                     data=[1, 0xc5, 0, 0])
+            dhcpsendname = bytearray(dhcpsendname['data'])
+            dhcpsendname = 'Enable' if dhcpsendname[1] == 1 else 'Disable'
+            settings['dhcp_sends_hostname'] = {
+                'value': dhcpsendname,
+                'help': ('Have the device send  hostname as part of its '
+                         'DHCP client requests in option 12'),
+                'possible': ['Enable', 'Disable']
+            }
+            dhcpsendvci = self.ipmicmd.xraw_command(0xc, 0x2,
+                                                    data=[1, 0xc6, 0, 0])
+            dhcpsendvci = bytearray(dhcpsendvci['data'])
+            dhcpsendvci = 'Enable' if dhcpsendvci[1] == 1 else 'Disable'
+            settings['dhcp_sends_vendor_class_identifier'] = {
+                'value': dhcpsendvci,
+                'possible': ['Enable', 'Disable'],
+                'help': ('Have the device send vendor class identifier '
+                         'as part of its DHCP requests in option 60')
+            }
+        except Exception:
+            pass
         return settings
 
     def set_bmc_configuration(self, changeset):
         rules = []
         powercfg = [None, None]
+        sendhost = None
+        sendvci = None
         for key in changeset:
             if not key:
                 raise pygexc.InvalidParameterValue('Empty key is invalid')
             if isinstance(changeset[key], six.string_types):
                 changeset[key] = {'value': changeset[key]}
-            if key.lower() in self.rulemap:
-                rules.append('{0}:{1}'.format(
-                    self.rulemap[key.lower()], changeset[key]['value']))
-            if key.lower() == 'power_redundancy':
+            for rule in self.rulemap:
+                if fnmatch.fnmatch(rule, key.lower()):
+                    rules.append('{0}:{1}'.format(
+                        self.rulemap[rule], changeset[key]['value']))
+            if fnmatch.fnmatch('power_redundancy', key.lower()):
                 if 'n+1'.startswith(changeset[key]['value'].lower()):
                     powercfg[0] = 1
                 elif 'disable'.startswith(changeset[key]['value'].lower()):
                     powercfg[0] = 0
-            elif key.lower().startswith('power_oversubscription'):
+            if fnmatch.fnmatch('power_oversubscription', key.lower()):
                 ovs = changeset[key]['value']
-                if 'enable'.startswith(ovs.lower()):
-                    powercfg[1] = 1
-                elif 'disable'.startswith(ovs.lower()):
-                    powercfg[1] = 0
-                else:
-                    raise pygexc.InvalidParameterValue(
-                        '{0} is an invalid setting for '
-                        'power_oversubscription'.format(ovs))
-            elif key.lower() == 'fanspeed':
+                ovs = stringtoboolean(changeset[key]['value'],
+                                      'power_oversubscription')
+                powercfg[1] = 1 if ovs else 0
+            if fnmatch.fnmatch('dhcp_sends_hostname', key.lower()):
+                sendhost = changeset[key]['value']
+                sendhost = stringtoboolean(changeset[key]['value'],
+                                           'dhcp_sends_hostname')
+            if fnmatch.fnmatch(
+                    'dhcp_sends_vendor_class_identifier', key.lower()):
+                sendvci = changeset[key]['value']
+                sendvci = stringtoboolean(
+                    changeset[key]['value'],
+                    'dhcp_sends_vendor_class_identifier')
+            if fnmatch.fnmatch('fanspeed', key.lower()):
                 for mode in self.fanmodes:
                     byteval = mode
                     mode = self.fanmodes[mode]
@@ -391,6 +437,12 @@ class SMMClient(object):
                 if powercfg[1] is None:
                     powercfg[1] = currcfg[1]
             self.ipmicmd.xraw_command(0x32, 0xa3, data=powercfg)
+        if sendhost is not None:
+            sendhost = 1 if sendhost else 0
+            self.ipmicmd.xraw_command(0xc, 1, data=[1, 0xc5, sendhost])
+        if sendvci is not None:
+            sendvci = 1 if sendvci else 0
+            self.ipmicmd.xraw_command(0xc, 1, data=[1, 0xc6, sendvci])
 
     def set_user_priv(self, uid, priv):
         if priv.lower() == 'administrator':
