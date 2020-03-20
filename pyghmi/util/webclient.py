@@ -130,10 +130,6 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
                                             **kwargs)
         except TypeError:
             httplib.HTTPConnection.__init__(self, host, port, **kwargs)
-        if verifycallback:
-            self.cert_reqs = ssl.CERT_NONE  # use custom validation
-        else:
-            self.cert_reqs = ssl.CERT_REQUIRED  # use standard validation
         if clone:
             self._certverify = clone._certverify
             self.cookies = clone.cookies
@@ -142,6 +138,10 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
             self._certverify = verifycallback
             self.cookies = {}
             self.stdheaders = {}
+        if self._certverify:
+            self.cert_reqs = ssl.CERT_NONE  # use custom validation
+        else:
+            self.cert_reqs = ssl.CERT_REQUIRED  # use standard validation
         if '[' not in host and '%' in host:
             self.stdheaders['Host'] = '[' + host[:host.find('%')] + ']'
 
