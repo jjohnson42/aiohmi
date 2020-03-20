@@ -130,7 +130,10 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
                                             **kwargs)
         except TypeError:
             httplib.HTTPConnection.__init__(self, host, port, **kwargs)
-        self.cert_reqs = ssl.CERT_NONE  # verification will be done ssh style..
+        if verifycallback:
+            self.cert_reqs = ssl.CERT_NONE  # use custom validation
+        else:
+            self.cert_reqs = ssl.CERT_REQUIRED  # use standard validation
         if clone:
             self._certverify = clone._certverify
             self.cookies = clone.cookies
@@ -173,12 +176,19 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         except socket.error:
             pass
         plainsock.connect(addrinfo[4])
-        self.sock = ssl.wrap_socket(plainsock, cert_reqs=self.cert_reqs)
-        # txtcert = self.sock.getpeercert()  # currently not possible
-        bincert = self.sock.getpeercert(binary_form=True)
-        if not self._certverify(bincert):
-            raise pygexc.UnrecognizedCertificate('Unknown certificate',
-                                                 bincert)
+        if self._certverify:
+            self.sock = ssl.wrap_socket(plainsock, cert_reqs=self.cert_reqs)
+            bincert = self.sock.getpeercert(binary_form=True)
+            if not self._certverify(bincert):
+                raise pygexc.UnrecognizedCertificate('Unknown certificate',
+                                                     bincert)
+        else:
+            ctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+            ctx.load_default_certs()
+            ctx.verify_mode = ssl.CERT_REQUIRED
+            ctx.check_hostname = True
+            self.sock = ctx.wrap_socket(plainsock,
+                                        server_hostname=self.thehost)
 
     def getresponse(self):
         try:
