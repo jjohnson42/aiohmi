@@ -1,3 +1,4 @@
+# coding: utf8
 # Copyright 2019 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1044,10 +1045,26 @@ class Command(object):
         """
         biosinfo = self._do_web_request(self._biosurl)
         rb = biosinfo.get('Actions', {}).get('#Bios.ResetBios', {})
+        actinf = rb.get('@Redfish.ActionInfo', None)
         rb = rb.get('target', '')
+        parms = {}
+        if actinf:
+            actinf = self._do_web_request(
+                '/redfish/v1/Systems/Self/Bios/ResetBiosActionInfo')
+            for parm in actinf.get('Parameters', ()):
+                if parm.get('Required', False):
+                    if parm.get('Name', None) == 'ResetType' and parm.get(
+                            'AllowableValues', [None])[0] == 'Reset':
+                        parms['ResetType'] = 'Reset'
+                    else:
+                        raise Exception(
+                            'Unrecognized required parameter {0}'.format(
+                                parm.get('Name', 'Unknown')))
         if not rb:
             raise Exception('BIOS reset not detected on this system')
-        self._do_web_request(rb, {'Action': 'Bios.ResetBios'})
+        if not parms:
+            parms = {'Action': 'Bios.ResetBios'}
+        self._do_web_request(rb, parms)
 
     def set_system_configuration(self, changeset):
         currsettings, reginfo = self._getsyscfg()
