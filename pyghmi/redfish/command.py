@@ -1515,18 +1515,19 @@ class Command(object):
                 clearurl = newloginfo.get('Actions', {}).get(
                     '#LogService.ClearLog', {}).get('target', '')
                 while clearurl:
-                    while logtag != newloginfo.get('@odata.etag', None):
-                        logtag = newloginfo.get('@odata.etag', None)
-                        entries = self._do_web_request(entriesurl, cache=False)
-                        newloginfo = self._do_web_request(lurl, cache=False)
                     try:
                         self._do_web_request(clearurl, method='POST',
-                                             etag=logtag)
+                                             etag=logtag, payload={})
                         clearurl = False
                     except exc.PyghmiException as e:
                         if 'EtagPreconditionalFailed' not in str(e):
                             raise
+                        # This doesn't guarantee atomicity, but it mitigates
+                        # greatly.  Unfortunately some implementations
+                        # mutate the tag endlessly and we have no hope
+                        entries = self._do_web_request(entriesurl, cache=False)
                         newloginfo = self._do_web_request(lurl, cache=False)
+                        logtag = newloginfo.get('@odata.etag', None)
             for log in entries.get('Members', []):
                 record = {}
                 record['log_id'] = logid
