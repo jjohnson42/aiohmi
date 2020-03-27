@@ -451,7 +451,7 @@ class SDREntry(object):
             'type': self.sensor_type,
             'id': self.sensor_number,
         }
-        if reading[1] & 0b100000:
+        if reading[1] & 0b100000 or not reading[1] & 0b1000000:
             output['unavailable'] = 1
             return SensorReading(output, self.unit_suffix)
         if self.numeric_format == 2:
