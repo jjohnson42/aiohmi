@@ -1500,7 +1500,6 @@ class Command(object):
         for lurl in lurls:
             lurl = lurl['@odata.id']
             loginfo = self._do_web_request(lurl, cache=(not clear))
-            logtag = loginfo.get('@odata.etag', None)
             entriesurl = loginfo.get('Entries', {}).get('@odata.id', None)
             if not entriesurl:
                 continue
@@ -1517,7 +1516,7 @@ class Command(object):
                 while clearurl:
                     try:
                         self._do_web_request(clearurl, method='POST',
-                                             etag=logtag, payload={})
+                                             payload={})
                         clearurl = False
                     except exc.PyghmiException as e:
                         if 'EtagPreconditionalFailed' not in str(e):
@@ -1527,7 +1526,6 @@ class Command(object):
                         # mutate the tag endlessly and we have no hope
                         entries = self._do_web_request(entriesurl, cache=False)
                         newloginfo = self._do_web_request(lurl, cache=False)
-                        logtag = newloginfo.get('@odata.etag', None)
             for log in entries.get('Members', []):
                 record = {}
                 record['log_id'] = logid
