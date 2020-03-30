@@ -540,8 +540,8 @@ class SDREntry(object):
             self._set_tmp_formula(value)
             linearization = 0
         # time to compute the pre-linearization value.
-        decoded = float((value * self.m + self.b) *
-                        (10 ** self.resultexponent))
+        decoded = float((value * self.m + self.b)
+                        * (10 ** self.resultexponent))
         if linearization == 0:
             return decoded
         elif linearization == 1:
@@ -602,10 +602,8 @@ class SDREntry(object):
             tstr = ""
             while len(data) >= 3:  # the packing only works with 3 byte chunks
                 tstr += chr((data[0] & 0b111111) + 0x20)
-                tstr += chr(((data[1] & 0b1111) << 2) +
-                            (data[0] >> 6) + 0x20)
-                tstr += chr(((data[2] & 0b11) << 4) +
-                            (data[1] >> 4) + 0x20)
+                tstr += chr(((data[1] & 0b1111) << 2) + (data[0] >> 6) + 0x20)
+                tstr += chr(((data[2] & 0b11) << 4) + (data[1] >> 4) + 0x20)
                 tstr += chr((data[2] >> 2) + 0x20)
             if not isinstance(tstr, str):
                 tstr = tstr.decode('utf-8')

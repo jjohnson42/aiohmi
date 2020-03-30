@@ -269,12 +269,12 @@ class Command(object):
             raise exc.IpmiException(response['error'])
         # this should only be invoked for get system boot option complying to
         # ipmi spec and targeting the 'boot flags' parameter
-        assert (response['command'] == 9 and
-                response['netfn'] == 1 and
-                response['data'][0] == 1 and
-                (response['data'][1] & 0b1111111) == 5)
-        if (response['data'][1] & 0b10000000 or
-                not response['data'][2] & 0b10000000):
+        assert (response['command'] == 9
+                and response['netfn'] == 1
+                and response['data'][0] == 1
+                and (response['data'][1] & 0b1111111) == 5)
+        if (response['data'][1] & 0b10000000
+                or not response['data'][2] & 0b10000000):
             return {'bootdev': 'default', 'persistent': True}
         else:  # will consult data2 of the boot flags parameter for the data
             persistent = False
@@ -345,8 +345,7 @@ class Command(object):
         waitattempts = 300
         if not isinstance(wait, bool):
             waitattempts = wait
-        if (wait and
-                newpowerstate in ('on', 'off', 'shutdown', 'softoff')):
+        if wait and newpowerstate in ('on', 'off', 'shutdown', 'softoff'):
             if newpowerstate in ('softoff', 'shutdown'):
                 waitpowerstate = 'off'
             else:
@@ -1029,7 +1028,7 @@ class Command(object):
                         netchan = bytearray(rsp['data'])[0]
                         self._netchannel = netchan & 0b1111
                         break
-                    except exc.IpmiException as ie:
+                    except exc.IpmiException:
                         # This means the attempt to fetch parameter 5 failed,
                         # therefore move on to next candidate channel
                         continue
@@ -1216,8 +1215,9 @@ class Command(object):
                                                          channel)
             if destdata:
                 self.xraw_command(netfn=0xc, command=1, data=destdata)
-        if (acknowledge_required is not None or retries is not None or
-                acknowledge_timeout is not None):
+        if (acknowledge_required is not None
+                or retries is not None
+                or acknowledge_timeout is not None):
             currtype = self.xraw_command(netfn=0xc, command=2, data=(
                 channel, 18, destination, 0))
             if currtype['data'][0] != b'\x11':

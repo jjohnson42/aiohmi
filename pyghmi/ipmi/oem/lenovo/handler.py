@@ -277,9 +277,9 @@ class OEMHandler(generic.OEMHandler):
                 event['severity'] = pygconst.Health.Critical
         # For HDD bay events, the event data 2 is the bay, modify
         # the description to be more specific
-        if (event['event_type_byte'] == 0x6f and
-                (evdata[0] & 0b11000000) == 0b10000000 and
-                event['component_type_id'] == 13):
+        if (event['event_type_byte'] == 0x6f
+                and (evdata[0] & 0b11000000) == 0b10000000
+                and event['component_type_id'] == 13):
             event['component'] += ' {0}'.format(evdata[1] & 0b11111)
 
     def reseat_bay(self, bay):
@@ -376,8 +376,8 @@ class OEMHandler(generic.OEMHandler):
     def has_tsm(self):
         """True if this particular server have a TSM based service processor"""
 
-        if (self.oemid['manufacturer_id'] == 19046 and
-                self.oemid['device_id'] == 32):
+        if (self.oemid['manufacturer_id'] == 19046
+                and self.oemid['device_id'] == 32):
             try:
                 self.ipmicmd.xraw_command(netfn=0x3a, command=0xf)
             except pygexc.IpmiException as ie:
