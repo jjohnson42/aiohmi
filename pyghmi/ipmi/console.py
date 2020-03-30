@@ -181,8 +181,8 @@ class Console(object):
             if isinstance(data, dict):
                 self.pendingoutput.append(data)
             else:  # it is a text situation
-                if (len(self.pendingoutput) == 0 or
-                        isinstance(self.pendingoutput[-1], dict)):
+                if (len(self.pendingoutput) == 0
+                        or isinstance(self.pendingoutput[-1], dict)):
                     self.pendingoutput.append(data)
                 else:
                     self.pendingoutput[-1] += data
@@ -310,8 +310,8 @@ class Console(object):
         self.broken = True
         if self.ipmi_session:
             self.ipmi_session.unregister_keepalive(self.keepaliveid)
-            if (self.ipmi_session.sol_handler and
-                    self.ipmi_session.sol_handler.__self__ is self):
+            if (self.ipmi_session.sol_handler
+                    and self.ipmi_session.sol_handler.__self__ is self):
                 self.ipmi_session.sol_handler = None
             self.ipmi_session = None
         if type(error) == dict:
@@ -388,8 +388,9 @@ class Console(object):
                     # also add pending output for efficiency and ease
                     newtext = self.lastpayload[4 + ackcount:]
                     with self.outputlock:
-                        if (self.pendingoutput and
-                                not isinstance(self.pendingoutput[0], dict)):
+                        if (self.pendingoutput
+                                and not isinstance(self.pendingoutput[0],
+                                                   dict)):
                             self.pendingoutput[0] = \
                                 newtext + self.pendingoutput[0]
                         else:
@@ -510,8 +511,8 @@ class ServerConsole(Console):
             if nacked and not breakdetected:  # the BMC was in some way unhappy
                 newtext = self.lastpayload[4 + ackcount:]
                 with self.outputlock:
-                    if (self.pendingoutput and
-                            not isinstance(self.pendingoutput[0], dict)):
+                    if (self.pendingoutput
+                            and not isinstance(self.pendingoutput[0], dict)):
                         self.pendingoutput[0] = newtext + self.pendingoutput[0]
                     else:
                         self.pendingoutput = [newtext] + self.pendingoutput

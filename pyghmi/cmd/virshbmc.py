@@ -27,8 +27,8 @@ def lifecycle_callback(connection, domain, event, detail, console):
 
 
 def error_handler(unused, error):
-    if (error[0] == libvirt.VIR_ERR_RPC and
-            error[1] == libvirt.VIR_FROM_STREAMS):
+    if (error[0] == libvirt.VIR_ERR_RPC
+            and error[1] == libvirt.VIR_FROM_STREAMS):
         return
 
 
@@ -91,8 +91,8 @@ class LibvirtBmc(bmc.Bmc):
         return self.domain.isActive()
 
     def check_console(self):
-        if (self.state[0] == libvirt.VIR_DOMAIN_RUNNING or
-                self.state[0] == libvirt.VIR_DOMAIN_PAUSED):
+        if (self.state[0] == libvirt.VIR_DOMAIN_RUNNING
+                or self.state[0] == libvirt.VIR_DOMAIN_PAUSED):
             if self.stream is None:
                 self.stream = self.conn.newStream(libvirt.VIR_STREAM_NONBLOCK)
                 self.domain.openConsole(None, self.stream, 0)

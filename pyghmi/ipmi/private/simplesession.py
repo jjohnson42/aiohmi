@@ -366,9 +366,10 @@ class Session(object):
         # we are always the requestor for now
         seqincrement = 7  # IPMI spec forbids gaps bigger then 7 in seq number.
         # Risk the taboo rather than violate the rules
-        while (not self.servermode and
-                (netfn, command, self.seqlun) in self.tabooseq and
-               self.tabooseq[(netfn, command, self.seqlun)] and seqincrement):
+        while (not self.servermode
+               and (netfn, command, self.seqlun) in self.tabooseq
+               and self.tabooseq[(netfn, command, self.seqlun)]
+               and seqincrement):
             self.tabooseq[(self.expectednetfn, command, self.seqlun)] -= 1
             # Allow taboo to eventually expire after a few rounds
             self.seqlun += 1  # the last two bits are lun, so add 4 to add 1
@@ -455,8 +456,8 @@ class Session(object):
                     callback=None,
                     rslun=0):
         if not self.logged:
-            if (self.logoutexpiry is not None and
-                    _monotonic_time() > self.logoutexpiry):
+            if (self.logoutexpiry is not None
+                    and _monotonic_time() > self.logoutexpiry):
                 self._mark_broken()
             raise exc.IpmiException('Session no longer connected')
         self._cmdwait()
@@ -911,17 +912,17 @@ class Session(object):
     def _handle_ipmi_packet(self, data, sockaddr=None, qent=None):
         if self.sockaddr is None and sockaddr is not None:
             self.sockaddr = sockaddr
-        elif (self.sockaddr is not None and
-              sockaddr is not None and
-              self.sockaddr != sockaddr):
+        elif (self.sockaddr is not None
+              and sockaddr is not None
+              and self.sockaddr != sockaddr):
             return  # here, we might have sent an ipv4 and ipv6 packet to kick
             # things off ignore the second reply since we have one
             # satisfactory answer
         if data[4] in (0, 2):  # This is an ipmi 1.5 paylod
             remseqnumber = struct.unpack('<I', bytes(data[5:9]))[0]
             remsessid = struct.unpack("<I", bytes(data[9:13]))[0]
-            if (hasattr(self, 'remseqnumber') and
-                    remseqnumber < self.remseqnumber):
+            if (hasattr(self, 'remseqnumber')
+                    and remseqnumber < self.remseqnumber):
                 return -5  # remote sequence number is too low, reject it
             self.remseqnumber = remseqnumber
             if data[4] != self.authtype:
@@ -997,9 +998,9 @@ class Session(object):
             if sid != self.localsid:  # session id mismatch, drop it
                 return
             remseqnumber = struct.unpack("<I", bytes(data[10:14]))[0]
-            if (hasattr(self, 'remseqnumber') and
-                (remseqnumber < self.remseqnumber) and
-                    (self.remseqnumber != 0xffffffff)):
+            if (hasattr(self, 'remseqnumber')
+                    and (remseqnumber < self.remseqnumber)
+                    and (self.remseqnumber != 0xffffffff)):
                 return
             self.remseqnumber = remseqnumber
             psize = data[14] + (data[15] << 8)
@@ -1115,11 +1116,11 @@ class Session(object):
         self.remoterandombytes = bytes(data[8:24])
         self.remoteguid = bytes(data[24:40])
         userlen = len(self.userid)
-        hmacdata = (struct.pack("<II", localsid, self.pendingsessionid) +
-                    self.randombytes + self.remoterandombytes +
-                    self.remoteguid + struct.pack(
-                    "2B", self.nameonly | self.privlevel, userlen) +
-                    self.userid)
+        hmacdata = (struct.pack("<II", localsid, self.pendingsessionid)
+                    + self.randombytes + self.remoterandombytes
+                    + self.remoteguid + struct.pack("2B", self.nameonly
+                                                    | self.privlevel, userlen)
+                    + self.userid)
         expectedhash = hmac.new(self.password, hmacdata,
                                 self.currhashlib).digest()
         hashlen = len(expectedhash)
@@ -1131,10 +1132,10 @@ class Session(object):
         # We have now validated that the BMC and client agree on password, time
         # to store the keys
         self.sik = hmac.new(self.kg,
-                            self.randombytes + self.remoterandombytes +
-                            struct.pack("2B", self.nameonly | self.privlevel,
-                                        userlen) +
-                            self.userid, self.currhashlib).digest()
+                            self.randombytes + self.remoterandombytes
+                            + struct.pack("2B", self.nameonly
+                                          | self.privlevel, userlen)
+                            + self.userid, self.currhashlib).digest()
         self.k1 = hmac.new(self.sik, b'\x01' * 20, self.currhashlib).digest()
         self.k2 = hmac.new(self.sik, b'\x02' * 20, self.currhashlib).digest()
         self.aeskey = self.k2[0:16]
@@ -1226,8 +1227,9 @@ class Session(object):
             # second response is the real response.
             # If the message is send crrectly, we will discard the first
             # response or else error message will be parsed and return.
-            if ((entry[0] in [0x06, 0x07]) and (entry[2] == 0x34) and
-                    (payload[-2] == 0x0)):
+            if ((entry[0] in [0x06, 0x07])
+                    and (entry[2] == 0x34)
+                    and (payload[-2] == 0x0)):
                 return -1
             else:
                 self._parse_payload(payload)
@@ -1302,8 +1304,8 @@ class Session(object):
             # delayed in this case, it's safe to just redo the request
             self.lastpayload = None
             self._open_rmcpplus_request()
-        elif (self.sessioncontext == 'EXPECTINGRAKP2' or
-              self.sessioncontext == 'EXPECTINGRAKP4'):
+        elif (self.sessioncontext == 'EXPECTINGRAKP2'
+              or self.sessioncontext == 'EXPECTINGRAKP4'):
             # If we can't be sure which RAKP was dropped or if RAKP3/4 was just
             # delayed, the most reliable thing to do is rewind and start over
             # bmcs do not take kindly to receiving RAKP1 or RAKP3 twice

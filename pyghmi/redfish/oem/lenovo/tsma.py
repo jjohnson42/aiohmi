@@ -61,8 +61,8 @@ def read_hpm(filename):
             currsec.data = hpmfile.read(currlen)
             hpminfo.append(currsec)
             sectype, compid = struct.unpack('BB', hpmfile.read(2))
-        upimg = (hpminfo[1].data[:-hpminfo[1].hash_size] +
-                 hpminfo[2].data[:-hpminfo[2].hash_size])
+        upimg = (hpminfo[1].data[:-hpminfo[1].hash_size]
+                 + hpminfo[2].data[:-hpminfo[2].hash_size])
         hpminfo[2].combo_image = upimg
         hpminfo[1].combo_image = upimg
         currpos = hpmfile.tell()
@@ -314,8 +314,8 @@ class TsmHandler(generic.OEMHandler):
                     break
                 if rsp.get('state', 0) in (6, 10):
                     raise Exception('Update Failure')
-                if (rsp.get('state', 0) == 8 and
-                        rsp.get('progress', 0) > 0 and progress):
+                if (rsp.get('state', 0) == 8
+                        and rsp.get('progress', 0) > 0 and progress):
                     progress({
                         'phase': 'apply',
                         'progress': 70 + float(rsp.get(

@@ -72,8 +72,8 @@ class _ExpEngine(object):
         for optkey in self.cfg:
             opt = self.cfg[optkey]
             lid = opt['lenovo_id'].replace('-', '_')
-            if (lid == category and
-                    opt['lenovo_setting'] == setting):
+            if (lid == category
+                    and opt['lenovo_setting'] == setting):
                 self.relatedsettings.add(optkey)
                 return opt['lenovo_value']
         return None
@@ -322,8 +322,8 @@ class LenovoFirmwareConfig(object):
                         default = onedata.get('default', None)
                         if default == '':
                             default = None
-                    if (setting.find('cmd_data') is not None or
-                            setting.find('boolean_data') is not None):
+                    if (setting.find('cmd_data') is not None
+                            or setting.find('boolean_data') is not None):
                         protect = True  # Hide currently unsupported settings
                     ldata = setting.find("list_data")
                     extraorder = False

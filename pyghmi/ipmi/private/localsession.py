@@ -51,16 +51,16 @@ class IpmiReq(ctypes.Structure):
 _IONONE = 0
 _IOWRITE = 1
 _IOREAD = 2
-IPMICTL_SET_MY_ADDRESS_CMD = (_IOREAD << 30 |
-                              ctypes.sizeof(ctypes.c_uint) << 16 |
-                              ord('i') << 8 | 17)  # from ipmi.h
-IPMICTL_SEND_COMMAND = (_IOREAD << 30 |
-                        ctypes.sizeof(IpmiReq) << 16 |
-                        ord('i') << 8 | 13)  # from ipmi.h
+IPMICTL_SET_MY_ADDRESS_CMD = (
+    _IOREAD << 30 | ctypes.sizeof(ctypes.c_uint) << 16
+    | ord('i') << 8 | 17)  # from ipmi.h
+IPMICTL_SEND_COMMAND = (
+    _IOREAD << 30 | ctypes.sizeof(IpmiReq) << 16
+    | ord('i') << 8 | 13)  # from ipmi.h
 # next is really IPMICTL_RECEIVE_MSG_TRUNC, but will only use that
-IPMICTL_RECV = ((_IOWRITE | _IOREAD) << 30 |
-                ctypes.sizeof(IpmiRecv) << 16 |
-                ord('i') << 8 | 11)  # from ipmi.h
+IPMICTL_RECV = (
+    (_IOWRITE | _IOREAD) << 30 | ctypes.sizeof(IpmiRecv) << 16
+    | ord('i') << 8 | 11)  # from ipmi.h
 BMC_SLAVE_ADDR = ctypes.c_uint(0x20)
 CURRCHAN = 0xf
 ADDRTYPE = 0xc

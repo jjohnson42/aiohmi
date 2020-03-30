@@ -188,8 +188,8 @@ class IMMClient(object):
         try:
             self.fwo = self.fwc.get_fw_options(fetchimm=fetchimm)
         except Exception:
-            raise Exception(self.bmcname +
-                            ' failed to retrieve UEFI configuration')
+            raise Exception('%s failed to retrieve UEFI configuration'
+                            % self.bmcname)
         self.fwovintage = util._monotonic_time()
         retcfg = {}
         for opt in self.fwo:
@@ -197,8 +197,8 @@ class IMMClient(object):
                 # Suppress the Avago configuration to be consistent with
                 # other tools.
                 continue
-            if (hideadvanced and self.fwo[opt]['lenovo_protect'] or
-                    self.fwo[opt]['hidden']):
+            if (hideadvanced and self.fwo[opt]['lenovo_protect']
+                    or self.fwo[opt]['hidden']):
                 # Do not enumerate hidden settings
                 continue
             retcfg[opt] = {}
@@ -266,8 +266,8 @@ class IMMClient(object):
             newnewvalues = []
             for newvalue in newvalues:
                 newv = re.sub(r'\s+', ' ', newvalue)
-                if (self.fwo[key]['possible'] and
-                        newvalue not in self.fwo[key]['possible']):
+                if (self.fwo[key]['possible']
+                        and newvalue not in self.fwo[key]['possible']):
                     candlist = []
                     for candidate in self.fwo[key]['possible']:
                         candid = re.sub(r'\s+', ' ', candidate)
@@ -370,8 +370,9 @@ class IMMClient(object):
 
     @property
     def wc(self):
-        if (not self._wc or (self._wc.vintage and
-                             self._wc.vintage < util._monotonic_time() - 30)):
+        if (not self._wc or (self._wc.vintage
+                             and self._wc.vintage < util._monotonic_time()
+                             - 30)):
             if not self.updating and self._wc:
                 # in case the existing session is still valid
                 # dispose of the session
@@ -552,22 +553,22 @@ class IMMClient(object):
                         bdata = {}
                         if 'versionStr' in firm and firm['versionStr']:
                             bdata['version'] = firm['versionStr']
-                        if ('releaseDate' in firm and
-                                firm['releaseDate'] and
-                                firm['releaseDate'] != 'N/A'):
+                        if ('releaseDate' in firm
+                                and firm['releaseDate']
+                                and firm['releaseDate'] != 'N/A'):
                             try:
                                 bdata['date'] = self._parse_builddate(
                                     firm['releaseDate'])
                             except ValueError:
                                 pass
-                        yield ('{0} {1}'.format(aname, fname), bdata)
+                        yield '{0} {1}'.format(aname, fname), bdata
                 for fwi in fwu.get('items', []):
                     if fwi.get('key', -1) == adata.get('key', -2):
                         if fwi.get('fw_status', 0) == 2:
                             bdata = {}
                             if 'fw_version_pend' in fwi:
                                 bdata['version'] = fwi['fw_version_pend']
-                            yield('{0} Pending Update'.format(aname), bdata)
+                            yield '{0} Pending Update'.format(aname), bdata
         for disk in self.disk_inventory():
             yield disk
         self.weblogout()
@@ -708,8 +709,8 @@ class IMMClient(object):
                     bdata['pcislot'] = '{0:02x}:{1:02x}'.format(
                         fundata[self.BUSNO], fundata[self.DEVNO])
                     serialdata = fundata.get(self.ADP_SERIALNO, None)
-                    if (serialdata and serialdata != 'N/A' and
-                            '---' not in serialdata):
+                    if (serialdata and serialdata != 'N/A'
+                            and '---' not in serialdata):
                         bdata['serial'] = serialdata
                     partnum = fundata.get(self.ADP_PARTNUM, None)
                     if partnum and partnum != 'N/A':
@@ -929,9 +930,8 @@ class XCCClient(IMMClient):
             '/redfish/v1/Systems/1/Bios/Actions/Bios.ResetBios',
             {'Action': 'Bios.ResetBios'},
             headers={
-                'Authorization': 'Basic ' +
-                                 base64.b64encode(
-                                     self.username + ':' + self.password),
+                'Authorization': 'Basic %s' % base64.b64encode(
+                    self.username + ':' + self.password),
                 'Content-Type': 'application/json'
             }
         )
@@ -1252,8 +1252,8 @@ class XCCClient(IMMClient):
             elif strsize in ('remainder', 'rest'):
                 volsize = remainingcap
             elif strsize.endswith('%'):
-                volsize = int(params['capacity'] *
-                              float(strsize.replace('%', '')) / 100.0)
+                volsize = int(params['capacity']
+                              * float(strsize.replace('%', '')) / 100.0)
             else:
                 try:
                     volsize = int(strsize)
@@ -1445,8 +1445,8 @@ class XCCClient(IMMClient):
         # then check for agentless, if agentless, get adapter info using
         # https, using the caller TLS verification scheme
         components = set(components)
-        if (not components or
-                set(('core', 'imm', 'bmc', 'xcc')) & components):
+        if (not components
+                or set(('core', 'imm', 'bmc', 'xcc')) & components):
             rsp = self.ipmicmd.xraw_command(netfn=0x3a, command=0x50)
             immverdata = self.parse_imm_buildinfo(rsp['data'])
             bmcmajor, bmcminor = [int(x) for x in bmcver.split('.')]
@@ -1454,20 +1454,20 @@ class XCCClient(IMMClient):
             bdata = {'version': bmcver,
                      'build': immverdata[0],
                      'date': immverdata[1]}
-            yield (self.bmcname, bdata)
+            yield self.bmcname, bdata
             bdata = self.fetch_grouped_properties({
                 'build': '/v2/ibmc/dm/fw/imm3/backup_pending_build_id',
                 'version': '/v2/ibmc/dm/fw/imm3/backup_pending_build_version',
                 'date': '/v2/ibmc/dm/fw/imm3/backup_pending_build_date'})
             if bdata:
-                yield ('{0} Backup'.format(self.bmcname), bdata)
+                yield '{0} Backup'.format(self.bmcname), bdata
             else:
                 bdata = self.fetch_grouped_properties({
                     'build': '/v2/ibmc/dm/fw/imm3/backup_build_id',
                     'version': '/v2/ibmc/dm/fw/imm3/backup_build_version',
                     'date': '/v2/ibmc/dm/fw/imm3/backup_build_date'})
                 if bdata:
-                    yield ('{0} Backup'.format(self.bmcname), bdata)
+                    yield '{0} Backup'.format(self.bmcname), bdata
                     bdata = self.fetch_grouped_properties({
                         'build': '/v2/ibmc/trusted_buildid',
                     })
@@ -1476,7 +1476,7 @@ class XCCClient(IMMClient):
                     'build': '/v2/ibmc/trusted_buildid',
                 })
             if bdata:
-                yield ('{0} Trusted Image'.format(self.bmcname), bdata)
+                yield '{0} Trusted Image'.format(self.bmcname), bdata
             bdata = self.fetch_grouped_properties({
                 'build': '/v2/ibmc/dm/fw/imm3/primary_pending_build_id',
                 'version': '/v2/ibmc/dm/fw/imm3/primary_pending_build_version',
@@ -1566,8 +1566,8 @@ class XCCClient(IMMClient):
                 url = mt['remotepath']
                 if url.startswith('//'):
                     url = 'smb:' + url
-                elif (not url.startswith('http://') and
-                      not url.startswith('https://')):
+                elif (not url.startswith('http://')
+                      and not url.startswith('https://')):
                     url = url.replace(':', '')
                     url = 'nfs://' + url
                 yield media.Media(mt['filename'], url)
@@ -1684,8 +1684,8 @@ class XCCClient(IMMClient):
                 progress({'phase': 'upload',
                           'progress': 100.0 * rsp['received'] / rsp['size']})
             elif rsp['state'] != 'done':
-                if (rsp.get('status', None) == 413 or
-                    uploadthread.rspstatus == 413):
+                if (rsp.get('status', None) == 413
+                        or uploadthread.rspstatus == 413):
                     raise Exception('File is larger than supported')
                 raise Exception('Unexpected result:' + repr(rsp))
             uploadstate = rsp['state']
@@ -1814,8 +1814,7 @@ class XCCClient(IMMClient):
 
         if rsp.get('return', -1) != 0:
             errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
-            raise Exception('Unexpected result starting update: ' +
-                            errmsg)
+            raise Exception('Unexpected result starting update: %s' % errmsg)
         complete = False
         while not complete:
             ipmisession.Session.pause(3)
@@ -1831,8 +1830,8 @@ class XCCClient(IMMClient):
                 if rsp['items'][0]['action_status'] != 0:
                     raise Exception('Unexpected failure: ' + repr(rsp))
                 break
-            if (rsp['items'][0]['action_state'] == 'In Progress' and
-                    rsp['items'][0]['action_status'] == 2):
+            if (rsp['items'][0]['action_state'] == 'In Progress'
+                    and rsp['items'][0]['action_status'] == 2):
                 raise Exception('Unexpected failure: ' + repr(rsp))
             if rsp['items'][0]['action_state'] != 'In Progress':
                 raise Exception(
@@ -1870,7 +1869,7 @@ class XCCClient(IMMClient):
     def get_health(self, summary):
         try:
             wc = self.get_webclient(False)
-        except (socket.timeout, socket.error) as e:
+        except (socket.timeout, socket.error):
             wc = None
         if not wc:
             summary['health'] = pygconst.Health.Critical

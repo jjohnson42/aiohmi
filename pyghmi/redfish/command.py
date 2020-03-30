@@ -100,11 +100,11 @@ def _to_boolean(attrval):
     attrval = attrval.lower()
     if not attrval:
         return False
-    if ('true'.startswith(attrval) or 'yes'.startswith(attrval) or
-            'enabled'.startswith(attrval) or attrval == '1'):
+    if ('true'.startswith(attrval) or 'yes'.startswith(attrval)
+            or 'enabled'.startswith(attrval) or attrval == '1'):
         return True
-    if ('false'.startswith(attrval) or 'no'.startswith(attrval) or
-            'disabled'.startswith(attrval) or attrval == '0'):
+    if ('false'.startswith(attrval) or 'no'.startswith(attrval)
+            or 'disabled'.startswith(attrval) or attrval == '0'):
         return False
     raise Exception(
         'Unrecognized candidate for boolean: {0}'.format(attrval))
@@ -542,8 +542,8 @@ class Command(object):
             if reqpowerstate in ('softoff', 'shutdown'):
                 reqpowerstate = 'off'
             timeout = os.times()[4] + 300
-            while (self.get_power()['powerstate'] != reqpowerstate and
-                   os.times()[4] < timeout):
+            while (self.get_power()['powerstate'] != reqpowerstate
+                   and os.times()[4] < timeout):
                 time.sleep(1)
             if self.get_power()['powerstate'] != reqpowerstate:
                 raise exc.PyghmiException(
@@ -619,19 +619,19 @@ class Command(object):
         elif overridestate == 'Continuous':
             persistent = True
         else:
-            raise exc.PyghmiException('Unrecognized Boot state: ' +
-                                      repr(overridestate))
+            raise exc.PyghmiException('Unrecognized Boot state: %s'
+                                      % repr(overridestate))
         uefimode = result.get('Boot', {}).get('BootSourceOverrideMode', None)
         if uefimode == 'UEFI':
             uefimode = True
         elif uefimode == 'Legacy':
             uefimode = False
         else:
-            raise exc.PyghmiException('Unrecognized mode: ' + uefimode)
+            raise exc.PyghmiException('Unrecognized mode: %s' % uefimode)
         bootdev = result.get('Boot', {}).get('BootSourceOverrideTarget', None)
         if bootdev not in boot_devices_read:
-            raise exc.PyghmiException('Unrecognized boot target: ' +
-                                      repr(bootdev))
+            raise exc.PyghmiException('Unrecognized boot target: %s'
+                                      % repr(bootdev))
         bootdev = boot_devices_read[bootdev]
         return {'bootdev': bootdev, 'persistent': persistent,
                 'uefimode': uefimode}
@@ -656,10 +656,10 @@ class Command(object):
         :returns: dict or True -- If callback is not provided, the response
         """
         reqbootdev = bootdev
-        if (bootdev not in boot_devices_write and
-                bootdev not in boot_devices_read):
-            raise exc.InvalidParameterValue('Unsupported device ' +
-                                            repr(bootdev))
+        if (bootdev not in boot_devices_write
+                and bootdev not in boot_devices_read):
+            raise exc.InvalidParameterValue('Unsupported device %s'
+                                            % repr(bootdev))
         bootdev = boot_devices_write.get(bootdev, bootdev)
         if bootdev == 'None':
             payload = {'Boot': {'BootSourceOverrideEnabled': 'Disabled'}}
@@ -1100,8 +1100,8 @@ class Command(object):
                                '{0}'.format(','.join(sorted(blameattrs)))
                                )
                 raise exc.InvalidParameterValue(errstr)
-            if (currsettings.get(change, {}).get('possible', []) and
-                    changeval not in currsettings[change]['possible']):
+            if (currsettings.get(change, {}).get('possible', [])
+                    and changeval not in currsettings[change]['possible']):
                 normval = changeval.lower()
                 normval = re.sub(r'\s+', ' ', normval)
                 if not normval.endswith('*'):
@@ -1148,15 +1148,15 @@ class Command(object):
         if ipv4_configuration.lower() == 'dhcp':
             dodhcp = True
             patch['DHCPv4'] = {'DHCPEnabled': True}
-        elif (ipv4_configuration == 'static' or
-              'IPv4StaticAddresses' in patch):
+        elif (ipv4_configuration == 'static'
+              or 'IPv4StaticAddresses' in patch):
             dodhcp = False
             patch['DHCPv4'] = {'DHCPEnabled': False}
         if patch:
             nicurl = self._get_bmc_nic_url(name)
             try:
                 self._do_web_request(nicurl, patch, 'PATCH')
-            except exc.RedfishError as e:
+            except exc.RedfishError:
                 patch = {'IPv4Addresses': [ipinfo]}
                 if dodhcp:
                     ipinfo['AddressOrigin'] = 'DHCP'

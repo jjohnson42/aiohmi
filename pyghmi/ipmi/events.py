@@ -311,10 +311,10 @@ def _fix_sel_time(records, ipmicmd):
         record = records[index]
         if 'timecode' not in record or record['timecode'] == 0xffffffff:
             continue
-        if ('event' in record and record['event'] == 'Clock time change' and
-                record['event_data'] == 'After'):
-            if (lasttimestamp is not None and
-                    record['timecode'] > lasttimestamp):
+        if ('event' in record and record['event'] == 'Clock time change'
+                and record['event_data'] == 'After'):
+            if (lasttimestamp is not None
+                    and record['timecode'] > lasttimestamp):
                 # if the timestamp did something impossible, declare the rest
                 # of history not meaningfully correctable
                 correctionenabled = False
@@ -322,8 +322,8 @@ def _fix_sel_time(records, ipmicmd):
                 continue
             newtimestamp = record['timecode']
             trimindexes.append(index)
-        elif ('event' in record and record['event'] == 'Clock time change' and
-                record['event_data'] == 'Before'):
+        elif ('event' in record and record['event'] == 'Clock time change'
+              and record['event_data'] == 'Before'):
             if not correctionenabled:
                 continue
             if newtimestamp:
@@ -342,8 +342,8 @@ def _fix_sel_time(records, ipmicmd):
                 if not correctearly or not correctionenabled:
                     correctednowtime = nowtime
                     continue
-                if (lasttimestamp is not None and
-                        record['timecode'] > lasttimestamp):
+                if (lasttimestamp is not None
+                        and record['timecode'] > lasttimestamp):
                     # Time has gone backwards in pre-init, no hope for
                     # accurate time
                     correctearly = False
@@ -359,8 +359,8 @@ def _fix_sel_time(records, ipmicmd):
                 # We are in 'normal' time, assume we cannot go to
                 # pre-init time and do corrections unless time sync events
                 # guide us in safely
-                if (lasttimestamp is not None and
-                        record['timecode'] > lasttimestamp):
+                if (lasttimestamp is not None
+                        and record['timecode'] > lasttimestamp):
                     # Time has gone backwards, without a clock sync
                     # give up any attempt to correct from this point back...
                     correctionenabled = False

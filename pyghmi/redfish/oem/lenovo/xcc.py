@@ -78,14 +78,14 @@ class OEMHandler(generic.OEMHandler):
                     bdata = {}
                     if 'versionStr' in firm and firm['versionStr']:
                         bdata['version'] = firm['versionStr']
-                    if ('releaseDate' in firm and
-                            firm['releaseDate'] and
-                            firm['releaseDate'] != 'N/A'):
+                    if ('releaseDate' in firm
+                            and firm['releaseDate']
+                            and firm['releaseDate'] != 'N/A'):
                         try:
                             bdata['date'] = parse_time(firm['releaseDate'])
                         except ValueError:
                             pass
-                    yield ('{0} {1}'.format(aname, fname), bdata)
+                    yield '{0} {1}'.format(aname, fname), bdata
 
     def _get_disk_firmware_single(self, diskent, prefix=''):
         bdata = {}
@@ -346,8 +346,9 @@ class OEMHandler(generic.OEMHandler):
             elif strsize in ('remainder', 'rest'):
                 volsize = remainingcap
             elif strsize.endswith('%'):
-                volsize = int(params['capacity'] *
-                              float(strsize.replace('%', '')) / 100.0)
+                volsize = int(params['capacity']
+                              * float(strsize.replace('%', ''))
+                              / 100.0)
             else:
                 try:
                     volsize = int(strsize)
@@ -403,8 +404,9 @@ class OEMHandler(generic.OEMHandler):
 
     @property
     def wc(self):
-        if (not self._wc or (self._wc.vintage and
-                             self._wc.vintage < util._monotonic_time() - 30)):
+        if (not self._wc or (self._wc.vintage
+                             and self._wc.vintage < util._monotonic_time()
+                             - 30)):
             self._wc = self.get_webclient()
         return self._wc
 
@@ -533,8 +535,8 @@ class OEMHandler(generic.OEMHandler):
                 progress({'phase': 'upload',
                           'progress': 100.0 * rsp['received'] / rsp['size']})
             elif rsp['state'] != 'done':
-                if (rsp.get('status', None) == 413 or
-                        uploadthread.rspstatus == 413):
+                if (rsp.get('status', None) == 413
+                        or uploadthread.rspstatus == 413):
                     raise Exception('File is larger than supported')
                 raise Exception('Unexpected result:' + repr(rsp))
             uploadstate = rsp['state']
@@ -662,8 +664,7 @@ class OEMHandler(generic.OEMHandler):
 
         if rsp.get('return', -1) != 0:
             errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
-            raise Exception('Unexpected result starting update: ' +
-                            errmsg)
+            raise Exception('Unexpected result starting update: %s' % errmsg)
         complete = False
         while not complete:
             time.sleep(3)
@@ -677,15 +678,15 @@ class OEMHandler(generic.OEMHandler):
             if rsp['items'][0]['action_state'] == 'Complete OK':
                 complete = True
                 if rsp['items'][0]['action_status'] != 0:
-                    raise Exception('Unexpected failure: ' + repr(rsp))
+                    raise Exception('Unexpected failure: %s' % repr(rsp))
                 break
-            if (rsp['items'][0]['action_state'] == 'In Progress' and
-                    rsp['items'][0]['action_status'] == 2):
+            if (rsp['items'][0]['action_state'] == 'In Progress'
+                    and rsp['items'][0]['action_status'] == 2):
                 raise Exception('Unexpected failure: ' + repr(rsp))
             if rsp['items'][0]['action_state'] != 'In Progress':
                 raise Exception(
                     'Unknown condition waiting for '
-                    'firmware update: ' + repr(rsp))
+                    'firmware update: %s' % repr(rsp))
         if bank == 'backup':
             return 'complete'
         return 'pending'

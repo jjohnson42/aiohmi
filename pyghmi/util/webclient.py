@@ -94,18 +94,16 @@ def get_upload_form(filename, data, formname, otherfields):
             data = data.read()
         except AttributeError:
             pass
-        form = (b'--' +
-                BND +
-                '\r\nContent-Disposition: form-data; '
-                'name="{0}"; filename="{1}"\r\n'.format(
-                    formname, filename).encode('utf-8'))
+        form = (b'--' + BND
+                + '\r\nContent-Disposition: form-data; '
+                  'name="{0}"; filename="{1}"\r\n'.format(
+                      formname, filename).encode('utf-8'))
         form += b'Content-Type: application/octet-stream\r\n\r\n' + data
         for ofield in otherfields:
-            form += (b'\r\n--' +
-                     BND +
-                     '\r\nContent-Disposition: form-data; '
-                     'name="{0}"\r\n\r\n{1}'.format(
-                         ofield, otherfields[ofield]).encode('utf-8'))
+            form += (b'\r\n--' + BND
+                     + '\r\nContent-Disposition: form-data; '
+                       'name="{0}"\r\n\r\n{1}'.format(
+                           ofield, otherfields[ofield]).encode('utf-8'))
         form += b'\r\n--' + BND + b'--\r\n'
         uploadforms[filename] = form
         return form
@@ -304,8 +302,8 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
             pass
         self.rspstatus = rsp.status
         if rsp.status != 200:
-            raise Exception('Unexpected response in file upload: ' +
-                            rsp.read())
+            raise Exception('Unexpected response in file upload: %s'
+                            % rsp.read())
         body = rsp.read()
         if rsp.getheader('Content-Encoding', None) == 'gzip':
             body = gzip.GzipFile(fileobj=io.BytesIO(body)).read()

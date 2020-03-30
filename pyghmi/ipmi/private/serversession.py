@@ -49,9 +49,9 @@ class ServerSession(ipmisession.Session):
         # table 13-18, integrity, 1 for now is hmac-sha1-96, 4 is sha256
         # confidentiality: 1 is aes-cbc-128, the only one
         self.privlevel = 4
-        response = (bytearray([clienttag, 0, self.privlevel, 0]) +
-                    self.clientsessionid + self.managedsessionid +
-                    bytearray([
+        response = (bytearray([clienttag, 0, self.privlevel, 0])
+                    + self.clientsessionid + self.managedsessionid
+                    + bytearray([
                         0, 0, 0, 8, 1, 0, 0, 0,  # auth
                         1, 0, 0, 8, 1, 0, 0, 0,  # integrity
                         2, 0, 0, 8, 1, 0, 0, 0,  # privacy
@@ -114,9 +114,9 @@ class ServerSession(ipmisession.Session):
         uuidbytes = self.uuid.bytes
         self.uuiddata = uuidbytes
         self.Rc = os.urandom(16)
-        hmacdata = (self.clientsessionid + self.managedsessionid +
-                    self.Rm + self.Rc + uuidbytes +
-                    bytearray([self.rolem, len(self.username)]))
+        hmacdata = (self.clientsessionid + self.managedsessionid
+                    + self.Rm + self.Rc + uuidbytes
+                    + bytearray([self.rolem, len(self.username)]))
         hmacdata += self.username
         self.kuid = self.authdata[self.username.decode('utf-8')].encode(
             'utf-8')
@@ -128,8 +128,8 @@ class ServerSession(ipmisession.Session):
         # akin to a leak of /etc/shadow, not too worrisome if the secret
         # is complex, but terrible for most likely passwords selected by
         # a human
-        newmessage = (bytearray([clienttag, 0, 0, 0]) + self.clientsessionid +
-                      self.Rc + uuidbytes + authcode)
+        newmessage = (bytearray([clienttag, 0, 0, 0]) + self.clientsessionid
+                      + self.Rc + uuidbytes + authcode)
         self.send_payload(newmessage, constants.payload_types['rakp2'],
                           retry=False)
 
@@ -144,18 +144,15 @@ class ServerSession(ipmisession.Session):
         # even if rakp2 was good
         RmRc = self.Rm + self.Rc
         self.sik = hmac.new(self.kg,
-                            bytes(RmRc) +
-                            struct.pack("2B", self.rolem,
-                                        len(self.username)) +
-                            self.username, hashlib.sha1).digest()
+                            bytes(RmRc)
+                            + struct.pack("2B", self.rolem, len(self.username))
+                            + self.username, hashlib.sha1).digest()
         self.k1 = hmac.new(self.sik, b'\x01' * 20, hashlib.sha1).digest()
         self.k2 = hmac.new(self.sik, b'\x02' * 20, hashlib.sha1).digest()
         self.aeskey = self.k2[0:16]
-        hmacdata = self.Rc +\
-            self.clientsessionid +\
-            struct.pack("2B", self.rolem,
-                        len(self.username)) +\
-            self.username
+        hmacdata = (self.Rc + self.clientsessionid
+                    + struct.pack("2B", self.rolem, len(self.username))
+                    + self.username)
         expectedauthcode = hmac.new(self.kuid, bytes(hmacdata), hashlib.sha1
                                     ).digest()
         authcode = struct.pack("%dB" % len(data[8:]), *data[8:])
