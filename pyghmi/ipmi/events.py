@@ -474,7 +474,7 @@ class EventHandler(object):
         # evtoffset = specifictrap[3] & 0b1111
         deassertion = (specifictrap[3] & 0b10000000) == 0b10000000
         # alertseverity = petdata[26]
-        sensorid = petdata[28]
+        sensorid = '{0}.0'.format(petdata[28])
         event_data = petdata[31:34]
         event = {}
         seqnum = struct.unpack_from('>H', buffer(petdata[16:18]))[0]
@@ -498,7 +498,7 @@ class EventHandler(object):
             raise pygexc.PyghmiException(
                 'Unrecognized Event message version {0}'.format(eventdata[2]))
         sensor_type = eventdata[3]
-        sensorid = eventdata[4]
+        sensorid = '{0}.{1}'.format(eventdata[4], eventdata[1] & 0b11)
         event_data = eventdata[6:]
         deassertion = (eventdata[5] & 0b10000000 == 0b10000000)
         event_type = eventdata[5] & 0b1111111
