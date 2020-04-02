@@ -122,7 +122,8 @@ class Session(object):
         self.req.msg.netfn = netfn
         self.req.msg.cmd = command
         data = memoryview(bytearray(data))
-        self.databuffer[:len(data)] = data[:len(data)]
+        if data:
+            self.databuffer[:len(data)] = data[:len(data)]
         self.req.msg.data_len = len(data)
         fcntl.ioctl(self.ipmidev, IPMICTL_SEND_COMMAND, self.req)
         self.await_reply()
