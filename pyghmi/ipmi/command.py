@@ -25,6 +25,7 @@ import pyghmi.constants as const
 import pyghmi.exceptions as exc
 import pyghmi.ipmi.events as sel
 import pyghmi.ipmi.fru as fru
+import pyghmi.ipmi.oem.generic as genericoem
 from pyghmi.ipmi.oem.lookup import get_oem_handler
 import pyghmi.ipmi.private.util as pygutil
 from pyghmi.ipmi import sdr
@@ -248,6 +249,10 @@ class Command(object):
 
         """
         if self._oemknown:
+            return
+        if self.bmc is None:
+            self._oem = genericoem.OEMHandler(None, None)
+            self._oemknown = True
             return
         self._oem, self._oemknown = get_oem_handler(self._get_device_id(),
                                                     self)
