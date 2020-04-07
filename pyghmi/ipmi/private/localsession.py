@@ -121,9 +121,12 @@ class Session(object):
         self.req.addr = ctypes.pointer(self.addr)
         self.req.msg.netfn = netfn
         self.req.msg.cmd = command
-        data = memoryview(bytearray(data))
         if data:
-            self.databuffer[:len(data)] = data[:len(data)]
+            data = memoryview(bytearray(data))
+            try:
+                self.databuffer[:len(data)] = data[:len(data)]
+            except ValueError:
+                self.databuffer[:len(data)] = data[:len(data)].tobytes()
         self.req.msg.data_len = len(data)
         fcntl.ioctl(self.ipmidev, IPMICTL_SEND_COMMAND, self.req)
         self.await_reply()
