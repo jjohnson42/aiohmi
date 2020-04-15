@@ -593,8 +593,12 @@ class Command(object):
                 errmsg = [
                     x.get('Message', x['MessageId']) for x in info.get(
                         'error', {}).get('@Message.ExtendedInfo', {})]
+                msgid = [
+                    x['MessageId'] for x in info.get(
+                        'error', {}).get('@Message.ExtendedInfo', {})]
                 errmsg = ','.join(errmsg)
-                raise exc.RedfishError(errmsg)
+                msgid = ','.join(msgid)
+                raise exc.RedfishError(errmsg, msgid=msgid)
             except (ValueError, KeyError):
                 raise exc.PyghmiException(str(url) + ":" + res[0])
         if payload is None and method is None:
@@ -826,11 +830,10 @@ class Command(object):
         self._do_web_request(url, {'ResetType': action})
 
     def set_identify(self, on=True, blink=None):
-        thetag = self.sysinfo.get('@odata.etag', None)
         self._do_web_request(
             self.sysurl,
             {'IndicatorLED': 'Blinking' if blink else 'Lit' if on else 'Off'},
-            method='PATCH', etag=thetag)
+            method='PATCH', etag='*')
 
     _idstatemap = {
         'Blinking': 'blink',

@@ -27,7 +27,9 @@ class IpmiException(PyghmiException):
 
 
 class RedfishError(PyghmiException):
-    pass
+    def __init__(self, text='', msgid=None):
+        super(RedfishError, self).__init__(text)
+        self.msgid = msgid
 
 
 class UnrecognizedCertificate(Exception):
