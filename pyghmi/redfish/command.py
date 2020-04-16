@@ -1070,6 +1070,15 @@ class Command(object):
         self._do_web_request(rb, parms)
 
     def set_system_configuration(self, changeset):
+        while True:
+            try:
+                self._set_system_configuration(changeset)
+                return
+            except exc.RedfishError as re:
+                if 'etag' not in re.msgid.lower():
+                    raise
+
+    def _set_system_configuration(self, changeset):
         currsettings, reginfo = self._getsyscfg()
         rawsettings = self._do_web_request(self._biosurl, cache=False)
         rawsettings = rawsettings.get('Attributes', {})
