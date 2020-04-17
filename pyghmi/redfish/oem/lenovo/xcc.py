@@ -140,7 +140,9 @@ class OEMHandler(generic.OEMHandler):
         pools = []
         for item in rsp.get('items', []):
             for cinfo in item['controllerInfo']:
-                cid = cinfo['id']
+                cid = '{0},{1},{2}'.format(
+                    cinfo['id'], cinfo.get('slotNo', -1), cinfo.get(
+                        'type', -1))
                 for pool in cinfo['pools']:
                     volumes = []
                     disks = []
@@ -232,9 +234,18 @@ class OEMHandler(generic.OEMHandler):
 
     def _raid_number_map(self, controller):
         themap = {}
+        cid = controller.split(',')
         rsp = self.wc.grab_json_response(
             '/api/function/raid_conf?'
-            'params=raidlink_GetDisksToConf,{0}'.format(controller))
+            'params=raidlink_GetDisksToConf,{0}'.format(cid[0]))
+        if rsp.get('return') == 22:  # New style firmware
+            if cid[2] == 2:
+                arg = '{0},{1}'.format(cid[1], cid[2])
+            else:
+                arg = '{0},{1}'.format(cid[0], cid[2])
+            arg = 'params=raidlink_GetDisksToConf,{0}'.format(arg)
+            rsp = self.wc.grab_json_response(
+                '/api/function/raid_conf?{0}'.format(arg))
         for lvl in rsp['items'][0]['supported_raidlvl']:
             mapdata = (lvl['rdlvl'], lvl['maxSpan'])
             raidname = lvl['rdlvlstr'].replace(' ', '').lower()
@@ -283,11 +294,18 @@ class OEMHandler(generic.OEMHandler):
             else:
                 hstr = ''
             drvstr = '|'.join([str(x.id[1]) for x in drives]) + '|'
+            ctl = controller.split(',')
             pth = '/api/function/raid_conf?params=raidlink_CheckConfisValid'
-            args = [pth, controller, rdlvl, spancount, drivesperspan, drvstr,
+            args = [pth, ctl[0], rdlvl, spancount, drivesperspan, drvstr,
                     hstr]
             url = ','.join([str(x) for x in args])
             rsp = self.wc.grab_json_response(url)
+            if rsp.get('return', -1) == 22:
+                args.append(ctl[1])
+                args = [pth, ctl[0], rdlvl, spancount, drivesperspan, drvstr,
+                        hstr, ctl[1]]
+                url = ','.join([str(x) for x in args])
+                rsp = self.wc.grab_json_response(url)
             if rsp['items'][0]['errcode'] == 16:
                 raise pygexc.InvalidParameterValue('Incorrect number of disks')
             elif rsp['items'][0]['errcode'] != 0:
@@ -310,8 +328,9 @@ class OEMHandler(generic.OEMHandler):
 
     def _create_array(self, pool):
         params = self._parse_array_spec(pool)
+        cid = params['controller'].split(',')[0]
         url = '/api/function/raid_conf?params=raidlink_GetDefaultVolProp'
-        args = (url, params['controller'], 0, params['drives'])
+        args = (url, cid, 0, params['drives'])
         props = self.wc.grab_json_response(','.join([str(x) for x in args]))
         props = props['items'][0]
         volumes = pool.volumes
@@ -363,12 +382,23 @@ class OEMHandler(generic.OEMHandler):
                 name, volsize, stripsize, props['cpwb'], props['cpra'],
                 props['cpio'], props['ap'], props['dcp'], props['initstate']))
         url = '/api/function'
+        cid = params['controller'].split(',')
+        cnum = cid[0]
         arglist = '{0},{1},{2},{3},{4},{5},'.format(
-            params['controller'], params['raidlevel'], params['spans'],
+            cnum, params['raidlevel'], params['spans'],
             params['perspan'], params['drives'], params['hotspares'])
         arglist += ''.join(vols)
         parms = {'raidlink_AddNewVolWithNaAsync': arglist}
         rsp = self.wc.grab_json_response(url, parms)
+        if rsp['return'] == 14:  # newer firmware
+            if cid[2] == 2:
+                cnum = cid[1]
+            arglist = '{0},{1},{2},{3},{4},{5},'.format(
+                cnum, params['raidlevel'], params['spans'],
+                params['perspan'], params['drives'], params['hotspares'])
+            arglist += ''.join(vols) + ',{0}'.format(cid[2])
+            parms = {'raidlink_AddNewVolWithNaAsync': arglist}
+            rsp = self.wc.grab_json_response(url, parms)
         if rsp['return'] != 0:
             raise Exception(
                 'Unexpected response to add volume command: ' + repr(rsp))
@@ -378,9 +408,18 @@ class OEMHandler(generic.OEMHandler):
         realcfg = self.get_storage_configuration(False)
         for pool in cfgspec.arrays:
             for volume in pool.volumes:
-                vid = '{0},{1}'.format(volume.id[1], volume.id[0])
+                cid = volume.id[0].split(',')
+                if cid[2] == 2:
+                    vid = '{0},{1},{2}'.format(volume.id[1], cid[1], cid[2])
+                else:
+                    vid = '{0},{1},{2}'.format(volume.id[1], cid[0], cid[2])
                 rsp = self.wc.grab_json_response(
                     '/api/function', {'raidlink_RemoveVolumeAsync': vid})
+                if rsp.get('return', -1) == 2:
+                    # older firmware
+                    vid = '{0},{1}'.format(volume.id[1], cid[0])
+                    rsp = self.wc.grab_json_response(
+                        '/api/function', {'raidlink_RemoveVolumeAsync': vid})
                 if rsp.get('return', -1) != 0:
                     raise Exception(
                         'Unexpected return to volume deletion: ' + repr(rsp))
