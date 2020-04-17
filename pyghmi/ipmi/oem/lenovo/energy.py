@@ -30,7 +30,7 @@ class EnergyManager(object):
                                        data=self.iana + b'\x00\x00\x01')
         except pygexc.IpmiException as ie:
             if ie.ipmicode == 193:  # try again with IBM IANA
-                self.iana = bytearray('\x4d\x4f\x00')
+                self.iana = bytearray(b'\x4d\x4f\x00')
                 rsp = ipmicmd.xraw_command(netfn=0x2e, command=0x82,
                                            data=self.iana + '\x00\x00\x01')
             else:
