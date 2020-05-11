@@ -22,8 +22,9 @@ import termios
 import threading
 import tty
 
-from pyghmi.ipmi import console
 import six
+
+from pyghmi.ipmi import console
 
 
 def _doinput(sol):

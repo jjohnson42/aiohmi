@@ -36,10 +36,11 @@ import string
 import struct
 import weakref
 
+import six
+
 import pyghmi.constants as const
 import pyghmi.exceptions as exc
 import pyghmi.ipmi.private.constants as ipmiconst
-import six
 
 try:
     import cPickle as pickle

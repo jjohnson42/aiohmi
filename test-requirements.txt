@@ -11,4 +11,4 @@ stestr>=1.0.0 # Apache-2.0
 testscenarios>=0.4
 testtools>=2.2.0
 oslotest>=3.2.0 # Apache-2.0
-flake8-import-order>=0.13 # LGPLv3
+flake8-import-order>=0.17.1 # LGPLv3

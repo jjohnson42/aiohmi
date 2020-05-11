@@ -25,8 +25,9 @@ import socket
 import ssl
 import threading
 
-import pyghmi.exceptions as pygexc
 import six
+
+import pyghmi.exceptions as pygexc
 
 try:
     import Cookie

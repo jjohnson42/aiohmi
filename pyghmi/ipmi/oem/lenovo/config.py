@@ -21,9 +21,10 @@ import ast
 import random
 import struct
 
+import six
+
 import pyghmi.exceptions as pygexc
 from pyghmi.ipmi.oem.lenovo import EfiDecompressor
-import six
 
 try:
     import EfiCompressor

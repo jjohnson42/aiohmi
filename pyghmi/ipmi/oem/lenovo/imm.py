@@ -27,6 +27,8 @@ import socket
 import struct
 import weakref
 
+import six
+
 import pyghmi.constants as pygconst
 import pyghmi.exceptions as pygexc
 import pyghmi.ipmi.oem.lenovo.config as config
@@ -37,7 +39,6 @@ from pyghmi.ipmi import sdr
 import pyghmi.media as media
 import pyghmi.storage as storage
 import pyghmi.util.webclient as webclient
-import six
 
 try:
     from urllib import urlencode

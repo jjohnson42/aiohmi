@@ -18,12 +18,13 @@ import weakref
 from xml.etree.ElementTree import fromstring
 import zipfile
 
+import six
+
 import pyghmi.constants as pygconst
 import pyghmi.exceptions as pygexc
 import pyghmi.ipmi.private.session as ipmisession
 from pyghmi.ipmi import sdr
 import pyghmi.util.webclient as webclient
-import six
 
 try:
     from urllib import urlencode

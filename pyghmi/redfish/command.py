@@ -31,6 +31,7 @@ import sys
 import time
 
 from dateutil import tz
+
 import pyghmi.constants as const
 import pyghmi.exceptions as exc
 import pyghmi.redfish.oem.lookup as oem
