@@ -520,10 +520,14 @@ class OEMHandler(generic.OEMHandler):
         if rsp.get('return', -1) != 0:
             errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
             raise Exception('Unrecognized return: ' + errmsg)
-        rsp = self.wc.grab_json_response('/api/providers/rp_rdoc_getfiles')
-        if 'items' not in rsp or len(rsp['items']) == 0:
-            raise Exception(
-                'Image upload was not accepted, it may be too large')
+        ready = False
+        while not ready:
+            time.sleep(3)
+            rsp = self.wc.grab_json_response('/api/providers/rp_rdoc_getfiles')
+            if 'items' not in rsp or len(rsp['items']) == 0:
+                raise Exception(
+                    'Image upload was not accepted, it may be too large')
+            ready = rsp['items'][0]['size'] != 0
         self._refresh_token()
         rsp = self.wc.grab_json_response('/api/providers/rp_rdoc_mountall',
                                          {})

@@ -366,6 +366,7 @@ class OEMHandler(generic.OEMHandler):
                                       self.oemid['product_id'])
 
     tsma_ids = ((19046, 32, 1287),)
+
     @property
     def has_tsma(self):
         currid = (self.oemid['manufacturer_id'], self.oemid['device_id'],
