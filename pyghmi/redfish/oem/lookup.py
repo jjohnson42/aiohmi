@@ -24,7 +24,7 @@ def get_oem_handler(sysinfo, sysurl, webclient, cache):
     for oem in sysinfo.get('Oem', {}):
         if oem in OEMMAP:
             return OEMMAP[oem].get_handler(sysinfo, sysurl, webclient, cache)
-    for oem in sysinfo.get('Links', {}).get('OEM'):
+    for oem in sysinfo.get('Links', {}).get('OEM', []):
         if oem in OEMMAP:
             return OEMMAP[oem].get_handler(sysinfo, sysurl, webclient, cache)
     return generic.OEMHandler(sysinfo, sysurl, webclient, cache)
