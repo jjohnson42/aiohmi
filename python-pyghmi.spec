@@ -33,7 +33,7 @@ BuildRequires: python2-devel
 BuildRequires: python2-pbr
 BuildRequires: python2-setuptools
 
-Requires: python2-cryptography >= 2.1
+Requires: python2-cryptography >= 2.1, python2-cryptography
 
 %description -n python2-%{sname}
 %{common_desc}
@@ -55,7 +55,7 @@ BuildRequires: python3-devel
 BuildRequires: python3-pbr
 BuildRequires: python3-setuptools
 
-Requires: python3-cryptography >= 2.1
+Requires: python3-cryptography >= 2.1, python3-dateutil
 
 %description -n python3-%{sname}
 %{common_desc}
