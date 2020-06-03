@@ -1942,12 +1942,16 @@ class XCCClient(IMMClient):
             'E': pygconst.Health.Critical,
             'W': pygconst.Health.Warning,
         }
+        infoevents = False
         for item in rsp.get('items', ()):
             # while usually the ipmi interrogation shall explain things,
             # just in case there is a gap, make sure at least the
             # health field is accurately updated
             itemseverity = hmap.get(item.get('severity', 'E'),
                                     pygconst.Health.Critical)
+            if itemseverity == pygconst.Health.Ok:
+                infoevents = True
+                continue
             if (summary['health'] < itemseverity):
                 summary['health'] = itemseverity
             if item['cmnid'] == 'FQXSPPW0104J':
@@ -1975,7 +1979,8 @@ class XCCClient(IMMClient):
                     'health': itemseverity,
                     'type': item['source'],
                 }, ''))
-        if summary.get('health', pygconst.Health.Ok) == pygconst.Health.Ok:
+        if (summary.get('health', pygconst.Health.Ok) == pygconst.Health.Ok
+                and not infoevents):
             # Fault LED is lit without explanation, mark to encourage
             # examination
             summary['health'] = pygconst.Health.Warning
