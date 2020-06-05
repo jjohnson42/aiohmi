@@ -518,6 +518,10 @@ class Command(object):
     def sysinfo(self):
         return self._do_web_request(self.sysurl)
 
+    @property
+    def bmcinfo(self):
+        return self._do_web_request(self._bmcurl)
+
     def get_power(self):
         currinfo = self._do_web_request(self.sysurl, cache=False)
         return {'powerstate': str(currinfo['PowerState'].lower())}
@@ -1403,7 +1407,7 @@ class Command(object):
     def oem(self):
         if not self._oem:
             self._oem = oem.get_oem_handler(
-                self.sysinfo, self.sysurl, self.wc, self._urlcache)
+                self.sysinfo, self.sysurl, self.wc, self._urlcache, self)
             self._oem.set_credentials(self.username, self.password)
         return self._oem
 

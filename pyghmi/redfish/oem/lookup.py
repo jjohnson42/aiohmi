@@ -20,11 +20,18 @@ OEMMAP = {
 }
 
 
-def get_oem_handler(sysinfo, sysurl, webclient, cache):
+def get_oem_handler(sysinfo, sysurl, webclient, cache, cmd):
     for oem in sysinfo.get('Oem', {}):
         if oem in OEMMAP:
-            return OEMMAP[oem].get_handler(sysinfo, sysurl, webclient, cache)
+            return OEMMAP[oem].get_handler(sysinfo, sysurl, webclient, cache,
+                                           cmd)
     for oem in sysinfo.get('Links', {}).get('OEM', []):
         if oem in OEMMAP:
-            return OEMMAP[oem].get_handler(sysinfo, sysurl, webclient, cache)
+            return OEMMAP[oem].get_handler(sysinfo, sysurl, webclient, cache,
+                                           cmd)
+    bmcinfo = cmd.bmcinfo
+    for oem in bmcinfo.get('Oem', {}):
+        if oem in OEMMAP:
+            return OEMMAP[oem].get_handler(sysinfo, sysurl, webclient, cache,
+                                           cmd)
     return generic.OEMHandler(sysinfo, sysurl, webclient, cache)

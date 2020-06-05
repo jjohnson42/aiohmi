@@ -17,8 +17,12 @@ from pyghmi.redfish.oem.lenovo import tsma
 from pyghmi.redfish.oem.lenovo import xcc
 
 
-def get_handler(sysinfo, sysurl, webclient, cache):
+def get_handler(sysinfo, sysurl, webclient, cache, cmd):
     leninf = sysinfo.get('Oem', {}).get('Lenovo', {})
+    if not leninf:
+        bmcinfo = cmd.bmcinfo
+        if 'Ami' in bmcinfo.get('Oem', {}):
+            return tsma.TsmHandler(sysinfo, sysurl, webclient, cache)
     if 'FrontPanelUSB' in leninf or sysinfo.get('SKU', '').startswith('7X58'):
         return xcc.OEMHandler(sysinfo, sysurl, webclient, cache)
     else:
