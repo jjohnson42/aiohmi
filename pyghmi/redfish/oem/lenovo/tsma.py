@@ -125,6 +125,8 @@ class TsmHandler(generic.OEMHandler):
                 if currprog:
                     progress({'phase': 'download',
                               'progress': 100 * currprog})
+        if fd.exc:
+            raise fd.exc
         if progress:
             progress({'phase': 'complete'})
         return savefile
