@@ -135,7 +135,10 @@ class OEMHandler(generic.OEMHandler):
 
     def get_storage_configuration(self, logout=True):
         rsp = self.wc.grab_json_response(
-            '/api/function/raid_alldevices?params=storage_GetAllDevices')
+            '/api/function/raid_alldevices?params=storage_GetAllDevices,0')
+        if not rsp:
+            rsp = self.wc.grab_json_response(
+                '/api/function/raid_alldevices?params=storage_GetAllDevices')
         standalonedisks = []
         pools = []
         for item in rsp.get('items', []):
