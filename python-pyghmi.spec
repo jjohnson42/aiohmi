@@ -33,7 +33,7 @@ BuildRequires: python2-devel
 BuildRequires: python2-pbr
 BuildRequires: python2-setuptools
 
-Requires: python2-cryptography >= 2.1, python2-cryptography
+Requires: python2-cryptography >= 2.1, python2-cryptography, python2-dateutil
 
 %description -n python2-%{sname}
 %{common_desc}
