@@ -332,6 +332,8 @@ class IMMClient(object):
             if not isinstance(ret, str):
                 ret = ret.decode('utf-8')
             return ret
+        if propdata[0] == 0x44:  # dword
+            return propdata[1:5]
         else:
             raise Exception('Unknown format for property: ' + repr(propdata))
 
@@ -892,6 +894,13 @@ class XCCClient(IMMClient):
             settings['smm']['value'] = 'Enable'
         else:
             settings['smm']['value'] = None
+        smmip = self.get_property('/v2/ibmc/smm/smm_ip')
+        if smmip:
+            smmip = socket.inet_ntoa(smmip[-1::-1])
+            settings['smm_ip'] = {
+                'help': 'Current IPv4 address as reported by SMM, read-only',
+                'value': smmip,
+            }
         return settings
 
     rulemap = {
