@@ -69,8 +69,8 @@ def fpc_read_dc_output(ipmicmd):
 
 def fpc_read_fan_power(ipmicmd):
     rsp = ipmicmd.xraw_command(netfn=0x32, command=0x90, data=(3,))
-    rsp = rsp['data']
-    rsp += '\x00'
+    rsp = bytes(rsp['data'])
+    rsp += b'\x00'
     return struct.unpack_from('<I', rsp[1:])[0] / 100.0
 
 
@@ -119,7 +119,7 @@ def fpc_get_nodeperm(ipmicmd, number, sz):
     if len(rsp['data']) == 4:  # different gens handled rc differently
         rsp['data'] = b'\x00' + bytes(rsp['data'])
     elif len(rsp['data']) == 6:  # New FPC format
-        rsp['data'] = rsp['data'][:2] + rsp['data'][3:]
+        rsp['data'] = bytes(rsp['data'][:2]) + bytes(rsp['data'][3:])
     perminfo = bytearray(rsp['data'])[1]
     if sz == 6:  # FPC
         permfail = ('\x02', '\x03')
