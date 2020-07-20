@@ -19,7 +19,6 @@ understand how the ipmi_command class workes.
 
 import functools
 import os
-import string
 import sys
 
 from pyghmi.ipmi import command
@@ -77,7 +76,7 @@ def main():
     bmc = sys.argv[1]
     userid = sys.argv[2]
 
-    bmcs = string.split(bmc, ",")
+    bmcs = bmc.split(',')
     ipmicmd = None
     for bmc in bmcs:
         # NOTE(etingof): is it right to have `ipmicmd` overridden?
