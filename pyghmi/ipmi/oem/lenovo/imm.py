@@ -896,7 +896,7 @@ class XCCClient(IMMClient):
             settings['smm']['value'] = None
         smmip = self.get_property('/v2/ibmc/smm/smm_ip')
         if smmip:
-            smmip = socket.inet_ntoa(smmip[-1::-1])
+            smmip = socket.inet_ntoa(bytes(smmip[-1::-1]))
             settings['smm_ip'] = {
                 'help': 'Current IPv4 address as reported by SMM, read-only',
                 'value': smmip,
