@@ -538,6 +538,8 @@ class SMMClient(object):
             if rsp.status != 200:
                 raise Exception(rsp.read())
             indexhtml = rsp.read()
+            if not isinstance(indexhtml, str):
+                indexhtml = indexhtml.decode('utf8')
             for line in indexhtml.split('\n'):
                 if '"ST1"' in line:
                     self.st1 = line.split()[-1].replace(
@@ -551,6 +553,8 @@ class SMMClient(object):
             body = rsp.read()
             if rsp.status != 200:
                 raise Exception(body)
+            if not isinstance(body, str):
+                body = body.decode('utf8')
             for line in body.split('\n'):
                 if '"ST1"' in line:
                     self.st1 = line.split()[-1].replace(
