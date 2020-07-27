@@ -320,6 +320,8 @@ class SMMClient(object):
             'possible': [self.fanmodes[x] for x in self.fanmodes]}
         powercfg = self.ipmicmd.xraw_command(0x32, 0xa2)
         powercfg = bytearray(powercfg['data'])
+        if len(powercfg) == 5:
+            powercfg = powercfg[1:]
         val = powercfg[0]
         if val == 2:
             val = 'N+N'
@@ -382,7 +384,7 @@ class SMMClient(object):
             pass
         return settings
 
-    def set_bmc_configuration(self, changeset):
+    def set_bmc_configuration(self, changeset, variant):
         rules = []
         powercfg = [None, None]
         sendhost = None
@@ -435,14 +437,20 @@ class SMMClient(object):
             self.wc.request('POST', '/data', rules)
             self.wc.getresponse().read()
         if powercfg != [None, None]:
-            if None in powercfg:
-                currcfg = self.ipmicmd.xraw_command(0x32, 0xa2)
-                currcfg = bytearray(currcfg['data'])
-                if powercfg[0] is None:
-                    powercfg[0] = currcfg[0]
-                if powercfg[1] is None:
-                    powercfg[1] = currcfg[1]
-            self.ipmicmd.xraw_command(0x32, 0xa3, data=powercfg)
+            if variant == 2:
+                if None in powercfg:
+                    currcfg = self.ipmicmd.xraw_command(0x32, 0xa2)
+                    currcfg = bytearray(currcfg['data'])
+                    if powercfg[0] is None:
+                        powercfg[0] = currcfg[0]
+                    if powercfg[1] is None:
+                        powercfg[1] = currcfg[1]
+                self.ipmicmd.xraw_command(0x32, 0xa3, data=powercfg)
+            elif variant == 6:
+                if powercfg[0] is not None:
+                    self.ipmicmd.xraw_command(0x32, 0xa3, data=powercfg[:1])
+                if powercfg[1] is not None:
+                    self.ipmicmd.xraw_command(0x32, 0x9c, data=powercfg[1:])
         if sendhost is not None:
             sendhost = 1 if sendhost else 0
             self.ipmicmd.xraw_command(0xc, 1, data=[1, 0xc5, sendhost])
