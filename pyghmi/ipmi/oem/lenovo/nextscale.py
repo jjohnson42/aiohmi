@@ -304,8 +304,9 @@ class SMMClient(object):
         rspbody = rsp.read()
         accountinfo = fromstring(rspbody)
         for rule in self.rulemap:
-            settings[rule] = {'value': int(
-                accountinfo.find(self.rulemap[rule]).text)}
+            ruleinfo = accountinfo.find(self.rulemap[rule])
+            if ruleinfo:
+                settings[rule] = {'value': int(ruleinfo.text)}
         rsp = self.ipmicmd.xraw_command(0x34, 3)
         fanmode = self.fanmodes[bytearray(rsp['data'])[0]]
         settings['fanspeed'] = {
@@ -320,14 +321,16 @@ class SMMClient(object):
         powercfg = self.ipmicmd.xraw_command(0x32, 0xa2)
         powercfg = bytearray(powercfg['data'])
         val = powercfg[0]
-        if val == 1:
+        if val == 2:
+            val = 'N+N'
+        elif val == 1:
             val = 'N+1'
         elif val == 0:
             val = 'Disable'
         settings['power_redundancy'] = {
             'default': 'N+1',
             'value': val,
-            'possible': ['N+1', 'Disable'],
+            'possible': ['N+N', 'N+1', 'Disable'],
             'help': ('Configures allowed power budget according to expected '
                      'redundancy. If N+1, power caps will be set to keep '
                      'servers from using more power than the installed power '
@@ -394,7 +397,9 @@ class SMMClient(object):
                     rules.append('{0}:{1}'.format(
                         self.rulemap[rule], changeset[key]['value']))
             if fnmatch.fnmatch('power_redundancy', key.lower()):
-                if 'n+1'.startswith(changeset[key]['value'].lower()):
+                if 'n+n'.startswith(changeset[key]['value'].lower()):
+                    powercfg[0] = 2
+                elif 'n+1'.startswith(changeset[key]['value'].lower()):
                     powercfg[0] = 1
                 elif 'disable'.startswith(changeset[key]['value'].lower()):
                     powercfg[0] = 0
