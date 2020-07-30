@@ -962,16 +962,19 @@ class XCCClient(IMMClient):
             return None
         if not login:
             return wc
+        referer = 'https://{0}/'.format(self.imm)
         adata = json.dumps({'username': self.username,
                             'password': self.password
                             })
         headers = {'Connection': 'keep-alive',
+                   'Referer': referer,
                    'Content-Type': 'application/json'}
         wc.request('POST', '/api/login', adata, headers)
         rsp = wc.getresponse()
         if rsp.status == 200:
             rspdata = json.loads(rsp.read())
             wc.set_header('Content-Type', 'application/json')
+            wc.set_header('Referer', referer)
             wc.set_header('Authorization', 'Bearer ' + rspdata['access_token'])
             if '_csrf_token' in wc.cookies:
                 wc.set_header('X-XSRF-TOKEN', wc.cookies['_csrf_token'])
