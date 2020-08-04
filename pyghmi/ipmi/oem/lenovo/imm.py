@@ -124,8 +124,11 @@ class IMMClient(object):
         self.ipmicmd = weakref.proxy(ipmicmd)
         self.updating = False
         self.imm = ipmicmd.bmc
+        srv = self.imm
+        if ':' in srv:
+            srv = '[{0}]'.format(srv)
         self.adp_referer = 'https://{0}/designs/imm/index-console.php'.format(
-            self.imm)
+            srv)
         if ipmicmd.ipmi_session.password:
             self.username = ipmicmd.ipmi_session.userid.decode('utf-8')
             self.password = ipmicmd.ipmi_session.password.decode('utf-8')
@@ -962,7 +965,10 @@ class XCCClient(IMMClient):
             return None
         if not login:
             return wc
-        referer = 'https://{0}/'.format(self.imm)
+        srv = self.imm
+        if ':' in srv:
+            srv = '[{0}]'.format(self.imm)
+        referer = 'https://{0}/'.format(srv)
         adata = json.dumps({'username': self.username,
                             'password': self.password
                             })
