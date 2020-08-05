@@ -463,12 +463,13 @@ class OEMHandler(generic.OEMHandler):
             return None
         if not login:
             return wc
-        referer = 'https://{0}/'.format(wc.thehost)
+        referer = 'https://xcc/'
         adata = json.dumps({'username': self.username,
                             'password': self.password
                             })
         headers = {'Connection': 'keep-alive',
                    'Referer': referer,
+                   'Host': 'xcc',
                    'Content-Type': 'application/json'}
         wc.request('POST', '/api/login', adata, headers)
         rsp = wc.getresponse()
@@ -477,6 +478,7 @@ class OEMHandler(generic.OEMHandler):
             wc.set_header('Content-Type', 'application/json')
             wc.set_header('Authorization', 'Bearer ' + rspdata['access_token'])
             wc.set_header('Referer', referer)
+            wc.set_header('Host', 'xcc')
             if '_csrf_token' in wc.cookies:
                 wc.set_header('X-XSRF-TOKEN', wc.cookies['_csrf_token'])
             return wc

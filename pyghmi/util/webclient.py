@@ -141,7 +141,7 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
             self.cert_reqs = ssl.CERT_NONE  # use custom validation
         else:
             self.cert_reqs = ssl.CERT_REQUIRED  # use standard validation
-        if '[' not in host and '%' in host:
+        if '[' not in host and '%' in host and 'Host'not in self.stdheaders:
             self.stdheaders['Host'] = '[' + host[:host.find('%')] + ']'
 
     def dupe(self):
