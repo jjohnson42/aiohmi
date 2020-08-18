@@ -54,6 +54,30 @@ TYPE_FRU = 2
 shared_sdrs = {}
 
 
+oem_type_offsets = {
+    343: {  # Intel
+        149: {  # Cascade Lake-AP
+            0x7a: {
+                0xda: {
+                    3: {
+                        'desc': 'Allowed',
+                        'severity': const.Health.Ok,
+                    },
+                    4: {
+                        'desc': 'Restricted',
+                        'severity': const.Health.Ok,
+                    },
+                    5: {
+                        'desc': 'Disabled',
+                        'severity': const.Health.Ok,
+                    },
+                },
+            },
+        },
+    },
+}
+
+
 def ones_complement(value, bits):
     # utility function to help with the large amount of 2s
     # complement prevalent in ipmi spec
@@ -264,7 +288,10 @@ class SDREntry(object):
     external code to pay attention to this class.
     """
 
-    def __init__(self, entrybytes, ipmicmd, reportunsupported=False):
+    def __init__(self, entrybytes, ipmicmd, reportunsupported=False,
+                 mfg_id=0, prod_id=0):
+        self.mfg_id = mfg_id
+        self.prod_id = prod_id
         # ignore record id for now, we only care about the sensor number for
         # moment
         self.readable = True
@@ -436,6 +463,11 @@ class SDREntry(object):
                 mapping = ipmiconst.sensor_type_offsets
                 desc = mapping[self.sensor_type_number][state]['desc']
                 health = mapping[self.sensor_type_number][state]['severity']
+            elif self.reading_type >= 0x70 and self.reading_type <= 0x7f:
+                sensedata = oem_type_offsets[self.mfg_id][self.prod_id][
+                    self.reading_type][self.sensor_type_number][state]
+                desc = sensedata['desc']
+                health = sensedata['severity']
             else:
                 desc = "Unknown state %d" % state
                 health = const.Health.Warning
@@ -801,7 +833,8 @@ class SDR(object):
                 yield number
 
     def add_sdr(self, sdrbytes):
-        newent = SDREntry(sdrbytes, self.ipmicmd)
+        newent = SDREntry(sdrbytes, self.ipmicmd, False, self.mfg_id,
+                          self.prod_id)
         if newent.sdrtype == TYPE_SENSOR:
             id = '{0}.{1}'.format(newent.sensor_number, newent.sensor_lun)
             if id in self.sensors:
