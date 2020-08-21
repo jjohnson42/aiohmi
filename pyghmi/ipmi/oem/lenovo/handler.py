@@ -986,7 +986,8 @@ class OEMHandler(generic.OEMHandler):
         if self.has_xcc:
             return self.immhandler.set_bmc_configuration(changeset)
         if self.is_fpc:
-            return self.smmhandler.set_bmc_configuration(changeset)
+            return self.smmhandler.set_bmc_configuration(
+                changeset, self._fpc_variant)
         return super(OEMHandler, self).set_bmc_configuration(changeset)
 
     def get_system_configuration(self, hideadvanced):

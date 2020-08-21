@@ -507,12 +507,12 @@ class SMMClient(object):
 
     def process_fru(self, fru):
         # TODO(jjohnson2): can also get EIOM, SMM, and riser data if warranted
-        fru['Serial Number'] = self.ipmicmd.xraw_command(
-            netfn=0x32, command=0xb0, data=(5, 1))['data'][:].strip(
-                ' \x00\xff').replace('\xff', '')
-        fru['Model'] = self.ipmicmd.xraw_command(
-            netfn=0x32, command=0xb0, data=(5, 0))['data'][:].strip(
-                ' \x00\xff').replace('\xff', '')
+        fru['Serial Number'] = bytes(self.ipmicmd.xraw_command(
+            netfn=0x32, command=0xb0, data=(5, 1))['data'][:]).strip(
+                b' \x00\xff').replace(b'\xff', b'')
+        fru['Model'] = bytes(self.ipmicmd.xraw_command(
+            netfn=0x32, command=0xb0, data=(5, 0))['data'][:]).strip(
+                b' \x00\xff').replace(b'\xff', b'')
         return fru
 
     def get_webclient(self):
