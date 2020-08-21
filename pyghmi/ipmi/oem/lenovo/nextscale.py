@@ -634,6 +634,8 @@ class SMMClient(object):
             1 if enabled else 0))
         rsp = self.wc.getresponse()
         result = rsp.read()
+        if not isinstance(result, str):
+            result = result.decode('utf8')
         self.logout()
         if '<status>ok</status>' not in result:
             raise Exception("Unrecognized result: " + result)
@@ -643,6 +645,8 @@ class SMMClient(object):
             index + 1, server))
         rsp = self.wc.getresponse()
         result = rsp.read()
+        if not isinstance(result, str):
+            result = result.decode('utf8')
         if '<status>ok</status>' not in result:
             raise Exception("Unrecognized result: " + result)
         self.logout()
