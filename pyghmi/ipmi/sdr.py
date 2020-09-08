@@ -377,6 +377,7 @@ class SDREntry(object):
         # event only, compact and full are very similar
         # this function handles the common aspects of compact and full
         # offsets from spec, minus 6
+        self.sensor_owner = entry[0]
         self.sensor_lun = entry[1] & 0x03
         self.sensor_number = entry[2]
         self.entity = ipmiconst.entity_ids.get(
@@ -836,7 +837,8 @@ class SDR(object):
         newent = SDREntry(sdrbytes, self.ipmicmd, False, self.mfg_id,
                           self.prod_id)
         if newent.sdrtype == TYPE_SENSOR:
-            id = '{0}.{1}'.format(newent.sensor_number, newent.sensor_lun)
+            id = '{0}.{1}.{2}'.format(
+                newent.sensor_owner, newent.sensor_number, newent.sensor_lun)
             if id in self.sensors:
                 self.broken_sensor_ids[id] = True
                 return

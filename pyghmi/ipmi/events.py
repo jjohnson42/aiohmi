@@ -498,7 +498,8 @@ class EventHandler(object):
             raise pygexc.PyghmiException(
                 'Unrecognized Event message version {0}'.format(eventdata[2]))
         sensor_type = eventdata[3]
-        sensorid = '{0}.{1}'.format(eventdata[4], eventdata[1] & 0b11)
+        sensorid = '{0}.{1}.{2}'.format(
+            eventdata[0], eventdata[4], eventdata[1] & 0b11)
         event_data = eventdata[6:]
         deassertion = (eventdata[5] & 0b10000000 == 0b10000000)
         event_type = eventdata[5] & 0b1111111
