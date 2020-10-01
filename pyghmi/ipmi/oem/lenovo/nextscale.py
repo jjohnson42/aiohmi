@@ -76,8 +76,11 @@ def fpc_read_fan_power(ipmicmd):
 
 def fpc_read_psu_fan(ipmicmd, number, sz):
     rsp = ipmicmd.xraw_command(netfn=0x32, command=0xa5, data=(number,))
-    rsp = rsp['data']
-    return struct.unpack_from('<H', rsp[:2])[0]
+    rsp = bytes(rsp['data'])
+    if len(rsp) > 5:
+        return struct.unpack_from('<H', rsp[2:4])[0]
+    else:
+        return struct.unpack_from('<H', rsp[:2])[0]
 
 
 def fpc_get_psustatus(ipmicmd, number, sz):
@@ -156,6 +159,11 @@ fpc_sensors = {
         'units': 'W',
         'provider': fpc_read_dc_output,
     },
+    'PSU Power Loss': {
+        'type': 'Power',
+        'units': 'W',
+        'provider': fpc_read_dc_output,
+    },
     'Fan Power': {
         'type': 'Power',
         'units': 'W',
@@ -192,11 +200,14 @@ fpc_sensors = {
 def get_sensor_names(size):
     global fpc_sensors
     for name in fpc_sensors:
-        if size == 2 and name in ('Fan Power', 'Total Power Capacity'):
+        if size != 6 and name in ('Fan Power', 'Total Power Capacity',
+                                  'DC Power'):
+            continue
+        if size == 6 and name == 'PSU Power Loss':
             continue
         sensor = fpc_sensors[name]
         if 'elements' in sensor:
-            for elemidx in range(sensor['elements'] * size):
+            for elemidx in range(sensor['elements'] * (size & 0b11111)):
                 elemidx += 1
                 yield '{0} {1}'.format(name, elemidx)
         else:
@@ -206,11 +217,14 @@ def get_sensor_names(size):
 def get_sensor_descriptions(size):
     global fpc_sensors
     for name in fpc_sensors:
-        if size == 2 and name in ('Fan Power', 'Total Power Capacity'):
+        if size != 6 and name in ('Fan Power', 'Total Power Capacity',
+                                  'DC Power'):
+            continue
+        if size == 6 and name == 'PSU Power Loss':
             continue
         sensor = fpc_sensors[name]
         if 'elements' in sensor:
-            for elemidx in range(sensor['elements'] * size):
+            for elemidx in range(sensor['elements'] * (size & 0b11111)):
                 elemidx += 1
                 yield {'name': '{0} {1}'.format(name, elemidx),
                        'type': sensor['type']}
@@ -222,8 +236,11 @@ def get_fpc_firmware(bmcver, ipmicmd, fpcorsmm):
     mymsg = ipmicmd.xraw_command(netfn=0x32, command=0xa8)
     builddata = bytearray(mymsg['data'])
     name = None
-    if fpcorsmm == 2:  # SMM
-        name = 'SMM'
+    if fpcorsmm != 6:  # SMM
+        if fpcorsmm >> 5:
+            name = 'SMM2'
+        else:
+            name = 'SMM'
         buildid = '{0}{1}{2}{3}{4}{5}{6}'.format(
             *[chr(x) for x in builddata[-7:]])
     elif len(builddata) == 8:
@@ -233,7 +250,12 @@ def get_fpc_firmware(bmcver, ipmicmd, fpcorsmm):
     bmcmajor, bmcminor = [int(x) for x in bmcver.split('.')]
     bmcver = '{0}.{1:02d}'.format(bmcmajor, bmcminor)
     yield (name, {'version': bmcver, 'build': buildid})
-    yield ('PSOC', {'version': '{0}.{1}'.format(builddata[2], builddata[3])})
+    if fpcorsmm == 6:
+        yield ('PSOC', {'version': '{0}.{1}'.format(builddata[2],
+                                                    builddata[3])})
+    else:
+        yield ('PSOC', {'version': '{0}.{1}'.format(builddata[3],
+                                                    builddata[4])})
 
 
 def get_sensor_reading(name, ipmicmd, sz):

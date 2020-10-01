@@ -351,12 +351,18 @@ class OEMHandler(generic.OEMHandler):
             return self._fpc_variant
         fpc_ids = ((19046, 32, 1063), (20301, 32, 462))
         smm_id = (19046, 32, 1180)
+        smmv2_2u = (19046, 32, 1360)
+        smmv2_6u = (19046, 32, 1387)
         currid = (self.oemid['manufacturer_id'], self.oemid['device_id'],
                   self.oemid['product_id'])
         if currid in fpc_ids:
             self._fpc_variant = 6
         elif currid == smm_id:
             self._fpc_variant = 2
+        elif currid == smmv2_2u:
+            self._fpc_variant = 0x22
+        elif currid == smmv2_6u:
+            self._fpc_variant = 0x26
         return self._fpc_variant
 
     @property
@@ -577,7 +583,7 @@ class OEMHandler(generic.OEMHandler):
             if self.has_xcc and name and name.startswith('PSU '):
                 self.immhandler.augment_psu_info(fru, name)
             return fru
-        elif self.is_fpc == 2:  # SMM variant
+        elif self.is_fpc != 6:  # SMM variant
             fru['oem_parser'] = 'lenovo'
             return self.smmhandler.process_fru(fru)
         else:
