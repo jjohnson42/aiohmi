@@ -126,7 +126,7 @@ def fpc_get_nodeperm(ipmicmd, number, sz):
     perminfo = bytearray(rsp['data'])[1]
     if sz == 6:  # FPC
         permfail = ('\x02', '\x03')
-    elif sz == 2:  # SMM
+    else:  # SMM
         permfail = ('\x02',)
     if perminfo & 0x20:
         if rsp['data'][4] in permfail:
