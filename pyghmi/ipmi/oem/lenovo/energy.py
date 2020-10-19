@@ -32,7 +32,7 @@ class EnergyManager(object):
             if ie.ipmicode == 193:  # try again with IBM IANA
                 self.iana = bytearray(b'\x4d\x4f\x00')
                 rsp = ipmicmd.xraw_command(netfn=0x2e, command=0x82,
-                                           data=self.iana + '\x00\x00\x01')
+                                           data=self.iana + b'\x00\x00\x01')
             else:
                 raise
         if rsp['data'][4:6] not in (b'\x02\x01', b'\x02\x06', b'\x02\x09'):
