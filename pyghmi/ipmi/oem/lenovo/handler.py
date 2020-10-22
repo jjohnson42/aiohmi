@@ -583,7 +583,7 @@ class OEMHandler(generic.OEMHandler):
             if self.has_xcc and name and name.startswith('PSU '):
                 self.immhandler.augment_psu_info(fru, name)
             return fru
-        elif self.is_fpc != 6:  # SMM variant
+        elif self.is_fpc and self.is_fpc != 6:  # SMM variant
             fru['oem_parser'] = 'lenovo'
             return self.smmhandler.process_fru(fru)
         else:
