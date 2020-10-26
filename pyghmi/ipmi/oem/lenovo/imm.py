@@ -127,8 +127,7 @@ class IMMClient(object):
         srv = self.imm
         if ':' in srv:
             srv = '[{0}]'.format(srv)
-        self.adp_referer = 'https://{0}/designs/imm/index-console.php'.format(
-            srv)
+        self.adp_referer = 'https://imm/designs/imm/index-console.php'
         if ipmicmd.ipmi_session.password:
             self.username = ipmicmd.ipmi_session.userid.decode('utf-8')
             self.password = ipmicmd.ipmi_session.password.decode('utf-8')
@@ -354,9 +353,9 @@ class IMMClient(object):
                            'password': self.password,
                            'SessionTimeout': 60})
         headers = {'Connection': 'keep-alive',
-                   'Origin': 'https://1.2.3.4/',
-                   'Host': '1.2.3.4',
-                   'Referer': 'https://1.2.3.4/designs/imm/index.php',
+                   'Origin': 'https://imm/',
+                   'Host': 'imm',
+                   'Referer': 'https://imm/designs/imm/index.php',
                    'Content-Type': 'application/x-www-form-urlencoded'}
         wc.request('POST', '/data/login', adata, headers)
         rsp = wc.getresponse()
@@ -372,7 +371,8 @@ class IMMClient(object):
                 else:
                     self.uploadtoken = {}
                 wc.set_header('Referer', self.adp_referer)
-                wc.set_header('Host', self.imm)
+                wc.set_header('Host', 'imm')
+                wc.set_header('Origin', 'https://imm/')
                 return wc
 
     @property
@@ -482,6 +482,11 @@ class IMMClient(object):
                 for uload in item['images']:
                     if uload['status'] != 0:
                         yield media.Media(uload['filename'])
+            for attached in item.get('urls', []):
+                filename = attached['url']
+                filename = filename.split('/')[-1]
+                url = '/'.join(attached['url'].split('/')[:-1])
+                yield media.Media(filename, url)
 
     def detach_remote_media(self):
         mnt = self.wc.grab_json_response(
