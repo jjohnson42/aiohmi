@@ -85,17 +85,24 @@ class TsmHandler(generic.OEMHandler):
         self.csrftok = None
         self.isipmi = bool(fish)
         self.fish = fish
+        self.fishclient = None
         super(TsmHandler, self).__init__(sysinfo, sysurl, webclient, cache)
         self.tsm = webclient.thehost
         self._certverify = webclient._certverify
 
     def clear_uefi_configuration(self):
+        if not self.fishclient:
+            self.init_redfish()
         return self.fishclient.clear_system_configuration()
 
     def get_uefi_configuration(self, hideadvanced=True):
+        if not self.fishclient:
+            self.init_redfish()
         return self.fishclient.get_system_configuration(hideadvanced)
 
     def set_uefi_configuration(self, changeset):
+        if not self.fishclient:
+            self.init_redfish()
         return self.fishclient.set_system_configuration(changeset)
 
     def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):

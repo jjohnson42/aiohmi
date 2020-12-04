@@ -165,7 +165,6 @@ class OEMHandler(generic.OEMHandler):
             self.tsmahandler.set_credentials(
                 ipmicmd.ipmi_session.userid.decode('utf-8'),
                 ipmicmd.ipmi_session.password.decode('utf-8'))
-            self.tsmahandler.init_redfish()
 
     @property
     def _megarac_eth_index(self):
