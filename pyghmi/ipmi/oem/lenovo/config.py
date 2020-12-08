@@ -36,7 +36,7 @@ IMM_NETFN = 0x2e
 IMM_COMMAND = 0x90
 LENOVO_ENTERPRISE = [0x4d, 0x4f, 0x00]
 
-OPEN_RO_COMMAND = [0x01, 0x05, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10]
+OPEN_RO_COMMAND = [0x01, 0x05, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40]
 OPEN_WO_COMMAND = [0x01, 0x03, 0x01]
 READ_COMMAND = [0x02]
 WRITE_COMMAND = [0x03]
@@ -45,7 +45,7 @@ SIZE_COMMAND = [0x06]
 
 
 def run_command_with_retry(connection, data):
-    tries = 10
+    tries = 15
     while tries:
         tries -= 1
         try:
@@ -210,6 +210,7 @@ class LenovoFirmwareConfig(object):
             remaining -= blocksize
             offset += blocksize
             run_command_with_retry(self.connection, data=data)
+            self.connection.ipmi_session.pause(0)
 
     def imm_read(self, filehandle, size):
         blocksize = 0xc8
@@ -232,10 +233,9 @@ class LenovoFirmwareConfig(object):
             data.extend(hex_blocksize[:2])
             remaining -= blocksize
             offset += blocksize
-
             response = run_command_with_retry(self.connection, data=data)
             output += response['data'][5:]
-
+            self.connection.ipmi_session.pause(0)
         return output
 
     def factory_reset(self):
