@@ -24,7 +24,6 @@ import struct
 import six
 
 import pyghmi.exceptions as pygexc
-from pyghmi.ipmi.oem.lenovo import EfiDecompressor
 
 try:
     import EfiCompressor
@@ -260,7 +259,7 @@ class LenovoFirmwareConfig(object):
             size = self.imm_size(cfgfilename)
             data = self.imm_read(filehandle, size)
             self.imm_close(filehandle)
-            data = EfiDecompressor.decompress(data)
+            data = EfiCompressor.FrameworkDecompress(data, len(data))
             if len(data) != 0:
                 break
             self.connection.ipmi_session.pause(2)
