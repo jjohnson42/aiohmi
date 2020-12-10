@@ -755,6 +755,8 @@ class SPD(object):
         buswidth = ddr3_bus_width[spd[13] & 0b111]
         sdramwidth = ddr3_dev_width[spd[12] & 0b111]
         ranks = ddr3_ranks[(spd[12] & 0b111000) >> 3]
+        if spd[6] & 0b11 == 0b10:
+            ranks = ranks * (((spd[6] >> 4) & 0b111) + 1)
         self.info['capacity_mb'] = sdramcap / 8 * buswidth / sdramwidth * ranks
         self.info['manufacturer'] = decode_manufacturer(spd[320], spd[321])
         self.info['manufacture_location'] = spd[322]
