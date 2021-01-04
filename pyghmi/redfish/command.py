@@ -163,10 +163,10 @@ class SensorReading(object):
 class AttrDependencyHandler(object):
     def __init__(self, dependencies, currsettings, pendingsettings):
         self.dependencymap = {}
-        for dep in dependencies.get('Dependencies', [[]]):
-            if dep['Type'] != 'Map':
-                continue
+        for dep in dependencies.get('Dependencies', [{}]):
             if 'Dependency' not in dep:
+                continue
+            if dep['Type'] != 'Map':
                 continue
             if dep['DependencyFor'] in self.dependencymap:
                 self.dependencymap[
