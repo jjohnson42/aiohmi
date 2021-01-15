@@ -950,7 +950,8 @@ class XCCClient(IMMClient):
             {'Action': 'Bios.ResetBios'},
             headers={
                 'Authorization': 'Basic %s' % base64.b64encode(
-                    self.username + ':' + self.password),
+                    (self.username + ':' + self.password).encode('utf8')
+                ).decode('utf8'),
                 'Content-Type': 'application/json'
             }
         )
