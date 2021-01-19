@@ -405,7 +405,12 @@ class IMMClient(object):
     def grab_cacheable_json(self, url, age=30):
         data = self.get_cached_data(url, age)
         if not data:
-            data = self.wc.grab_json_response(url)
+            data, status = self.wc.grab_json_response_with_status(url)
+            if status == 401:
+                self._wc = None
+                data, status = self.wc.grab_json_response_with_status(url)
+            if status != 200:
+                data = {}
             self.datacache[url] = (data, util._monotonic_time())
         return data
 
