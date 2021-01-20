@@ -64,7 +64,7 @@ class Array(object):
 
 class Volume(object):
     def __init__(self, name=None, size=None, status=None, id=None,
-                 stripsize=None):
+                 stripsize=None, read_policy=None, write_policy=None):
         """Define a Volume as an object
 
         :param name: Name of the volume
@@ -72,6 +72,8 @@ class Volume(object):
         :param status: Controller indicated status of the volume
         :param id: Controller identifier of a given volume
         :param stripsize: The stripsize of the volume in kibibytes
+        :param read_policy: The read policy of the volume
+        :param write_policy: The write policy of the volume
         """
         self.name = name
         if isinstance(size, int):
@@ -89,6 +91,8 @@ class Volume(object):
         self.status = status
         self.id = id
         self.stripsize = stripsize
+        self.read_policy = read_policy
+        self.write_policy = write_policy
 
 
 class ConfigSpec(object):
