@@ -898,14 +898,17 @@ class XCCClient(IMMClient):
             return settings
         settings['smm'] = {
             'default': 'Disable',
-            'possible': ['Enable', 'Disable'],
-            'help': 'Enables or disables the network of the D2 '
-                    'enclosure manager.',
+            'possible': ['Enable', 'Disable', 'IPMI'],
+            'help': 'Enables or disables the network of the '
+                    'enclosure manager. IPMI Enables with IPMI '
+                    'for v2 systems.',
         }
         if bytearray(enclosureinfo['data'])[0] == 2:
             settings['smm']['value'] = 'Disable'
         elif bytearray(enclosureinfo['data'])[0] == 1:
             settings['smm']['value'] = 'Enable'
+        elif bytearray(enclosureinfo['data'])[0] == 4:
+            settings['smm']['value'] = 'IPMI'
         else:
             settings['smm']['value'] = None
         smmip = self.get_property('/v2/ibmc/smm/smm_ip')
@@ -934,10 +937,12 @@ class XCCClient(IMMClient):
                 changeset[key] = {'value': changeset[key]}
             currval = changeset[key].get('value', None)
             if 'smm'.startswith(key.lower()):
-                if currval == 'Enable':
+                if 'enabled'.startswith(currval.lower()):
                     self.ipmicmd.xraw_command(0x3a, 0xf1, data=[1])
-                elif currval == 'Disable':
+                elif 'disabled'.startswith(currval.lower()):
                     self.ipmicmd.xraw_command(0x3a, 0xf1, data=[2])
+                elif 'ipmi'.startswith(currval.lower()):
+                    self.ipmicmd.xraw_command(0x3a, 0xf1, data=[4])
             elif key.lower() in self.rulemap:
                 ruleset[self.rulemap[key.lower()]] = changeset[key]['value']
                 if key.lower() == 'password_expiration':
