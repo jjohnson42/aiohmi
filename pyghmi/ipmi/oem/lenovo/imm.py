@@ -1302,10 +1302,18 @@ class XCCClient(IMMClient):
                     nameappend += 1
             else:
                 name = vol.name
-            if vol.stripsize:
+            if vol.stripsize is not None:
                 stripsize = int(math.log(vol.stripsize * 2, 2))
             else:
                 stripsize = props['stripsize']
+            if vol.read_policy is not None:
+                read_policy = vol.read_policy
+            else:
+                read_policy = props["cpra"]
+            if vol.write_policy is not None:
+                write_policy = vol.write_policy
+            else:
+                write_policy = props["cpwb"]
             strsize = 'remainder' if vol.size is None else str(vol.size)
             if strsize in ('all', '100%'):
                 volsize = params['capacity']
@@ -1325,7 +1333,7 @@ class XCCClient(IMMClient):
                 raise pygexc.InvalidParameterValue(
                     'Requested sizes exceed available capacity')
             vols.append('{0};{1};{2};{3};{4};{5};{6};{7};{8};|'.format(
-                name, volsize, stripsize, props['cpwb'], props['cpra'],
+                name, volsize, stripsize, write_policy, read_policy,
                 props['cpio'], props['ap'], props['dcp'], props['initstate']))
         url = '/api/function'
         cid = params['controller'].split(',')
