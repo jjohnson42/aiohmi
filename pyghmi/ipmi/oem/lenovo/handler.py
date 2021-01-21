@@ -995,6 +995,8 @@ class OEMHandler(generic.OEMHandler):
             return self.immhandler.get_bmc_configuration()
         if self.is_fpc:
             return self.smmhandler.get_bmc_configuration()
+        if self.has_tsma:
+            return self.tsmahandler.get_bmc_configuration()
         return super(OEMHandler, self).get_bmc_configuration()
 
     def set_bmc_configuration(self, changeset):
@@ -1003,6 +1005,9 @@ class OEMHandler(generic.OEMHandler):
         if self.is_fpc:
             return self.smmhandler.set_bmc_configuration(
                 changeset, self._fpc_variant)
+        if self.has_tsma:
+            return self.tsmahandler.set_bmc_configuration(
+                changeset)
         return super(OEMHandler, self).set_bmc_configuration(changeset)
 
     def get_system_configuration(self, hideadvanced):

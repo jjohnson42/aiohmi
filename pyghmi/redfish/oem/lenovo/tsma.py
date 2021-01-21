@@ -19,6 +19,8 @@ try:
 except ImportError:
     from urllib.parse import urlencode
 
+import six
+
 import pyghmi.exceptions as exc
 import pyghmi.media as media
 import pyghmi.redfish.oem.generic as generic
@@ -89,6 +91,64 @@ class TsmHandler(generic.OEMHandler):
         super(TsmHandler, self).__init__(sysinfo, sysurl, webclient, cache)
         self.tsm = webclient.thehost
         self._certverify = webclient._certverify
+
+    def get_bmc_configuration(self):
+        wc = self.wc
+        rsp, status = wc.grab_json_response_with_status(
+            '/api/settings/dns-info')
+        if status != 200:
+            raise Exception(repr(rsp))
+        settings = {}
+        settings['dns_domain'] = {
+            'value': rsp['domain_name']
+        }
+        dnssrvs = []
+        for idx in range(3):
+            currsrv = rsp.get('dns_server{0}'.format(idx + 1), '::')
+            if currsrv and currsrv != '::':
+                dnssrvs.append(currsrv)
+        settings['dns_servers'] = {'value': ','.join(dnssrvs)}
+        return settings
+
+    def set_bmc_configuration(self, changeset):
+        dnschgs = {}
+        for key in changeset:
+            if isinstance(changeset[key], six.string_types):
+                changeset[key] = {'value': changeset[key]}
+            currval = changeset[key].get('value', None)
+            if 'dns_servers'.startswith(key.lower()):
+                srvs = currval.split(',')
+                for idx in range(3):
+                    if idx < len(srvs):
+                        dnschgs['dns_server{0}'.format(idx + 1)] = srvs[idx]
+                    else:
+                        dnschgs['dns_server{0}'.format(idx + 1)] = ''
+            if 'dns_domain'.startswith(key.lower()):
+                dnschgs['domain_name'] = currval
+        if dnschgs:
+            self._set_dns_config(dnschgs)
+
+    def _set_dns_config(self, dnschgs):
+        wc = self.wc
+        rsp, status = wc.grab_json_response_with_status(
+            '/api/settings/dns-info')
+        if status != 200:
+            raise Exception(repr(rsp))
+        rsp['domain_manual'] = 1
+        for i in range(3):
+            keyn = 'dns_server{0}'.format(i + 1)
+            if rsp[keyn] == '::':
+                rsp[keyn] = ''
+        for chg in dnschgs:
+            rsp[chg] = dnschgs[chg]
+        rsp, status = wc.grab_json_response_with_status(
+            '/api/settings/dns-info', rsp, method='PUT')
+        if status != 200:
+            raise Exception(repr(rsp))
+        rsp, status = wc.grab_json_response_with_status(
+            '/api/settings/dns/restart', {'dns_status': 1}, method='PUT')
+        if status != 200:
+            raise Exception(repr(rsp))
 
     def clear_uefi_configuration(self):
         if not self.fishclient:
