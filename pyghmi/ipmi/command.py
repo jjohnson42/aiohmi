@@ -1285,6 +1285,8 @@ class Command(object):
         """Set the management controller identifier, per DCMI specification
 
         """
+        if not isinstance(mci, bytes):
+            mci = mci.encode('utf8')
         return self._chunkwise_dcmi_set(0xa, mci + b'\x00')
 
     def get_asset_tag(self):
@@ -1322,7 +1324,7 @@ class Command(object):
         chunks = [data[i:i + 15] for i in range(0, len(data), 15)]
         offset = 0
         for chunk in chunks:
-            chunk = bytearray(chunk, 'utf-8')
+            chunk = bytearray(chunk)
             cmddata = bytearray((0xdc, offset, len(chunk)))
             cmddata += chunk
             self.xraw_command(netfn=0x2c, command=command, data=cmddata)
