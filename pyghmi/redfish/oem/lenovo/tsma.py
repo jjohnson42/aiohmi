@@ -143,6 +143,57 @@ class TsmHandler(generic.OEMHandler):
             self.tsm, self.username, self.password,
             verifycallback=self._certverify)
 
+    def get_ntp_enabled(self):
+        wc = self.wc
+        rsp, status = wc.grab_json_response_with_status(
+            '/api/settings/date-time')
+        if status != 200:
+            raise Exception(repr(rsp))
+        return rsp.get('ntp_auto_date', 0) > 0
+
+    def set_ntp_enabled(self, enabled):
+        wc = self.wc
+        rsp, status = wc.grab_json_response_with_status(
+            '/api/settings/date-time')
+        if status != 200:
+            raise Exception(repr(rsp))
+        rsp['ntp_auto_date'] = 1 if enabled else 0
+        rsp, status = wc.grab_json_response_with_status(
+            '/api/settings/date-time', rsp, method='PUT')
+        if status != 200:
+            raise Exception(repr(rsp))
+
+    def get_ntp_servers(self):
+        wc = self.wc
+        rsp, status = wc.grab_json_response_with_status(
+            '/api/settings/date-time')
+        if status != 200:
+            raise Exception(repr(rsp))
+        srvs = []
+        pntp = rsp.get('primary_ntp', None)
+        if pntp:
+            srvs.append(pntp)
+        pntp = rsp.get('secondary_ntp', None)
+        if pntp:
+            srvs.append(pntp)
+        return srvs
+
+    def set_ntp_server(self, server, index=0):
+        wc = self.wc
+        rsp, status = wc.grab_json_response_with_status(
+            '/api/settings/date-time')
+        if status != 200:
+            raise Exception(repr(rsp))
+        if index == 0:
+            rsp['primary_ntp'] = server
+        elif index == 1:
+            rsp['secondary_ntp'] = server
+        rsp['ntp_auto_date'] = 1
+        rsp, status = wc.grab_json_response_with_status(
+            '/api/settings/date-time', rsp, method='PUT')
+        if status != 200:
+            raise Exception(repr(rsp))
+
     def get_firmware_inventory(self, components, raisebypass=True):
         wc = self.wc
         fwinf, status = wc.grab_json_response_with_status(

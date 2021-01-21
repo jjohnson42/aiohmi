@@ -292,6 +292,8 @@ class OEMHandler(generic.OEMHandler):
             return ntpres['data'][0] == '\x01'
         elif self.is_fpc:
             return self.smmhandler.get_ntp_enabled(self._fpc_variant)
+        elif self.has_tsma:
+            return self.tsmahandler.get_ntp_enabled()
         return None
 
     def get_ntp_servers(self):
@@ -303,6 +305,8 @@ class OEMHandler(generic.OEMHandler):
             return srvs
         if self.is_fpc:
             return self.smmhandler.get_ntp_servers()
+        if self.has_tsma:
+            return self.tsmahandler.get_ntp_servers()
         return None
 
     def set_ntp_enabled(self, enabled):
@@ -317,6 +321,8 @@ class OEMHandler(generic.OEMHandler):
         if self.is_fpc:
             self.smmhandler.set_ntp_enabled(enabled)
             return True
+        if self.has_tsma:
+            self.tsmahandler.set_ntp_enabled(enabled)
         return None
 
     def set_ntp_server(self, server, index=0):
@@ -333,6 +339,10 @@ class OEMHandler(generic.OEMHandler):
                     'SMM supports indexes 0 through 2')
             self.smmhandler.set_ntp_server(server, index)
             return True
+        elif self.has_tsma:
+            if not (0 <= index <= 1):
+                raise pygexc.InvalidParameterValue("Index must be 0 or 1")
+            return self.tsmahandler.set_ntp_server(server, index)
         return None
 
     def set_user_access(self, uid, channel, callback, link_auth, ipmi_msg,
