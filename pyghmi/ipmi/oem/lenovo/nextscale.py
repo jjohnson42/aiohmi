@@ -15,7 +15,7 @@
 import fnmatch
 import struct
 import weakref
-from xml.etree.ElementTree import fromstring
+from xml.etree.ElementTree import fromstring as rfromstring
 import zipfile
 
 import six
@@ -35,6 +35,12 @@ try:
     range = xrange
 except NameError:
     pass
+
+
+def fromstring(inputdata):
+    if '!entity' in inputdata.lower():
+        raise Exception('!ENTITY not supported in this interface')
+    return rfromstring(inputdata)
 
 
 def stringtoboolean(originput, name):

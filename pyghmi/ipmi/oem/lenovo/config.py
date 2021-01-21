@@ -44,6 +44,12 @@ CLOSE_COMMAND = [0x05]
 SIZE_COMMAND = [0x06]
 
 
+def fromstring(inputdata):
+    if '!entity' in inputdata:
+        raise Exception('Unsupported XML')
+    return etree.fromstring(inputdata)
+
+
 def run_command_with_retry(connection, data):
     tries = 15
     while tries:
@@ -265,7 +271,7 @@ class LenovoFirmwareConfig(object):
             self.connection.ipmi_session.pause(2)
         if not data:
             raise Exception("BMC failed to return configuration information")
-        xml = etree.fromstring(data)
+        xml = fromstring(data)
         sortid = 0
         for config in xml.iter("config"):
             lenovo_id = config.get("ID")
