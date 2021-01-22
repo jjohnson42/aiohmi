@@ -337,7 +337,7 @@ class SMMClient(object):
         accountinfo = fromstring(rspbody)
         for rule in self.rulemap:
             ruleinfo = accountinfo.find(self.rulemap[rule])
-            if ruleinfo:
+            if ruleinfo is not None:
                 settings[rule] = {'value': int(ruleinfo.text)}
         rsp = self.ipmicmd.xraw_command(0x34, 3)
         fanmode = self.fanmodes[bytearray(rsp['data'])[0]]
