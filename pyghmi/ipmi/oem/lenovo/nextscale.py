@@ -38,7 +38,7 @@ except NameError:
 
 
 def fromstring(inputdata):
-    if '!entity' in inputdata.lower():
+    if b'!entity' in inputdata.lower():
         raise Exception('!ENTITY not supported in this interface')
     return rfromstring(inputdata)
 

@@ -45,7 +45,7 @@ SIZE_COMMAND = [0x06]
 
 
 def fromstring(inputdata):
-    if '!entity' in inputdata:
+    if b'!entity' in inputdata.lower():
         raise Exception('Unsupported XML')
     return etree.fromstring(inputdata)
 
