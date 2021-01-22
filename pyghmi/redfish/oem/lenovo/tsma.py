@@ -108,10 +108,25 @@ class TsmHandler(generic.OEMHandler):
             if currsrv and currsrv != '::':
                 dnssrvs.append(currsrv)
         settings['dns_servers'] = {'value': ','.join(dnssrvs)}
+        rsp, status = wc.grab_json_response_with_status(
+            '/api/LockoutPolicystatus')
+        if status == 200:
+            isenabled = rsp.get('Status', 0) == 1
+            if isenabled:
+                settings['password_login_failures'] = {'value': rsp.get(
+                    'Attemptstimes', 0)}
+            else:
+                settings['password_login_failures'] = {'value': 0}
+        rsp, status = wc.grab_json_response_with_status(
+            '/api/GetPWComplex')
+        if status == 200:
+            settings['password_complexity'] = {'value': rsp.get(
+                'pw_complex', 0)}
         return settings
 
     def set_bmc_configuration(self, changeset):
         dnschgs = {}
+        wc = self.wc
         for key in changeset:
             if isinstance(changeset[key], six.string_types):
                 changeset[key] = {'value': changeset[key]}
@@ -125,11 +140,41 @@ class TsmHandler(generic.OEMHandler):
                         dnschgs['dns_server{0}'.format(idx + 1)] = ''
             if 'dns_domain'.startswith(key.lower()):
                 dnschgs['domain_name'] = currval
+            if 'password_complexity'.startswith(key.lower()):
+                self._set_pass_complexity(currval, wc)
+            if 'password_login_failures'.startswith(key.lower()):
+                self._set_pass_lockout(currval, wc)
         if dnschgs:
-            self._set_dns_config(dnschgs)
+            self._set_dns_config(dnschgs, wc)
 
-    def _set_dns_config(self, dnschgs):
-        wc = self.wc
+    def _set_pass_complexity(self, currval, wc):
+        rsp, status = wc.grab_json_response_with_status(
+            '/api/SetPWComplex', {'Enable': currval})
+        if status != 200:
+            raise Exception(repr(rsp))
+
+    def _set_pass_lockout(self, currval, wc):
+        rsp, status = wc.grab_json_response_with_status(
+            '/api/LockoutPolicystatus')
+        if status != 200:
+            raise Exception(repr(rsp))
+        request = {
+            'SameStatus': 0,
+            'Lock_min': rsp.get('Locktime', 5),
+            'Rest_min': rsp.get('Resettime', 1),
+            'Attemptstimes': rsp.get('Attemptstimes', 3)
+        }
+        if currval == 0:
+            request['Enable'] = 0
+        else:
+            request['Enable'] = 1
+            request['Attemptstimes'] = currval
+        rsp, status = wc.grab_json_response_with_status(
+            '/api/SetLockoutPolicy', request)
+        if status != 200:
+            raise Exception(repr(rsp))
+
+    def _set_dns_config(self, dnschgs, wc):
         rsp, status = wc.grab_json_response_with_status(
             '/api/settings/dns-info')
         if status != 200:
