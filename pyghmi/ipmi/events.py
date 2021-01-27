@@ -246,7 +246,7 @@ def decode_eventdata(sensor_type, offset, eventdata, sdr):
             else:
                 return 'Before'
     elif sensor_type == 0x19 and offset == 0:
-        return 'Requested {0] while {1}'.format(eventdata[1], eventdata[2])
+        return 'Requested {0} while {1}'.format(eventdata[1], eventdata[2])
     elif sensor_type == 0x1d and offset == 7:
         return restart_causes.get(eventdata[1], 'Unknown')
     elif sensor_type == 0x21:

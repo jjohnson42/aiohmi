@@ -1,0 +1,1 @@
+stestr==2.6.0  # Apache-2.0
