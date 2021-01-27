@@ -165,7 +165,7 @@ class LenovoFirmwareConfig(object):
             data.extend(OPEN_WO_COMMAND)
             hex_size = struct.pack("<I", size)
             data.extend(bytearray(hex_size[:4]))
-            data.extend([0x01, 0x10])
+            data.extend([0x01, 0x40])
         if not isinstance(filename, bytes):
             filename = filename.encode('utf-8')
         data.extend(filename)
@@ -192,7 +192,11 @@ class LenovoFirmwareConfig(object):
 
         hex_filehandle = struct.pack("<I", filehandle)
         data.extend(bytearray(hex_filehandle[:4]))
-        run_command_with_retry(self.connection, data=data)
+        try:
+            run_command_with_retry(self.connection, data=data)
+        except pygexc.IpmiException as e:
+            if e.ipmicode != 203:
+                raise
 
     def imm_write(self, filehandle, size, inputdata):
         blocksize = 0xc8
