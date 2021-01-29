@@ -321,7 +321,7 @@ class Session(object):
             for portent in list(cls.bmc_handlers[sesskey]):
                 session = cls.bmc_handlers[sesskey][portent]
                 session.cleaningup = True
-                session.logout()
+                session.logout(False)
 
     @classmethod
     def _assignsocket(cls, server=None, forbiddensockets=()):
