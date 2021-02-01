@@ -253,6 +253,26 @@ class IMMClient(object):
                 else:
                     raise pygexc.InvalidParameterValue(
                         '{0} not a known setting'.format(key))
+        self.merge_changeset(changeset)
+        changepending = True
+        if changeset:
+            try:
+                changepending = self.fwc.set_fw_options(self.fwo)
+            except Exception:
+                self.fwo = None
+                self.fwovintage = 0
+                raise
+        giveup = util._monotonic_time() + 60
+        while changeset and changepending:
+            ipmisession.Session.pause(1)
+            self.fwo = self.fwc.get_fw_options(fetchimm=fetchimm)
+            self.fwovintage = util._monotonic_time()
+            if self.fwovintage > giveup:
+                break
+            self.merge_changeset(changeset)
+            changepending = self.fwc.set_fw_options(self.fwo, checkonly=True)
+
+    def merge_changeset(self, changeset):
         for key in changeset:
             if isinstance(changeset[key], six.string_types):
                 changeset[key] = {'value': changeset[key]}
@@ -293,12 +313,6 @@ class IMMClient(object):
                 self.fwo[key]['new_value'] = newnewvalues[0]
             else:
                 self.fwo[key]['new_value'] = newnewvalues
-        if changeset:
-            try:
-                self.fwc.set_fw_options(self.fwo)
-            except Exception:
-                self.fwo = None
-                raise
 
     def clear_bmc_configuration(self):
         self.ipmicmd.xraw_command(0x2e, 0xcc,

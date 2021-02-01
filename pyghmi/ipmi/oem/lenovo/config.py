@@ -51,7 +51,7 @@ def fromstring(inputdata):
 
 
 def run_command_with_retry(connection, data):
-    tries = 15
+    tries = 240
     while tries:
         tries -= 1
         try:
@@ -472,7 +472,7 @@ class LenovoFirmwareConfig(object):
 
         return options
 
-    def set_fw_options(self, options):
+    def set_fw_options(self, options, checkonly=False):
         changes = False
         random.seed()
         ident = 'ASU-%x-%x-%x-0' % (random.getrandbits(48),
@@ -539,7 +539,9 @@ class LenovoFirmwareConfig(object):
                 choice.append(instance)
 
         if not changes:
-            return
+            return False
+        if checkonly:
+            return True
 
         xml = etree.tostring(configurations)
         data = EfiCompressor.FrameworkCompress(xml, len(xml))
@@ -547,3 +549,4 @@ class LenovoFirmwareConfig(object):
                                    size=len(data))
         self.imm_write(filehandle, len(data), data)
         self.imm_close(filehandle)
+        return True
