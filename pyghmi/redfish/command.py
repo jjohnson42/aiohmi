@@ -56,6 +56,7 @@ boot_devices_write = {
     'network': 'Pxe',
     'pxe': 'Pxe',
     'hd': 'Hdd',
+    'usb': 'Usb',
     'cd': 'Cd',
     'cdrom': 'Cd',
     'optical': 'Cd',

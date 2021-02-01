@@ -59,6 +59,7 @@ boot_devices = {
     'optical': 0x14,
     'dvd': 0x14,
     'floppy': 0x3c,
+    'usb': 0x3c,
     'default': 0x0,
     'setup': 0x18,
     'bios': 0x18,
