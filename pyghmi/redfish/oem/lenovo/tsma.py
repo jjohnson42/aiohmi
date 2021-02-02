@@ -78,7 +78,8 @@ def read_hpm(filename):
 class TsmHandler(generic.OEMHandler):
     hostnic = 'usb0'
 
-    def __init__(self, sysinfo, sysurl, webclient, cache=None, fish=None):
+    def __init__(self, sysinfo, sysurl, webclient, cache=None, fish=None,
+                 gpool=None):
         if cache is None:
             cache = {}
         self._wc = None
@@ -88,7 +89,8 @@ class TsmHandler(generic.OEMHandler):
         self.isipmi = bool(fish)
         self.fish = fish
         self.fishclient = None
-        super(TsmHandler, self).__init__(sysinfo, sysurl, webclient, cache)
+        super(TsmHandler, self).__init__(sysinfo, sysurl, webclient, cache,
+                                         gpool)
         self.tsm = webclient.thehost
         self._certverify = webclient._certverify
 

@@ -24,10 +24,13 @@ def get_handler(sysinfo, sysurl, webclient, cache, cmd):
         if 'Ami' in bmcinfo.get('Oem', {}):
             return tsma.TsmHandler(sysinfo, sysurl, webclient, cache)
     if 'FrontPanelUSB' in leninf or sysinfo.get('SKU', '').startswith('7X58'):
-        return xcc.OEMHandler(sysinfo, sysurl, webclient, cache)
+        return xcc.OEMHandler(sysinfo, sysurl, webclient, cache,
+                              gpool=cmd._gpool)
     else:
         leninv = sysinfo.get('Links', {}).get('OEM', {}).get(
             'Lenovo', {}).get('Inventory', {})
         if 'hdd' in leninv and 'hostMAC' in leninv and 'backPlane' in leninv:
-            return tsma.TsmHandler(sysinfo, sysurl, webclient, cache)
-        return generic.OEMHandler(sysinfo, sysurl, webclient, cache)
+            return tsma.TsmHandler(sysinfo, sysurl, webclient, cache,
+                                   gpool=cmd._gpool)
+        return generic.OEMHandler(sysinfo, sysurl, webclient, cache,
+                                  gpool=cmd._gpool)

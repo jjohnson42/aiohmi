@@ -34,4 +34,4 @@ def get_oem_handler(sysinfo, sysurl, webclient, cache, cmd):
         if oem in OEMMAP:
             return OEMMAP[oem].get_handler(sysinfo, sysurl, webclient, cache,
                                            cmd)
-    return generic.OEMHandler(sysinfo, sysurl, webclient, cache)
+    return generic.OEMHandler(sysinfo, sysurl, webclient, cache, cmd._gpool)

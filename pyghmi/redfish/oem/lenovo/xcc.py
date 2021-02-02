@@ -18,6 +18,7 @@ import json
 import math
 import os
 import random
+import re
 import socket
 import time
 
@@ -29,12 +30,76 @@ from pyghmi.util.parse import parse_time
 import pyghmi.util.webclient as webclient
 
 
-class OEMHandler(generic.OEMHandler):
+numregex = re.compile('([0-9]+)')
+funtypes = {
+    0: 'RAID Controller',
+    1: 'Ethernet',
+    2: 'Fibre Channel',
+    3: 'Infiniband',
+    4: 'GPU',
+    10: 'NVMe Controller',
+    12: 'Fabric Controller',
+}
 
-    def __init__(self, sysinfo, sysurl, webclient, cache):
-        super(OEMHandler, self).__init__(sysinfo, sysurl, webclient, cache)
+
+def naturalize_string(key):
+    """Analyzes string in a human way to enable natural sort
+
+    :param key: string for the split
+    :returns: A structure that can be consumed by 'sorted'
+    """
+    return [int(text) if text.isdigit() else text.lower()
+            for text in re.split(numregex, key)]
+
+
+def natural_sort(iterable):
+    """Return a sort using natural sort if possible
+
+    :param iterable:
+    :return:
+    """
+    try:
+        return sorted(iterable, key=naturalize_string)
+    except TypeError:
+        # The natural sort attempt failed, fallback to ascii sort
+        return sorted(iterable)
+
+
+class OEMHandler(generic.OEMHandler):
+    logouturl = '/api/providers/logout'
+    bmcname = 'XCC'
+    ADP_URL = '/api/dataset/imm_adapters?params=pci_GetAdapters'
+    ADP_NAME = 'adapterName'
+    ADP_FUN = 'functions'
+    ADP_FU_URL = '/api/function/adapter_update?params=pci_GetAdapterListAndFW'
+    ADP_LABEL = 'connectorLabel'
+    ADP_SLOTNO = 'slotNo'
+    ADP_OOB = 'oobSupported'
+    ADP_PARTNUM = 'vpd_partNo'
+    ADP_SERIALNO = 'vpd_serialNo'
+    ADP_VENID = 'generic_vendorId'
+    ADP_SUBVENID = 'generic_subVendor'
+    ADP_DEVID = 'generic_devId'
+    ADP_SUBDEVID = 'generic_subDevId'
+    ADP_FRU = 'vpd_cardSKU'
+    BUSNO = 'generic_busNo'
+    PORTS = 'network_pPorts'
+    DEVNO = 'generic_devNo'
+
+    def __init__(self, sysinfo, sysurl, webclient, cache, gpool=None):
+        super(OEMHandler, self).__init__(sysinfo, sysurl, webclient, cache,
+                                         gpool)
         self._wc = None
         self.updating = False
+        self.datacache = {}
+
+    def get_cached_data(self, attribute, age=30):
+        try:
+            kv = self.datacache[attribute]
+            if kv[1] > util._monotonic_time() - age:
+                return kv[0]
+        except KeyError:
+            return None
 
     def get_description(self):
         description = self._do_web_request('/DeviceDescription.json')
@@ -857,3 +922,209 @@ class OEMHandler(generic.OEMHandler):
                     return 0
                 else:
                     return days
+
+    def get_inventory_descriptions(self, withids=False):
+        hwmap = self.hardware_inventory_map()
+        yield "System"
+        for key in natural_sort(hwmap):
+            yield key
+
+    def get_inventory_of_component(self, compname):
+        if compname.lower() == 'system':
+            sysinfo = {
+                'UUID': self._varsysinfo.get('UUID', ''),
+                'Serial Number': self._varsysinfo.get('SerialNumber', ''),
+                'Manufacturer': self._varsysinfo.get('Manufacturer', ''),
+                'Product Name': self._varsysinfo.get('Model', ''),
+                'Model': self._varsysinfo.get(
+                    'SKU', self._varsysinfo.get('PartNumber', '')),
+            }
+            return sysinfo
+        hwmap = self.hardware_inventory_map()
+        try:
+            return hwmap[compname]
+        except KeyError:
+
+            return None
+
+    def get_inventory(self, withids=False):
+        sysinfo = {
+            'UUID': self._varsysinfo.get('UUID', ''),
+            'Serial Number': self._varsysinfo.get('SerialNumber', ''),
+            'Manufacturer': self._varsysinfo.get('Manufacturer', ''),
+            'Product Name': self._varsysinfo.get('Model', ''),
+            'Model': self._varsysinfo.get(
+                'SKU', self._varsysinfo.get('PartNumber', '')),
+        }
+        yield ('System', sysinfo)
+        for cpuinv in self._get_cpu_inventory():
+            yield cpuinv
+        for meminv in self._get_mem_inventory():
+            yield meminv
+        hwmap = self.hardware_inventory_map()
+        for key in natural_sort(hwmap):
+            yield (key, hwmap[key])
+
+    def hardware_inventory_map(self):
+        hwmap = self.get_cached_data('lenovo_cached_hwmap')
+        if hwmap:
+            return hwmap
+        hwmap = {}
+        for disk in self.disk_inventory(mode=1):  # hardware mode
+            hwmap[disk[0]] = disk[1]
+        adapterdata = self.get_cached_data('lenovo_cached_adapters')
+        if not adapterdata:
+            if self.updating:
+                raise pygexc.TemporaryError(
+                    'Cannot read extended inventory during firmware update')
+            if self.wc:
+                adapterdata = self.wc.grab_json_response(self.ADP_URL)
+                if adapterdata:
+                    self.datacache['lenovo_cached_adapters'] = (
+                        adapterdata, util._monotonic_time())
+        if adapterdata and 'items' in adapterdata:
+            anames = {}
+            for adata in adapterdata['items']:
+                skipadapter = False
+                clabel = adata[self.ADP_LABEL]
+                if clabel == 'Unknown':
+                    continue
+                if clabel != 'Onboard':
+                    aslot = adata[self.ADP_SLOTNO]
+                    if clabel == 'ML2':
+                        clabel = 'ML2 (Slot {0})'.format(aslot)
+                    else:
+                        clabel = 'Slot {0}'.format(aslot)
+                aname = adata[self.ADP_NAME]
+                bdata = {'location': clabel, 'name': aname}
+                if aname in anames:
+                    anames[aname] += 1
+                    aname = '{0} {1}'.format(aname, anames[aname])
+                else:
+                    anames[aname] = 1
+                for fundata in adata[self.ADP_FUN]:
+                    bdata['pcislot'] = '{0:02x}:{1:02x}'.format(
+                        fundata[self.BUSNO], fundata[self.DEVNO])
+                    serialdata = fundata.get(self.ADP_SERIALNO, None)
+                    if (serialdata and serialdata != 'N/A'
+                            and '---' not in serialdata):
+                        bdata['serial'] = serialdata
+                    partnum = fundata.get(self.ADP_PARTNUM, None)
+                    if partnum and partnum != 'N/A':
+                        bdata['Part Number'] = partnum
+                    cardtype = funtypes.get(fundata.get('funType', None),
+                                            None)
+                    if cardtype is not None:
+                        bdata['Type'] = cardtype
+                    venid = fundata.get(self.ADP_VENID, None)
+                    if venid is not None:
+                        bdata['PCI Vendor ID'] = '{0:04x}'.format(venid)
+                    devid = fundata.get(self.ADP_DEVID, None)
+                    if devid is not None:
+                        bdata['PCI Device ID'] = '{0:04x}'.format(devid)
+                    venid = fundata.get(self.ADP_SUBVENID, None)
+                    if venid is not None:
+                        bdata['PCI Subsystem Vendor ID'] = '{0:04x}'.format(
+                            venid)
+                    devid = fundata.get(self.ADP_SUBDEVID, None)
+                    if devid is not None:
+                        bdata['PCI Subsystem Device ID'] = '{0:04x}'.format(
+                            devid)
+                    fruno = fundata.get(self.ADP_FRU, None)
+                    if fruno is not None:
+                        bdata['FRU Number'] = fruno
+                    if self.PORTS in fundata:
+                        for portinfo in fundata[self.PORTS]:
+                            for lp in portinfo['logicalPorts']:
+                                ma = lp['networkAddr']
+                                ma = ':'.join(
+                                    [ma[i:i + 2] for i in range(
+                                        0, len(ma), 2)]).lower()
+                                bdata['MAC Address {0}'.format(
+                                    portinfo['portIndex'])] = ma
+                    elif clabel == 'Onboard':  # skip the various non-nic
+                        skipadapter = True
+                if not skipadapter:
+                    hwmap[aname] = bdata
+            self.datacache['lenovo_cached_hwmap'] = (hwmap,
+                                                     util._monotonic_time())
+        # self.weblogout()
+        return hwmap
+
+    def disk_inventory(self, mode=0):
+        # mode 0 is firmware, 1 is hardware
+        storagedata = self.get_cached_data('lenovo_cached_storage')
+        if not storagedata:
+            if self.wc:
+                storagedata = self.wc.grab_json_response(
+                    '/api/function/raid_alldevices?params=storage_GetAllDisks')
+                if storagedata:
+                    self.datacache['lenovo_cached_storage'] = (
+                        storagedata, util._monotonic_time())
+        if storagedata and 'items' in storagedata:
+            for adp in storagedata['items']:
+                for diskent in adp.get('disks', ()):
+                    if mode == 0:
+                        yield self.get_disk_firmware(diskent)
+                    elif mode == 1:
+                        yield self.get_disk_hardware(diskent)
+                for diskent in adp.get('aimDisks', ()):
+                    if mode == 0:
+                        yield self.get_disk_firmware(diskent)
+                    elif mode == 1:
+                        yield self.get_disk_hardware(diskent)
+                if mode == 1:
+                    bdata = {'Description': 'Unmanaged Disk'}
+                    if adp.get('m2Type', -1) == 2:
+                        yield 'M.2 Disk', bdata
+                    for umd in adp.get('unmanagedDisks', []):
+                        yield 'Disk {0}'.format(umd['slotNo']), bdata
+
+    def _get_cpu_inventory(self):
+        procdata = self.get_cached_data('lenovo_cached_proc')
+        if not procdata:
+            if self.wc:
+                procdata = self.wc.grab_json_response(
+                    '/api/dataset/imm_processors')
+                if procdata:
+                    self.datacache['lenovo_cached_proc'] = (
+                        procdata, util._monotonic_time())
+        if procdata:
+            for proc in procdata.get('items', [{}])[0].get('processors', []):
+                procinfo = {
+                    'Model': proc['processors_cpu_model']
+                }
+                yield ('Processor {0}'.format(proc['processors_name']),
+                       procinfo)
+
+    def _get_mem_inventory(self):
+        memdata = self.get_cached_data('lenovo_cached_memory')
+        if not memdata:
+            if self.wc:
+                memdata = self.wc.grab_json_response(
+                    '/api/dataset/imm_memory')
+                if memdata:
+                    self.datacache['lenovo_cached_memory'] = (
+                        memdata, util._monotonic_time())
+        if memdata:
+            for dimm in memdata.get('items', [{}])[0].get('memory', []):
+                memdata = {}
+                memdata['speed'] = dimm['memory_mem_speed'] * 8 // 100 * 100
+                memdata['module_type'] = 'RDIMM'
+                memdata['capacity_mb'] = dimm['memory_capacity'] * 1024
+                memdata['manufacturer'] = dimm['memory_manufacturer']
+                memdata['memory_type'] = dimm['memory_type']
+                memdata['model'] = dimm['memory_part_number'].rstrip()
+                memdata['serial'] = dimm['memory_serial_number']
+                yield (dimm['memory_name'], memdata)
+
+    def get_disk_hardware(self, diskent, prefix=''):
+        bdata = {}
+        if not prefix and diskent.get('location', '').startswith('M.2'):
+            prefix = 'M.2-'
+        diskname = 'Disk {1}{0}'.format(diskent['slotNo'], prefix)
+        bdata['Model'] = diskent['productName'].rstrip()
+        bdata['Serial Number'] = diskent['serialNo'].rstrip()
+        bdata['FRU Number'] = diskent['fruPartNo'].rstrip()
+        bdata['Description'] = diskent['type'].rstrip()
+        return (diskname, bdata)
