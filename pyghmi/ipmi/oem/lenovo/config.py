@@ -548,5 +548,9 @@ class LenovoFirmwareConfig(object):
         filehandle = self.imm_open("asu_update.efi", write=True,
                                    size=len(data))
         self.imm_write(filehandle, len(data), data)
+        stubread = len(data)
+        if stubread > 8:
+            stubread = 8
+        self.imm_read(filehandle, stubread)
         self.imm_close(filehandle)
         return True
