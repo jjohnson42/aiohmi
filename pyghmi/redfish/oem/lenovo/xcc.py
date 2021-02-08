@@ -24,6 +24,7 @@ import time
 
 import pyghmi.exceptions as pygexc
 import pyghmi.ipmi.private.util as util
+import pyghmi.media as media
 import pyghmi.redfish.oem.generic as generic
 import pyghmi.storage as storage
 from pyghmi.util.parse import parse_time
@@ -555,6 +556,23 @@ class OEMHandler(generic.OEMHandler):
             if '_csrf_token' in wc.cookies:
                 wc.set_header('X-XSRF-TOKEN', wc.cookies['_csrf_token'])
             return wc
+
+    def list_media(self, fishclient):
+        rt = self.wc.grab_json_response('/api/providers/rp_vm_remote_getdisk')
+        if 'items' in rt:
+            for mt in rt['items']:
+                url = mt['remotepath']
+                if url.startswith('//'):
+                    url = 'smb:' + url
+                elif (not url.startswith('http://')
+                      and not url.startswith('https://')):
+                    url = url.replace(':', '')
+                    url = 'nfs://' + url
+                yield media.Media(mt['filename'], url)
+        rt = self.wc.grab_json_response('/api/providers/rp_rdoc_imagelist')
+        if 'items' in rt:
+            for mt in rt['items']:
+                yield media.Media(mt['filename'])
 
     def attach_remote_media(self, url, user, password, vmurls):
         for vmurl in vmurls:
