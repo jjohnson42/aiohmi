@@ -963,7 +963,7 @@ class Command(object):
         """
 
         # For now, this is a stub, no implementation for redfish currently
-        return {}
+        return self.oem.get_bmc_configuration()
 
     def set_bmc_configuration(self, changeset):
         """Get miscellaneous BMC configuration
@@ -975,8 +975,7 @@ class Command(object):
         """
 
         # For now, this is a stub, no implementation for redfish currently
-        raise exc.UnsupportedFunctionality(
-            'Set BMC configuration not supported in redfish yet')
+        return self.oem.set_bmc_configuration(changeset)
 
     def clear_bmc_configuration(self):
         """Reset BMC to factory default

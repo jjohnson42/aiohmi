@@ -22,6 +22,8 @@ import re
 import socket
 import time
 
+import six
+
 import pyghmi.exceptions as pygexc
 import pyghmi.ipmi.private.util as util
 import pyghmi.media as media
@@ -29,7 +31,6 @@ import pyghmi.redfish.oem.generic as generic
 import pyghmi.storage as storage
 from pyghmi.util.parse import parse_time
 import pyghmi.util.webclient as webclient
-
 
 numregex = re.compile('([0-9]+)')
 funtypes = {
@@ -101,6 +102,72 @@ class OEMHandler(generic.OEMHandler):
                 return kv[0]
         except KeyError:
             return None
+
+    def get_bmc_configuration(self):
+        settings = {}
+        passrules = self.wc.grab_json_response('/api/dataset/imm_users_global')
+        passrules = passrules.get('items', [{}])[0]
+        settings['password_reuse_count'] = {
+            'value': passrules.get('pass_min_resuse')}
+        settings['password_change_interval'] = {
+            'value': passrules.get('pass_change_interval')}
+        settings['password_expiration'] = {
+            'value': passrules.get('pass_expire_days')}
+        settings['password_login_failures'] = {
+            'value': passrules.get('max_login_failures')}
+        settings['password_complexity'] = {
+            'value': passrules.get('pass_complex_required')}
+        settings['password_min_length'] = {
+            'value': passrules.get('pass_min_length')}
+        settings['password_lockout_period'] = {
+            'value': passrules.get('lockout_period')}
+        presassert = self.wc.grab_json_response('/api/dataset/imm_rpp')
+        asserted = presassert.get('items', [{}])[0].get('rpp_Assert', None)
+        if asserted is not None:
+            settings['presence_assert'] = {
+                'value': 'Enable' if asserted else 'Disable'
+            }
+        return settings
+
+    rulemap = {
+        'password_change_interval': 'USER_GlobalMinPassChgInt',
+        'password_reuse_count': 'USER_GlobalMinPassReuseCycle',
+        'password_expiration': 'USER_GlobalPassExpPeriod',
+        'password_login_failures': 'USER_GlobalMaxLoginFailures',
+        'password_complexity': 'USER_GlobalPassComplexRequired',
+        'password_min_length': 'USER_GlobalMinPassLen',
+        'password_lockout_period': 'USER_GlobalLockoutPeriod',
+    }
+
+    def set_bmc_configuration(self, changeset):
+        ruleset = {}
+        for key in changeset:
+            if isinstance(changeset[key], six.string_types):
+                changeset[key] = {'value': changeset[key]}
+            currval = changeset[key].get('value', None)
+            if key.lower() in self.rulemap:
+                ruleset[self.rulemap[key.lower()]] = currval
+                if key.lower() == 'password_expiration':
+                    warntime = str(int(int(currval) * 0.08))
+                    ruleset['USER_GlobalPassExpWarningPeriod'] = warntime
+            elif 'presence_asserted'.startswith(key.lower()):
+                if 'enabled'.startswith(currval.lower()):
+                    self.wc.grab_json_response('/api/dataset',
+                                               {'IMM_RPPAssert': '0'})
+                    self.wc.grab_json_response('/api/dataset',
+                                               {'IMM_RPPAssert': '1'})
+                elif 'disabled'.startswith(currval.lower()):
+                    self.wc.grab_json_response('/api/dataset',
+                                               {'IMM_RPPAssert': '0'})
+                else:
+                    raise pygexc.InvalidParameterValue(
+                        '"{0}" is not a recognized value for {1}'.format(
+                            currval, key))
+            else:
+                raise pygexc.InvalidParameterValue(
+                    '{0} not a known setting'.format(key))
+        if ruleset:
+            self.wc.grab_json_response('/api/dataset', ruleset)
 
     def get_description(self):
         description = self._do_web_request('/DeviceDescription.json')

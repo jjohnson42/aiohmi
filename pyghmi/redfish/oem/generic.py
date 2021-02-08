@@ -36,6 +36,13 @@ class OEMHandler(object):
             return cachent['contents']
         return None
 
+    def get_bmc_configuration(self):
+        return {}
+
+    def set_bmc_configuration(self, changeset):
+        raise exc.UnsupportedFunctionality(
+            'Platform does not support setting bmc attributes')
+
     def attach_remote_media(self, url, username, password, vmurls):
         return None
 

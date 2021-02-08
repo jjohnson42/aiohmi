@@ -895,6 +895,12 @@ class XCCClient(IMMClient):
             'value': passrules.get('pass_min_length')}
         settings['password_lockout_period'] = {
             'value': passrules.get('lockout_period')}
+        presassert = self.wc.grab_json_response('/api/dataset/imm_rpp')
+        asserted = presassert.get('items', [{}])[0].get('rpp_Assert', None)
+        if asserted is not None:
+            settings['presence_assert'] = {
+                'value': 'Enable' if asserted else 'Disable'
+            }
         try:
             enclosureinfo = self.ipmicmd.xraw_command(0x3a, 0xf1, data=[0])
         except pygexc.IpmiException:
@@ -951,6 +957,20 @@ class XCCClient(IMMClient):
                 if key.lower() == 'password_expiration':
                     warntime = str(int(int(changeset[key]['value']) * 0.08))
                     ruleset['USER_GlobalPassExpWarningPeriod'] = warntime
+            elif 'presence_asserted'.startswith(key.lower()):
+                assertion = changeset[key]['value']
+                if 'enabled'.startswith(assertion.lower()):
+                    self.wc.grab_json_response('/api/dataset',
+                                               {'IMM_RPPAssert': '0'})
+                    self.wc.grab_json_response('/api/dataset',
+                                               {'IMM_RPPAssert': '1'})
+                elif 'disabled'.startswith(assertion.lower()):
+                    self.wc.grab_json_response('/api/dataset',
+                                               {'IMM_RPPAssert': '0'})
+                else:
+                    raise pygexc.InvalidParameterValue(
+                        '"{0}" is not a recognized value for {1}'.format(
+                            assertion, key))
             else:
                 raise pygexc.InvalidParameterValue(
                     '{0} not a known setting'.format(key))
