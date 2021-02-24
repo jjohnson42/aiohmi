@@ -876,6 +876,7 @@ class OEMHandler(generic.OEMHandler):
             raise Exception('Unexpected result starting update: %s' % errmsg)
         complete = False
         while not complete:
+            self._refresh_token()
             time.sleep(3)
             rsp = self.wc.grab_json_response(
                 '/api/dataset/imm_firmware_progress')

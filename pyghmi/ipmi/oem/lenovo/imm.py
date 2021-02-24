@@ -1928,6 +1928,7 @@ class XCCClient(IMMClient):
             raise Exception('Unexpected result starting update: %s' % errmsg)
         complete = False
         while not complete:
+            self._refresh_token()
             ipmisession.Session.pause(3)
             rsp = self.wc.grab_json_response(
                 '/api/dataset/imm_firmware_progress')
