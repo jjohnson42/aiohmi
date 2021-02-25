@@ -2066,6 +2066,6 @@ class Command(object):
         self.oem_init()
         return self._oem.save_licenses(directory)
 
-    def apply_license(self, filename, progress=None):
+    def apply_license(self, filename, progress=None, data=None):
         self.oem_init()
-        return self._oem.apply_license(filename, progress)
+        return self._oem.apply_license(filename, progress, data=None)

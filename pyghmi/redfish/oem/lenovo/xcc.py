@@ -974,7 +974,7 @@ class OEMHandler(generic.OEMHandler):
                     self._refresh_token()
                 yield savefile
 
-    def apply_license(self, filename, progress=None):
+    def apply_license(self, filename, progress=None, data=None):
         license_errors = {
             310: "License is for a different model of system",
             311: "License is for a different system serial number",
@@ -982,7 +982,8 @@ class OEMHandler(generic.OEMHandler):
             313: "License is expired",
             314: "License usage limit reached",
         }
-        uploadthread = webclient.FileUploader(self.wc, '/upload', filename)
+        uploadthread = webclient.FileUploader(self.wc, '/upload', filename,
+                                              data=data)
         uploadthread.start()
         uploadthread.join()
         rsp = json.loads(uploadthread.rsp)

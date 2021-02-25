@@ -1508,8 +1508,8 @@ class Command(object):
                     directory))
         return self.oem.save_licenses(directory)
 
-    def apply_license(self, filename, progress=None):
-        return self.oem.apply_license(filename, progress)
+    def apply_license(self, filename, progress=None, data=None):
+        return self.oem.apply_license(filename, progress, data)
 
 
 if __name__ == '__main__':

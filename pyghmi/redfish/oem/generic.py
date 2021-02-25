@@ -393,7 +393,7 @@ class OEMHandler(object):
     def save_licenses(self, directory):
         raise exc.UnsupportedFunctionality()
 
-    def apply_license(self, filename, progress=None):
+    def apply_license(self, filename, progress=None, data=None):
         raise exc.UnsupportedFunctionality()
 
     def get_user_expiration(self, uid):
