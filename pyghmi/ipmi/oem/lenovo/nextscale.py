@@ -704,8 +704,13 @@ class SMMClient(object):
     def update_firmware(self, filename, data=None, progress=None, bank=None):
         if progress is None:
             progress = lambda x: True
-        if not data and zipfile.is_zipfile(filename):
+        z = None
+        if data and hasattr(data, 'read'):
+            if zipfile.is_zipfile(data):
+                z = zipfile.ZipFile(data)
+        elif data is None and zipfile.is_zipfile(filename):
             z = zipfile.ZipFile(filename)
+        if z:
             for tmpname in z.namelist():
                 if tmpname.endswith('.rom'):
                     filename = tmpname
