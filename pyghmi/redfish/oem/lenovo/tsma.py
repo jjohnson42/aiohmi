@@ -34,9 +34,14 @@ class HpmSection(object):
                  'hash_size', 'combo_image']
 
 
-def read_hpm(filename):
+def read_hpm(filename, data):
     hpminfo = []
-    with open(filename, 'rb') as hpmfile:
+    if data:
+        hpmfile = data
+        hpmfile.seek(0)
+    else:
+        hpmfile = open(filename, 'rb')
+    try:
         hpmfile.seek(0x20)
         skip = struct.unpack('>H', hpmfile.read(2))[0]
         hpmfile.seek(skip + 1, 1)
@@ -72,6 +77,9 @@ def read_hpm(filename):
         endpos = hpmfile.tell()
         if currpos < (endpos - 512):
             raise Exception("Unexpected end of HPM file")
+    finally:
+        if not data:
+            hpmfile.close()
     return hpminfo
 
 
@@ -341,6 +349,12 @@ class TsmHandler(generic.OEMHandler):
             raise Exception('Error {0} retrieving TSM version: {1}'.format(
                 status, fwinf))
         for cinf in fwinf:
+            if 'fw_ver' not in cinf:
+                continue
+            if cinf.get('buildname', None) == 'N/A':
+                continue
+            if '.' not in cinf['fw_ver']:
+                continue
             bmcinf = {
                 'version': cinf['fw_ver'],
                 'build': cinf['buildname'],
@@ -388,17 +402,18 @@ class TsmHandler(generic.OEMHandler):
         wc = self.wc
         wc.set_header('Content-Type', 'application/json')
         if filename.endswith('.hpm'):
-            return self.update_hpm_firmware(filename, progress, wc)
+            return self.update_hpm_firmware(filename, progress, wc, data)
         elif 'uefi' in filename and filename.endswith('.rom'):
-            return self.update_sys_firmware(filename, progress, wc)
+            return self.update_sys_firmware(filename, progress, wc, data=data)
         elif 'amd-sas' in filename and filename.endswith('.bin'):
-            return self.update_sys_firmware(filename, progress, wc, type='bp')
+            return self.update_sys_firmware(filename, progress, wc, data=data,
+                                            type='bp')
         elif 'lxpm' in filename and filename.endswith('.img'):
-            return self.update_lxpm_firmware(filename, progress, wc)
+            return self.update_lxpm_firmware(filename, progress, wc, data)
         else:
             raise Exception('Unsupported filename {0}'.format(filename))
 
-    def update_lxpm_firmware(self, filename, progress, wc):
+    def update_lxpm_firmware(self, filename, progress, wc, data):
         hdrs = wc.stdheaders.copy()
         hdrs['Content-Length'] = 0
         rsp = wc.grab_json_response_with_status(
@@ -407,7 +422,7 @@ class TsmHandler(generic.OEMHandler):
         # name fwimage filname filename application/x-raw-disk-image...
         fu = webclient.FileUploader(
             wc, '/api/maintenance/LXPMUpload',
-            filename, formname='fwimage')
+            filename, data, formname='fwimage')
         fu.start()
         while fu.isAlive():
             fu.join(3)
@@ -430,7 +445,8 @@ class TsmHandler(generic.OEMHandler):
             '/api/maintenance/Outofflash', method='PUT', headers=hdrs)
         return 'complete'
 
-    def update_sys_firmware(self, filename, progress, wc, type='uefi'):
+    def update_sys_firmware(self, filename, progress, wc, type='uefi',
+                            data=None):
         if type == 'bp':
             rsp = wc.grab_json_response_with_status('/api/chassis-status')
             if rsp[0]['power_status'] == 1:
@@ -455,7 +471,7 @@ class TsmHandler(generic.OEMHandler):
             '/api/maintenance/{0}'.format(updatemode),
             method='PUT', headers=hdrs)
         fu = webclient.FileUploader(
-            wc, '/api/maintenance/{0}'.format(fileupload), filename,
+            wc, '/api/maintenance/{0}'.format(fileupload), filename, data,
             formname='fwimage')
         fu.start()
         while fu.isAlive():
@@ -502,16 +518,16 @@ class TsmHandler(generic.OEMHandler):
             return 'pending'
         raise Exception('Update Failure')
 
-    def update_hpm_firmware(self, filename, progress, wc):
+    def update_hpm_firmware(self, filename, progress, wc, data):
         rsp = wc.grab_json_response('/api/maintenance/hpm/freemem')
         if 'MemFree' not in rsp:
             raise Exception('System Not Ready for update')
         if filename not in hpm_by_filename:
-            hpminfo = read_hpm(filename)
+            hpminfo = read_hpm(filename, data)
             if len(hpminfo) != 3:
                 raise Exception(
                     'This HPM update is currently not supported')
-            hpm_by_filename[filename] = read_hpm(filename)
+            hpm_by_filename[filename] = read_hpm(filename, data)
         else:
             hpminfo = hpm_by_filename[filename]
         rsp, status = wc.grab_json_response_with_status(
