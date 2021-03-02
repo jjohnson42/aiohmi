@@ -2068,4 +2068,4 @@ class Command(object):
 
     def apply_license(self, filename, progress=None, data=None):
         self.oem_init()
-        return self._oem.apply_license(filename, progress, data=None)
+        return self._oem.apply_license(filename, progress, data)
