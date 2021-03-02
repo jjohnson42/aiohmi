@@ -339,17 +339,21 @@ class SMMClient(object):
             ruleinfo = accountinfo.find(self.rulemap[rule])
             if ruleinfo is not None:
                 settings[rule] = {'value': int(ruleinfo.text)}
-        rsp = self.ipmicmd.xraw_command(0x34, 3)
-        fanmode = self.fanmodes[bytearray(rsp['data'])[0]]
-        settings['fanspeed'] = {
-            'value': fanmode, 'default': 'Normal',
-            'help': ('Adjust the fan speed of the D2 Chassis. Capped settings '
-                     'will reduce fan speed for better acoustic experience at '
-                     'the expense of performance.  Normal is using the Lenovo '
-                     'engineered cooling adjustments across the full range. '
-                     'Boosted adds fanspeed to the Normal response to '
-                     'provide more aggressive cooling.'),
-            'possible': [self.fanmodes[x] for x in self.fanmodes]}
+        dwc = self.ipmicmd.xraw_command(0x32, 0x94)
+        dwc = bytearray(dwc['data'])
+        if len(dwc) != 3 or dwc[0] == 1:
+            rsp = self.ipmicmd.xraw_command(0x34, 3)
+            fanmode = self.fanmodes[bytearray(rsp['data'])[0]]
+            settings['fanspeed'] = {
+                'value': fanmode, 'default': 'Normal',
+                'help': ('Adjust the fan speed of the D2 Chassis. Capped '
+                         'settings will reduce fan speed for better acoustic '
+                         'experience at the expense of performance.  Normal '
+                         'is using the Lenovo engineered cooling adjustments '
+                         'across the full range. Boosted adds fanspeed to '
+                         'the Normal response to provide more aggressive '
+                         'cooling.'),
+                'possible': [self.fanmodes[x] for x in self.fanmodes]}
         powercfg = self.ipmicmd.xraw_command(0x32, 0xa2)
         powercfg = bytearray(powercfg['data'])
         if len(powercfg) == 5:
