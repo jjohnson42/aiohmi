@@ -277,7 +277,7 @@ class OEMHandler(object):
     def attach_remote_media(self, imagename, username, password):
         raise exc.UnsupportedFunctionality()
 
-    def upload_media(self, filename, progress):
+    def upload_media(self, filename, progress, data):
         raise exc.UnsupportedFunctionality()
 
     def list_media(self):

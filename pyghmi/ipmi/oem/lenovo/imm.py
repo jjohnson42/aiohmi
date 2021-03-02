@@ -425,7 +425,7 @@ class IMMClient(object):
         except KeyError:
             return None
 
-    def upload_media(self, filename, progress=None):
+    def upload_media(self, filename, progress=None, data=None):
         xid = random.randint(0, 1000000000)
         alloc = self.wc.grab_json_response(
             '/data/set',
@@ -439,7 +439,7 @@ class IMMClient(object):
         uploadfields['available'] = alloc['available']
         uploadfields['checksum'] = xid
         ut = webclient.FileUploader(
-            self.wc, '/designs/imm/upload/rp_image_upload.esp', filename,
+            self.wc, '/designs/imm/upload/rp_image_upload.esp', filename, data,
             otherfields=uploadfields)
         ut.start()
         while ut.isAlive():
@@ -1684,11 +1684,11 @@ class XCCClient(IMMClient):
                 yield media.Media(mt['filename'])
         self.weblogout()
 
-    def upload_media(self, filename, progress=None):
+    def upload_media(self, filename, progress=None, data=None):
         xid = random.randint(0, 1000000000)
         self._refresh_token()
         uploadthread = webclient.FileUploader(
-            self.wc, '/upload?X-Progress-ID={0}'.format(xid), filename, None)
+            self.wc, '/upload?X-Progress-ID={0}'.format(xid), filename, data)
         uploadthread.start()
         while uploadthread.isAlive():
             uploadthread.join(3)
