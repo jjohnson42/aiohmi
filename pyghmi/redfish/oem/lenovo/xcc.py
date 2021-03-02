@@ -656,11 +656,11 @@ class OEMHandler(generic.OEMHandler):
             raise pygexc.InvalidParameterValue(
                 'XCC does not have required license for operation')
 
-    def upload_media(self, filename, progress=None):
+    def upload_media(self, filename, progress=None, data=None):
         xid = random.randint(0, 1000000000)
         self._refresh_token()
         uploadthread = webclient.FileUploader(
-            self.wc, '/upload?X-Progress-ID={0}'.format(xid), filename, None)
+            self.wc, '/upload?X-Progress-ID={0}'.format(xid), filename, data)
         uploadthread.start()
         while uploadthread.isAlive():
             uploadthread.join(3)

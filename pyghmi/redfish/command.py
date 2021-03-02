@@ -1463,7 +1463,7 @@ class Command(object):
                                           'Inserted': False},
                                          method='PATCH')
 
-    def upload_media(self, filename, progress=None):
+    def upload_media(self, filename, progress=None, data=None):
         """Upload a file to be hosted on the target BMC
 
         This will upload the specified data to
@@ -1474,7 +1474,7 @@ class Command(object):
                          will be given to the bmc.
         :param progress: Optional callback for progress updates
         """
-        return self.oem.upload_media(filename, progress)
+        return self.oem.upload_media(filename, progress, data)
 
     def update_firmware(self, file, data=None, progress=None, bank=None):
         """Send file to BMC to perform firmware update

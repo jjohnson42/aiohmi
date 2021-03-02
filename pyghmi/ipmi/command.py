@@ -2028,7 +2028,7 @@ class Command(object):
         self.oem_init()
         return self._oem.detach_remote_media()
 
-    def upload_media(self, filename, progress=None):
+    def upload_media(self, filename, progress=None, data=None):
         """Upload a file to be hosted on the target BMC
 
         This will upload the specified data to
@@ -2040,7 +2040,7 @@ class Command(object):
         :param progress: Optional callback for progress updates
         """
         self.oem_init()
-        return self._oem.upload_media(filename, progress)
+        return self._oem.upload_media(filename, progress, data)
 
     def list_media(self):
         """List attached remote media
