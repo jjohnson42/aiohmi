@@ -398,3 +398,7 @@ class OEMHandler(object):
 
     def get_user_expiration(self, uid):
         return None
+
+    def reseat_bay(self, bay):
+        raise exc.UnsupportedFunctionality(
+            'Bay reseat not supported on this platform')

@@ -95,6 +95,16 @@ class OEMHandler(generic.OEMHandler):
         self.updating = False
         self.datacache = {}
 
+    def reseat_bay(self, bay):
+        if bay != -1:
+            raise pygexc.UnsupportedFunctionality(
+                'This is not an enclosure manager')
+        rsp = self.wc.grab_json_response_with_status(
+            '/api/providers/virt_reseat', '{}')
+        if rsp[1] != 200 or rsp[0].get('return', 1) != 0:
+            raise pygexc.UnsupportedFunctionality(
+                'This platform does not support AC reseat.')
+
     def get_cached_data(self, attribute, age=30):
         try:
             kv = self.datacache[attribute]

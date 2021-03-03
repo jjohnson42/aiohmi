@@ -527,6 +527,17 @@ class Command(object):
         currinfo = self._do_web_request(self.sysurl, cache=False)
         return {'powerstate': str(currinfo['PowerState'].lower())}
 
+    def reseat_bay(self, bay):
+        """Request the reseat of a bay
+
+        Request the enclosure manager to reseat the system in a particular
+        bay.
+
+        :param bay: The bay identifier to reseat
+        :return:
+        """
+        self.oem.reseat_bay(bay)
+
     def set_power(self, powerstate, wait=False):
         if powerstate == 'boot':
             oldpowerstate = self.get_power()['powerstate']
