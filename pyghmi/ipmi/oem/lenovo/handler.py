@@ -284,6 +284,8 @@ class OEMHandler(generic.OEMHandler):
     def reseat_bay(self, bay):
         if self.is_fpc:
             return self.smmhandler.reseat_bay(bay)
+        elif self.has_xcc and bay == -1:
+            return self.immhandler.reseat()
         return super(OEMHandler, self).reseat_bay(bay)
 
     def get_ntp_enabled(self):

@@ -860,6 +860,13 @@ class XCCClient(IMMClient):
         super(XCCClient, self).__init__(ipmicmd)
         self.adp_referer = None
 
+    def reseat(self):
+        rsp = self.wc.grab_json_response_with_status(
+            '/api/providers/virt_reseat', '{}')
+        if rsp[1] != 200 or rsp[0].get('return', 1) != 0:
+            raise pygexc.UnsupportedFunctionality(
+                'This platform does not support AC reseat.')
+
     def get_description(self):
         dsc = self.wc.grab_json_response('/DeviceDescription.json')
         dsc = dsc[0]
