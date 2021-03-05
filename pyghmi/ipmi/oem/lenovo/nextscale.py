@@ -712,6 +712,8 @@ class SMMClient(object):
         if data and hasattr(data, 'read'):
             if zipfile.is_zipfile(data):
                 z = zipfile.ZipFile(data)
+            else:
+                data.seek(0)
         elif data is None and zipfile.is_zipfile(filename):
             z = zipfile.ZipFile(filename)
         if z:
