@@ -35,6 +35,17 @@ class HpmSection(object):
                  'hash_size', 'combo_image']
 
 
+def cstr_to_str(cstr):
+    try:
+        endidx = cstr.index(b'\x00')
+        cstr = cstr[:endidx]
+    except Exception:
+        pass
+    if not isinstance(cstr, str):
+        cstr = cstr.decode('utf8')
+    return cstr
+
+
 def read_hpm(filename, data):
     hpminfo = []
     if data:
@@ -310,7 +321,8 @@ class TsmHandler(generic.OEMHandler):
         if status != 200:
             raise Exception(repr(rsp))
 
-    def get_firmware_inventory(self, components, raisebypass=True):
+    def get_firmware_inventory(self, components, raisebypass=True,
+                               ipmicmd=None):
         wc = self.wc
         fwinf, status = wc.grab_json_response_with_status(
             '/api/DeviceVersion')
@@ -344,6 +356,13 @@ class TsmHandler(generic.OEMHandler):
                 lxpmres['version'] = '{0}.{1:02x}'.format(
                     lxpminf['main'], subver)
             yield ('LXPM', lxpmres)
+        if ipmicmd:
+            rsp = ipmicmd.xraw_command(0x3c, 0x40, data=(7, 2))
+            buildid = cstr_to_str(bytes(rsp['data']))
+            yield ('LXPM Windows Driver Bundle', {'build': buildid})
+            rsp = ipmicmd.xraw_command(0x3c, 0x40, data=(7, 3))
+            buildid = cstr_to_str(bytes(rsp['data']))
+            yield ('LXPM Linux Driver Bundle', {'build': buildid})
         name = 'TSM'
         fwinf, status = wc.grab_json_response_with_status('/api/get-sysfwinfo')
         if status != 200:

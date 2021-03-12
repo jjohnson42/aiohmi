@@ -652,8 +652,8 @@ class OEMHandler(generic.OEMHandler):
             return nextscale.get_fpc_firmware(bmcver, self.ipmicmd,
                                               self._fpc_variant)
         elif self.has_tsma:
-            return self.tsmahandler.get_firmware_inventory(components,
-                                                           raisebypass=False)
+            return self.tsmahandler.get_firmware_inventory(
+                components, raisebypass=False, ipmicmd=self.ipmicmd)
         return super(OEMHandler, self).get_oem_firmware(bmcver, components)
 
     def get_diagnostic_data(self, savefile, progress, autosuffix=False):
