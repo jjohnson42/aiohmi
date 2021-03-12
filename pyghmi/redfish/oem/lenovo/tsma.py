@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import struct
 import time
 try:
@@ -401,14 +402,16 @@ class TsmHandler(generic.OEMHandler):
     def update_firmware(self, filename, data=None, progress=None, bank=None):
         wc = self.wc
         wc.set_header('Content-Type', 'application/json')
+        basefilename = os.path.basename(filename)
         if filename.endswith('.hpm'):
             return self.update_hpm_firmware(filename, progress, wc, data)
-        elif 'uefi' in filename and filename.endswith('.rom'):
+        elif 'uefi' in basefilename and filename.endswith('.rom'):
             return self.update_sys_firmware(filename, progress, wc, data=data)
-        elif 'amd-sas' in filename and filename.endswith('.bin'):
+        elif 'amd-sas' in basefilename and filename.endswith('.bin'):
             return self.update_sys_firmware(filename, progress, wc, data=data,
                                             type='bp')
-        elif 'lxpm' in filename and filename.endswith('.img'):
+        elif (('lxpm' in basefilename or 'fw_drv' in basefilename)
+                and filename.endswith('.img')):
             return self.update_lxpm_firmware(filename, progress, wc, data)
         else:
             raise Exception('Unsupported filename {0}'.format(filename))
