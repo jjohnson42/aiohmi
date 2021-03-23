@@ -1168,11 +1168,13 @@ class Command(object):
                 netmask = _cidr_to_mask(int(cidr))
             patch['IPv4StaticAddresses'] = [ipinfo]
             ipinfo['Address'] = ipv4_address
+            ipv4_configuration = 'static'
             if netmask:
                 ipinfo['SubnetMask'] = netmask
         if ipv4_gateway:
             patch['IPv4StaticAddresses'] = [ipinfo]
             ipinfo['Gateway'] = ipv4_gateway
+            ipv4_configuration = 'static'
         if ipv4_configuration.lower() == 'dhcp':
             dodhcp = True
             patch['DHCPv4'] = {'DHCPEnabled': True}
