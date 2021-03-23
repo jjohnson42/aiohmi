@@ -662,7 +662,8 @@ class OEMHandler(generic.OEMHandler):
                                                        autosuffix)
         if self.is_fpc:
             return self.smmhandler.get_diagnostic_data(savefile, progress,
-                                                       autosuffix)
+                                                       autosuffix,
+                                                       self._fpc_variant)
         if self.has_tsma:
             return self.tsmahandler.get_diagnostic_data(savefile, progress,
                                                         autosuffix)

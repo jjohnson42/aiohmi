@@ -508,7 +508,8 @@ class SMMClient(object):
         self.ipmicmd.xraw_command(netfn=0x32, command=0xa4,
                                   data=[int(bay), 2])
 
-    def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
+    def get_diagnostic_data(self, savefile, progress=None, autosuffix=False,
+                            variant=None):
         rsp = self.ipmicmd.xraw_command(netfn=0x32, command=0xb1, data=[0])
         if bytearray(rsp['data'])[0] != 0:
             raise Exception("Service data generation already in progress")
@@ -529,7 +530,10 @@ class SMMClient(object):
                 progress({'phase': 'initializing', 'progress': initpct})
         if self.wc is None:
             raise Exception("Failed to connect to web api")
-        url = '/preview/smm-ffdc.tgz?ST1={0}'.format(self.st1)
+        if variant and variant >> 5:
+            url = '/preview/smm2-ffdc.tgz?ST1={0}'.format(self.st1)
+        else:
+            url = '/preview/smm-ffdc.tgz?ST1={0}'.format(self.st1)
         if autosuffix and not savefile.endswith('.tgz'):
             savefile += '-smm-ffdc.tgz'
         fd = webclient.FileDownloader(self.wc, url, savefile)
