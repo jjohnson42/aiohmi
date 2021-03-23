@@ -1110,6 +1110,10 @@ class Command(object):
                     if fnmatch(attr.lower(), change.lower()):
                         found = True
                         changeset[attr] = changeset[change]
+                    if fnmatch(attr.lower(),
+                               change.replace('.', '_').lower()):
+                        found = True
+                        changeset[attr] = changeset[change]
                 if found:
                     del changeset[change]
         for change in changeset:
