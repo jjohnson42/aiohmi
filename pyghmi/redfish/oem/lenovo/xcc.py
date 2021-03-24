@@ -928,7 +928,7 @@ class OEMHandler(generic.OEMHandler):
                                                 {'Generate_FFDC_status': 1})
         url = '/ffdc/{0}'.format(result['FileName'])
         if autosuffix and not savefile.endswith('.tzz'):
-            savefile += '.tzz'
+            savefile += '-{0}'.format(result['FileName'])
         fd = webclient.FileDownloader(self.wc, url, savefile)
         fd.start()
         while fd.isAlive():
