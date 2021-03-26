@@ -1580,6 +1580,7 @@ class Session(object):
                 # RAKP4 got dropped, BMC can consider it done and we must
                 # restart
                 self._relog()
+                return
             # ignore 15 value if we are retrying.
             # xCAT did but I can't recall why exactly
             if data[1] == 15 and self.logontries:
