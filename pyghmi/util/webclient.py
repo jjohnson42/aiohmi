@@ -239,7 +239,12 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
             raise
         body = rsp.read()
         if rsp.getheader('Content-Encoding', None) == 'gzip':
-            body = gzip.GzipFile(fileobj=io.BytesIO(body)).read()
+            try:
+                body = gzip.GzipFile(fileobj=io.BytesIO(body)).read()
+            except IOError:
+                # some implementations will send non-gzipped and claim it as
+                # gzip
+                pass
         if rsp.status >= 200 and rsp.status < 300:
             if body and not isinstance(body, str):
                 body = body.decode('utf8')
@@ -307,7 +312,12 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
                             % rsp.read())
         body = rsp.read()
         if rsp.getheader('Content-Encoding', None) == 'gzip':
-            body = gzip.GzipFile(fileobj=io.BytesIO(body)).read()
+            try:
+                body = gzip.GzipFile(fileobj=io.BytesIO(body)).read()
+            except IOError:
+                # In case the implementation lied, let the body return
+                # unprocessed
+                pass
         return body
 
     def get_upload_progress(self):
