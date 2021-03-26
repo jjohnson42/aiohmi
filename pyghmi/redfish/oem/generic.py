@@ -73,11 +73,12 @@ class OEMHandler(object):
             vmurls = [x['@odata.id'] for x in vmlist.get('Members', [])]
             for vminfo in fishclient._do_bulk_requests(vmurls):
                 vminfo = vminfo[0]
-                if vminfo['Image']:
+                if vminfo.get('Image', None):
                     imageurl = vminfo['Image'].replace(
                         '/' + vminfo['ImageName'], '')
                     yield media.Media(vminfo['ImageName'], imageurl)
-                elif vminfo['Inserted'] and vminfo['ImageName']:
+                elif vminfo.get('Inserted', None) and vminfo.get(
+                        'ImageName', None):
                     yield media.Media(vminfo['ImageName'])
 
     def get_inventory_descriptions(self, withids=False):

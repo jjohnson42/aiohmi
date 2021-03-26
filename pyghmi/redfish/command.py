@@ -1456,7 +1456,7 @@ class Command(object):
             return
         for vmurl in vmurls:
             vminfo = self._do_web_request(vmurl, cache=False)
-            if vminfo['ConnectedVia'] != 'NotConnected':
+            if vminfo.get('ConnectedVia', None) != 'NotConnected':
                 continue
             self._do_web_request(vmurl, {'Image': url, 'Inserted': True},
                                  'PATCH')
