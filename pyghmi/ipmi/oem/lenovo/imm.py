@@ -134,7 +134,6 @@ class IMMClient(object):
         self._wc = None  # The webclient shall be initiated on demand
         self._energymanager = None
         self.datacache = {}
-        self.webkeepalive = None
         self._keepalivesession = None
         self.fwc = None
         self.fwo = None
@@ -858,6 +857,7 @@ class XCCClient(IMMClient):
 
     def __init__(self, ipmicmd):
         super(XCCClient, self).__init__(ipmicmd)
+        self.ipmicmd.ipmi_session.register_keepalive(self.keepalive, None)
         self.adp_referer = None
 
     def reseat(self):
@@ -1529,14 +1529,15 @@ class XCCClient(IMMClient):
                 raise pygexc.InvalidParameterValue(
                     'Given location was unreachable by the XCC')
             raise Exception('Unhandled return: ' + repr(rt))
-        if not self.webkeepalive:
+        if not self._keepalivesession:
             self._keepalivesession = self._wc
-            self.webkeepalive = self.ipmicmd.ipmi_session.register_keepalive(
-                self.keepalive, None)
         self._wc = None
 
     def keepalive(self):
-        self._refresh_token_wc(self._keepalivesession)
+        if self.fwo and util._monotonic_time() - self.fwovintage > 15:
+            self.fwo = None
+        if self._keepalivesession:
+            self._refresh_token_wc(self._keepalivesession)
 
     def fetch_psu_firmware(self):
         psudata = self.get_cached_data('lenovo_cached_psu')
@@ -1650,9 +1651,7 @@ class XCCClient(IMMClient):
                 yield firm
 
     def detach_remote_media(self):
-        if self.webkeepalive:
-            self.ipmicmd.ipmi_session.unregister_keepalive(self.webkeepalive)
-            self._keepalivesession = None
+        self._keepalivesession = None
         rt = self.wc.grab_json_response('/api/providers/rp_vm_remote_getdisk')
         if 'items' in rt:
             slots = []
