@@ -158,6 +158,21 @@ def fpc_read_powerbank(ipmicmd):
     return struct.unpack_from('<H', rsp['data'][3:])[0]
 
 
+def fpc_get_dripstatus(ipmicmd, number, sz):
+    health = pygconst.Health.Ok
+    states = []
+    rsp = ipmicmd.xraw_command(0x34, 5)
+    rdata = bytearray(rsp['data'])
+    number = number - 1
+    if rdata[0] & (1 << number) == 0:
+        states.append('Absent')
+        health = pygconst.Health.Critical
+    if rdata[1] & (1 << number) != 0:
+        states.append('Leak detected')
+        health = pygconst.Health.Critical
+    return (health, states)
+
+
 fpc_sensors = {
     'AC Power': {
         'type': 'Power',
@@ -203,6 +218,13 @@ fpc_sensors = {
         'units': None,
         'provider': fpc_get_psustatus,
         'elements': 1,
+    },
+    'Drip Sensor': {
+        'type': 'Management Subsystem Health',
+        'abselements': 2,
+        'returns': 'tuple',
+        'units': None,
+        'provider': fpc_get_dripstatus,
     }
 }
 
@@ -215,9 +237,15 @@ def get_sensor_names(size):
             continue
         if size == 6 and name == 'PSU Power Loss':
             continue
+        if size != 0x26 and name == 'Drip Sensor':
+            continue
         sensor = fpc_sensors[name]
         if 'elements' in sensor:
             for elemidx in range(sensor['elements'] * (size & 0b11111)):
+                elemidx += 1
+                yield '{0} {1}'.format(name, elemidx)
+        elif 'abselements' in sensor:
+            for elemidx in range(sensor['abselements']):
                 elemidx += 1
                 yield '{0} {1}'.format(name, elemidx)
         else:
@@ -232,9 +260,16 @@ def get_sensor_descriptions(size):
             continue
         if size == 6 and name == 'PSU Power Loss':
             continue
+        if size != 0x26 and name == 'Drip Sensor':
+            continue
         sensor = fpc_sensors[name]
         if 'elements' in sensor:
             for elemidx in range(sensor['elements'] * (size & 0b11111)):
+                elemidx += 1
+                yield {'name': '{0} {1}'.format(name, elemidx),
+                       'type': sensor['type']}
+        elif 'abselements' in sensor:
+            for elemidx in range(sensor['abselements']):
                 elemidx += 1
                 yield {'name': '{0} {1}'.format(name, elemidx),
                        'type': sensor['type']}
@@ -279,12 +314,18 @@ def get_sensor_reading(name, ipmicmd, sz):
     else:
         bnam, _, idx = name.rpartition(' ')
         idx = int(idx)
-        if bnam in fpc_sensors and idx <= fpc_sensors[bnam]['elements'] * sz:
-            sensor = fpc_sensors[bnam]
-            if 'returns' in sensor:
-                health, states = sensor['provider'](ipmicmd, idx, sz)
-            else:
-                value = sensor['provider'](ipmicmd, idx, sz)
+        if bnam in fpc_sensors:
+            max = -1
+            if 'elements' in fpc_sensors[bnam]:
+                max = fpc_sensors[bnam]['elements'] * sz
+            elif 'abselements' in fpc_sensors[bnam]:
+                max = fpc_sensors[bnam]['abselements']
+            if idx <= max:
+                sensor = fpc_sensors[bnam]
+                if 'returns' in sensor:
+                    health, states = sensor['provider'](ipmicmd, idx, sz)
+                else:
+                    value = sensor['provider'](ipmicmd, idx, sz)
     if sensor is not None:
         return sdr.SensorReading({'name': name, 'imprecision': None,
                                   'value': value, 'states': states,
