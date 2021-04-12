@@ -337,7 +337,8 @@ def get_sensor_reading(name, ipmicmd, sz):
 
 class SMMClient(object):
 
-    def __init__(self, ipmicmd):
+    def __init__(self, ipmicmd, variant):
+        self.smm_variant = variant
         self.ipmicmd = weakref.proxy(ipmicmd)
         self.smm = ipmicmd.bmc
         self.username = ipmicmd.ipmi_session.userid
@@ -589,13 +590,17 @@ class SMMClient(object):
         return savefile
 
     def process_fru(self, fru):
+        smmv1 = self.smm_variant & 0xf0 == 0
         # TODO(jjohnson2): can also get EIOM, SMM, and riser data if warranted
-        fru['Serial Number'] = bytes(self.ipmicmd.xraw_command(
-            netfn=0x32, command=0xb0, data=(5, 1))['data'][:]).strip(
-                b' \x00\xff').replace(b'\xff', b'')
-        fru['Model'] = bytes(self.ipmicmd.xraw_command(
-            netfn=0x32, command=0xb0, data=(5, 0))['data'][:]).strip(
-                b' \x00\xff').replace(b'\xff', b'')
+        snum = bytes(self.ipmicmd.xraw_command(
+            netfn=0x32, command=0xb0, data=(5, 1))['data'][:])
+        mnum = bytes(self.ipmicmd.xraw_command(
+            netfn=0x32, command=0xb0, data=(5, 0))['data'][:])
+        if not smmv1:
+            snum = snum[2:]
+            mnum = mnum[2:]
+        fru['Serial Number'] = snum.strip(b' \x00\xff').replace(b'\xff', b'')
+        fru['Model'] = mnum.strip(b' \x00\xff').replace(b'\xff', b'')
         return fru
 
     def get_webclient(self):

@@ -155,7 +155,7 @@ class OEMHandler(generic.OEMHandler):
         elif self.has_imm:
             self.immhandler = imm.IMMClient(ipmicmd)
         elif self.is_fpc:
-            self.smmhandler = nextscale.SMMClient(ipmicmd)
+            self.smmhandler = nextscale.SMMClient(ipmicmd, self.is_fpc)
         elif self.has_tsma:
             conn = wc.SecureHTTPConnection(
                 ipmicmd.bmc, 443,
