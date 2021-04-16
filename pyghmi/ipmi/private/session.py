@@ -1821,6 +1821,8 @@ class Session(object):
                 # if a code somehow makes duplicate SOL handlers,
                 # this would notify all the handlers rather than just the
                 # last one to take ownership
+                if self._customkeepalives[ka][1] is None:
+                    continue
                 self._customkeepalives[ka][1](
                     {'error': 'Session Disconnected'})
         self._customkeepalives = None
