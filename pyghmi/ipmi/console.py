@@ -199,7 +199,7 @@ class Console(object):
 
         if self.ipmi_session:
             self.ipmi_session.unregister_keepalive(self.keepaliveid)
-        if self.activated:
+        if self.activated and self.ipmi_session is not None:
             try:
                 self.ipmi_session.raw_command(netfn=6, command=0x49,
                                               data=(1, 1, 0, 0, 0, 0))
@@ -295,7 +295,7 @@ class Console(object):
                      needskeepalive=False):
         while not (self.connected or self.broken):
             session.Session.wait_for_rsp(timeout=10)
-        if not self.ipmi_session.logged:
+        if self.ipmi_session is None or not self.ipmi_session.logged:
             self._print_error('Session no longer connected')
             raise exc.IpmiException('Session no longer connected')
         self.ipmi_session.send_payload(payload,
