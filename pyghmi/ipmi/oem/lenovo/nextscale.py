@@ -540,8 +540,10 @@ class SMMClient(object):
         if priv.lower() == 'administrator':
             rsp = self.ipmicmd.xraw_command(netfn=6, command=0x46, data=(uid,))
             username = bytes(rsp['data']).rstrip(b'\x00')
+            if not isinstance(username, str):
+                username = username.decode('utf8')
             self.wc.request(
-                'POST', '/data', b'set=user({0},1,{1},511,,4,15,0)'.format(
+                'POST', '/data', 'set=user({0},1,{1},511,,4,15,0)'.format(
                     uid, username))
             rsp = self.wc.getresponse()
             rsp.read()
