@@ -559,7 +559,7 @@ class SMMClient(object):
             self.wc.request('POST', '/data', rules)
             self.wc.getresponse().read()
         if powercfg != [None, None]:
-            if variant == 2:
+            if variant != 6:
                 if None in powercfg:
                     currcfg = self.ipmicmd.xraw_command(0x32, 0xa2)
                     currcfg = bytearray(currcfg['data'])
