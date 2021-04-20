@@ -37,6 +37,24 @@ except NameError:
     pass
 
 
+psutypes = {
+    0x63: 'CFF v3 550W PT',
+    0x64: 'CFF v3 750W PT',
+    0x65: 'CFF v3 750W TT',
+    0x66: 'CFF v3 1100W PT',
+    0x67: 'CFF v3 1600W PT',
+    0x68: 'CFF v3 2000W PT',
+    0x6B: 'CFF v4 500W PT',
+    0x6C: 'CFF v4 750W PT',
+    0x6D: 'CFF v4 750W TT',
+    0x6E: 'CFF v4 1100W PT',
+    0x6F: 'CFF v4 1100W -48Vdc',
+    0x70: 'CFF v4 1100W 200-277Vac/240-380Vdc',
+    0x71: 'CFF v4 1800W PT',
+    0x72: 'CFF v4 2400W PT',
+}
+
+
 def fromstring(inputdata):
     if b'!entity' in inputdata.lower():
         raise Exception('!ENTITY not supported in this interface')
@@ -158,6 +176,18 @@ def fpc_read_powerbank(ipmicmd):
     return struct.unpack_from('<H', rsp['data'][3:])[0]
 
 
+def get_psu_count(ipmicmd, variant):
+    if variant == 0x26:
+        mymsg = ipmicmd.xraw_command(netfn=0x32, command=0xa8)
+        builddata = bytearray(mymsg['data'])
+        if builddata[13] == 3:
+            return 9
+        else:
+            return 6
+    else:
+        return variant & 0xf
+
+
 def fpc_get_dripstatus(ipmicmd, number, sz):
     health = pygconst.Health.Ok
     states = []
@@ -216,11 +246,13 @@ fpc_sensors = {
         'type': 'Power Supply',
         'returns': 'tuple',
         'units': None,
+        'elements': True,
         'provider': fpc_get_psustatus,
-        'elements': 1,
+        'elementsfun': get_psu_count,
     },
     'Drip Sensor': {
         'type': 'Management Subsystem Health',
+        'elements': True,
         'abselements': 2,
         'returns': 'tuple',
         'units': None,
@@ -229,7 +261,7 @@ fpc_sensors = {
 }
 
 
-def get_sensor_names(size):
+def get_sensor_names(ipmicmd, size):
     global fpc_sensors
     for name in fpc_sensors:
         if size != 6 and name in ('Fan Power', 'Total Power Capacity',
@@ -240,19 +272,24 @@ def get_sensor_names(size):
         if size != 0x26 and name == 'Drip Sensor':
             continue
         sensor = fpc_sensors[name]
-        if 'elements' in sensor:
-            for elemidx in range(sensor['elements'] * (size & 0b11111)):
+
+        if 'abselements' in sensor:
+            for elemidx in range(sensor['abselements']):
                 elemidx += 1
                 yield '{0} {1}'.format(name, elemidx)
-        elif 'abselements' in sensor:
-            for elemidx in range(sensor['abselements']):
+        elif 'elementsfun' in sensor:
+            for elemidx in range(sensor['elementsfun'](ipmicmd, size)):
+                elemidx += 1
+                yield '{0} {1}'.format(name, elemidx)
+        elif 'elements' in sensor:
+            for elemidx in range(sensor['elements'] * (size & 0b11111)):
                 elemidx += 1
                 yield '{0} {1}'.format(name, elemidx)
         else:
             yield name
 
 
-def get_sensor_descriptions(size):
+def get_sensor_descriptions(ipmicmd, size):
     global fpc_sensors
     for name in fpc_sensors:
         if size != 6 and name in ('Fan Power', 'Total Power Capacity',
@@ -263,13 +300,18 @@ def get_sensor_descriptions(size):
         if size != 0x26 and name == 'Drip Sensor':
             continue
         sensor = fpc_sensors[name]
-        if 'elements' in sensor:
-            for elemidx in range(sensor['elements'] * (size & 0b11111)):
+        if 'abselements' in sensor:
+            for elemidx in range(sensor['abselements']):
                 elemidx += 1
                 yield {'name': '{0} {1}'.format(name, elemidx),
                        'type': sensor['type']}
-        elif 'abselements' in sensor:
-            for elemidx in range(sensor['abselements']):
+        elif 'elementsfun' in sensor:
+            for elemidx in range(sensor['elementsfun'](ipmicmd, size)):
+                elemidx += 1
+                yield {'name': '{0} {1}'.format(name, elemidx),
+                       'type': sensor['type']}
+        elif 'elements' in sensor:
+            for elemidx in range(sensor['elements'] * (size & 0b11111)):
                 elemidx += 1
                 yield {'name': '{0} {1}'.format(name, elemidx),
                        'type': sensor['type']}
@@ -316,10 +358,12 @@ def get_sensor_reading(name, ipmicmd, sz):
         idx = int(idx)
         if bnam in fpc_sensors:
             max = -1
-            if 'elements' in fpc_sensors[bnam]:
-                max = fpc_sensors[bnam]['elements'] * sz
-            elif 'abselements' in fpc_sensors[bnam]:
+            if 'abselements' in fpc_sensors[bnam]:
                 max = fpc_sensors[bnam]['abselements']
+            elif 'elementsfun' in fpc_sensors[bnam]:
+                max = 99
+            elif 'elements' in fpc_sensors[bnam]:
+                max = fpc_sensors[bnam]['elements'] * sz
             if idx <= max:
                 sensor = fpc_sensors[bnam]
                 if 'returns' in sensor:
@@ -818,6 +862,42 @@ class SMMClient(object):
                       'progress': percent})
             complete = percent >= 100.0
         return 'complete'
+
+    def get_inventory_descriptions(self, ipmicmd, variant):
+        psucount = get_psu_count(ipmicmd, variant)
+        for idx in range(psucount):
+            yield 'PSU {}'.format(idx + 1)
+
+    def get_inventory_of_component(self, ipmicmd, component):
+        psuidx = int(component.replace('PSU ', ''))
+        return self.get_psu_info(ipmicmd, psuidx)
+
+    def get_psu_info(self, ipmicmd, psunum):
+        psuinfo = ipmicmd.xraw_command(0x34, 0x6, data=(psunum,))
+        psuinfo = bytearray(psuinfo['data'])
+        psutype = struct.unpack('<H', psuinfo[23:25])[0]
+        psui = {}
+        if psuinfo[0] != 1:
+            return {'Model': 'Unavailable'}
+        psui['Revision'] = psuinfo[34]
+        psui['Description'] = psutypes.get(
+            psutype, 'Unknown ({})'.format(psutype))
+        psui['Part Number'] = str(psuinfo[35:47].strip().decode('utf8'))
+        psui['FRU Number'] = str(psuinfo[47:59].strip().decode('utf8'))
+        psui['Serial Number'] = str(psuinfo[59:71].strip().decode('utf8'))
+        psui['Header Code'] = str(psuinfo[71:75].strip().decode('utf8'))
+        psui['Vendor'] = str(psuinfo[25:29].strip().decode('utf8'))
+        psui['Manufacturing Date'] = '20{}-W{}'.format(
+            psuinfo[77:79].decode('utf8'), psuinfo[75:77].decode('utf8'))
+        psui['Primary Firmware Version'] = '{:x}.{:x}'.format(
+            psuinfo[80], psuinfo[79])
+        psui['Secondary Firmware Version'] = '{:x}.{:x}'.format(
+            psuinfo[82], psuinfo[81])
+        psui['Model'] = str(psuinfo[5:23].strip().decode('utf8'))
+        psui['Manufacturer Location'] = str(
+            psuinfo[83:85].strip().decode('utf8'))
+        psui['Barcode'] = str(psuinfo[85:108].strip().decode('utf8'))
+        return psui
 
     def logout(self):
         self.wc.request('POST', '/data/logout', None)

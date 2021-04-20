@@ -413,6 +413,8 @@ class OEMHandler(generic.OEMHandler):
             return iter(self.oem_inventory_info)
         elif self.has_imm:
             return self.immhandler.get_hw_descriptions()
+        elif self.is_fpc:
+            return self.smmhandler.get_inventory_descriptions(self.is_fpc)
         return ()
 
     def get_oem_inventory(self):
@@ -423,6 +425,11 @@ class OEMHandler(generic.OEMHandler):
         elif self.has_imm:
             for inv in self.immhandler.get_hw_inventory():
                 yield inv
+        elif self.is_fpc:
+            for compname in self.smmhandler.get_inventory_descriptions(
+                    self.ipmicmd, self.is_fpc):
+                yield (compname, self.smmhandler.get_inventory_of_component(
+                    self.ipmicmd, compname))
 
     def get_sensor_data(self):
         if self.has_imm:
@@ -430,7 +437,8 @@ class OEMHandler(generic.OEMHandler):
                 yield self.immhandler.get_oem_sensor_reading(name,
                                                              self.ipmicmd)
         elif self.is_fpc:
-            for name in nextscale.get_sensor_names(self._fpc_variant):
+            for name in nextscale.get_sensor_names(self.ipmicmd,
+                                                   self._fpc_variant):
                 yield nextscale.get_sensor_reading(name, self.ipmicmd,
                                                    self._fpc_variant)
 
@@ -438,7 +446,8 @@ class OEMHandler(generic.OEMHandler):
         if self.has_imm:
             return self.immhandler.get_oem_sensor_descriptions(self.ipmicmd)
         elif self.is_fpc:
-            return nextscale.get_sensor_descriptions(self._fpc_variant)
+            return nextscale.get_sensor_descriptions(
+                self.ipmicmd, self._fpc_variant)
         return ()
 
     def get_sensor_reading(self, sensorname):
@@ -456,6 +465,8 @@ class OEMHandler(generic.OEMHandler):
             return self.oem_inventory_info.get(component, None)
         if self.has_imm:
             return self.immhandler.get_component_inventory(component)
+        if self.is_fpc:
+            return self.smmhandler.get_inventory_of_component(component)
 
     def _collect_tsm_inventory(self):
         self.oem_inventory_info = {}
