@@ -774,7 +774,7 @@ class TsmHandler(generic.OEMHandler):
             {'image_name': name, 'image_type': img['image_type'],
              'image_index': img['image_index']})
 
-    def upload_media(self, filename, progress=None):
+    def upload_media(self, filename, progress=None, data=None):
         raise exc.UnsupportedFunctionality(
             'Remote media upload not supported on this system')
 
