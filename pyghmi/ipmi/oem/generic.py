@@ -278,7 +278,8 @@ class OEMHandler(object):
         raise exc.UnsupportedFunctionality()
 
     def upload_media(self, filename, progress, data):
-        raise exc.UnsupportedFunctionality()
+        raise exc.UnsupportedFunctionality(
+            'Remote media upload not supported on this system')
 
     def list_media(self):
         raise exc.UnsupportedFunctionality()
