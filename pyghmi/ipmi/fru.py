@@ -263,7 +263,7 @@ class FRU(object):
         if offset == 0:
             return
         if self.databytes[offset] & 0b1111 != 1:
-            raise iexc.BmcErrorException("Invallid/Unsupported chassis area")
+            raise iexc.BmcErrorException("Invalid/Unsupported chassis area")
         inf = self.info
         # ignore length field, just process the data
         inf['Chassis type'] = enclosure_types[self.databytes[offset + 2]]
