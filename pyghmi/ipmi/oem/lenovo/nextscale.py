@@ -427,7 +427,7 @@ class SMMClient(object):
                 settings[rule] = {'value': int(ruleinfo.text)}
         dwc = self.ipmicmd.xraw_command(0x32, 0x94)
         dwc = bytearray(dwc['data'])
-        if len(dwc) != 3 or dwc[0] == 1:
+        if len(dwc) not in (3, 4) or dwc[0] == 1:
             rsp = self.ipmicmd.xraw_command(0x34, 3)
             fanmode = self.fanmodes[bytearray(rsp['data'])[0]]
             settings['fanspeed'] = {
