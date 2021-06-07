@@ -1473,9 +1473,11 @@ class XCCClient(IMMClient):
                             spares.append(diskinfo)
                         else:
                             disks.append(diskinfo)
-                    totalsize = pool['totalCapacityStr'].replace('GB', '')
+                    totalsize = pool['totalCapacityStr'].replace(
+                        'GB', '').replace('GiB', '')
                     totalsize = int(float(totalsize) * 1024)
-                    freesize = pool['freeCapacityStr'].replace('GB', '')
+                    freesize = pool['freeCapacityStr'].replace(
+                        'GB', '').replace('GiB', '')
                     freesize = int(float(freesize) * 1024)
                     pools.append(storage.Array(
                         disks=disks, raid=pool['rdlvlstr'], volumes=volumes,
