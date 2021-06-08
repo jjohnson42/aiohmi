@@ -228,7 +228,7 @@ fpc_sensors = {
         'type': 'Fan',
         'units': 'RPM',
         'provider': fpc_read_psu_fan,
-        'elements': 1,
+        'elementsfun': get_psu_count,
     },
     'Total Power Capacity': {
         'type': 'Power',
