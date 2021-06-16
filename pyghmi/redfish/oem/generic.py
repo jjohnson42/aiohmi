@@ -118,19 +118,32 @@ class OEMHandler(object):
         }
         yield ('System', sysinfo)
         self._hwnamemap = {}
+        cpumemurls = []
         memurl = self._varsysinfo.get('Memory', {}).get('@odata.id', None)
+        if memurl:
+            cpumemurls.append(memurl)
         cpurl = self._varsysinfo.get('Processors', {}).get('@odata.id', None)
-        list(self._do_bulk_requests([memurl, cpurl]))
+        if cpurl:
+            cpumemurls.append(cpurl)
+        list(self._do_bulk_requests(cpumemurls))
         adpurls = self._get_adp_urls()
-        cpurls = self._get_cpu_urls()
-        memurls = self._get_mem_urls()
+        if cpurl:
+            cpurls = self._get_cpu_urls()
+        else:
+            cpurls = []
+        if memurl:
+            memurls = self._get_mem_urls()
+        else:
+            memurls = []
         diskurls = self._get_disk_urls()
         allurls = adpurls + cpurls + memurls + diskurls
         list(self._do_bulk_requests(allurls))
-        for cpu in self._get_cpu_inventory(withids=withids, urls=cpurls):
-            yield cpu
-        for mem in self._get_mem_inventory(withids=withids, urls=memurls):
-            yield mem
+        if cpurl:
+            for cpu in self._get_cpu_inventory(withids=withids, urls=cpurls):
+                yield cpu
+        if memurl:
+            for mem in self._get_mem_inventory(withids=withids, urls=memurls):
+                yield mem
         for adp in self._get_adp_inventory(withids=withids, urls=adpurls):
             yield adp
         for disk in self._get_disk_inventory(withids=withids, urls=diskurls):

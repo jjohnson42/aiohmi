@@ -771,7 +771,12 @@ class Command(object):
         one byte, return the int value
         """
         fetchcmd = bytearray((channel, param, 0, 0))
-        fetched = self.xraw_command(0xc, 2, data=fetchcmd)
+        try:
+            fetched = self.xraw_command(0xc, 2, data=fetchcmd)
+        except exc.IpmiException as ie:
+            if ie.ipmicode == 0x80:
+                return None
+            raise
         fetchdata = fetched['data']
         if bytearray(fetchdata)[0] != 17:
             return None

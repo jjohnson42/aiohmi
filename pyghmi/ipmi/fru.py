@@ -133,7 +133,7 @@ class FRU(object):
             try:
                 self.fetch_fru(fruid)
             except iexc.IpmiException as ie:
-                if ie.ipmicode in (203, 129):
+                if ie.ipmicode in (195, 201, 203, 129):
                     return
                 raise
             self.parsedata()
