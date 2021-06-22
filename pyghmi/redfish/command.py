@@ -1279,6 +1279,31 @@ class Command(object):
     def get_inventory(self, withids=False):
         return self.oem.get_inventory(withids)
 
+    def set_location_information(self, room=None, contactnames=None,
+                                 location=None, building=None, rack=None):
+        locationinfo = {}
+        postaladdress = {}
+        placement = {}
+        if contactnames is not None:
+            locationinfo['Contacts'] = [
+                {'ContactName': x} for x in contactnames]
+        if room is not None:
+            postaladdress['Room'] = room
+        if location is not None:
+            postaladdress['Location'] = location
+        if building is not None:
+            postaladdress['Building'] = building
+        if rack is not None:
+            placement['Rack'] = rack
+        if postaladdress:
+            locationinfo['PostalAddress'] = postaladdress
+        if placement:
+            locationinfo['Placement'] = placement
+        if locationinfo:
+            for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
+                chassisurl = chassis['@odata.id']
+                self._do_web_request(chassisurl, locationinfo, method='PATCH')
+
     @property
     def oem(self):
         if not self._oem:
