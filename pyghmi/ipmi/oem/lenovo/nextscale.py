@@ -882,21 +882,27 @@ class SMMClient(object):
         psui['Revision'] = psuinfo[34]
         psui['Description'] = psutypes.get(
             psutype, 'Unknown ({})'.format(psutype))
-        psui['Part Number'] = str(psuinfo[35:47].strip().decode('utf8'))
-        psui['FRU Number'] = str(psuinfo[47:59].strip().decode('utf8'))
-        psui['Serial Number'] = str(psuinfo[59:71].strip().decode('utf8'))
-        psui['Header Code'] = str(psuinfo[71:75].strip().decode('utf8'))
-        psui['Vendor'] = str(psuinfo[25:29].strip().decode('utf8'))
+        psui['Part Number'] = str(psuinfo[35:47].strip(
+            b' \x00\xff').decode('utf8'))
+        psui['FRU Number'] = str(psuinfo[47:59].strip(
+            b' \x00\xff').decode('utf8'))
+        psui['Serial Number'] = str(psuinfo[59:71].strip(
+            b' \x00\xff').decode('utf8'))
+        psui['Header Code'] = str(psuinfo[71:75].strip(
+            b' \x00\xff').decode('utf8'))
+        psui['Vendor'] = str(psuinfo[25:29].strip(
+            b' \x00\xff').decode('utf8'))
         psui['Manufacturing Date'] = '20{}-W{}'.format(
             psuinfo[77:79].decode('utf8'), psuinfo[75:77].decode('utf8'))
         psui['Primary Firmware Version'] = '{:x}.{:x}'.format(
             psuinfo[80], psuinfo[79])
         psui['Secondary Firmware Version'] = '{:x}.{:x}'.format(
             psuinfo[82], psuinfo[81])
-        psui['Model'] = str(psuinfo[5:23].strip().decode('utf8'))
+        psui['Model'] = str(psuinfo[5:23].strip(b' \x00\xff').decode('utf8'))
         psui['Manufacturer Location'] = str(
-            psuinfo[83:85].strip().decode('utf8'))
-        psui['Barcode'] = str(psuinfo[85:108].strip().decode('utf8'))
+            psuinfo[83:85].strip(b' \x00\xff').decode('utf8'))
+        psui['Barcode'] = str(psuinfo[85:108].strip(
+            b' \x00\xff').decode('utf8'))
         return psui
 
     def logout(self):
