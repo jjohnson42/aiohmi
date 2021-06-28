@@ -1,5 +1,5 @@
 # coding: utf8
-# Copyright 2019 Lenovo
+# Copyright 2021 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1483,8 +1483,14 @@ class Command(object):
             vminfo = self._do_web_request(vmurl, cache=False)
             if vminfo.get('ConnectedVia', None) != 'NotConnected':
                 continue
-            self._do_web_request(vmurl, {'Image': url, 'Inserted': True},
-                                 'PATCH')
+            try:
+                self._do_web_request(vmurl, {'Image': url, 'Inserted': True},
+                                     'PATCH')
+            except exc.RedfishError as re:
+                if re.msgid.endswith(u'PropertyUnknown'):
+                    self._do_web_request(vmurl, {'Image': url}, 'PATCH')
+                else:
+                    raise
             break
 
     def detach_remote_media(self):
@@ -1500,10 +1506,17 @@ class Command(object):
             for vminfo in self._do_bulk_requests(vmurls):
                 vminfo, currl = vminfo
                 if vminfo['Image']:
-                    self._do_web_request(currl,
-                                         {'Image': None,
-                                          'Inserted': False},
-                                         method='PATCH')
+                    try:
+                        self._do_web_request(currl,
+                                             {'Image': None,
+                                              'Inserted': False},
+                                             method='PATCH')
+                    except exc.RedfishError as re:
+                        if re.msgid.endswith(u'PropertyUnknown'):
+                            self._do_web_request(currl, {'Image': None},
+                                                 method='PATCH')
+                        else:
+                            raise
 
     def upload_media(self, filename, progress=None, data=None):
         """Upload a file to be hosted on the target BMC
