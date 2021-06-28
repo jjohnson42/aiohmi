@@ -1279,6 +1279,37 @@ class Command(object):
     def get_inventory(self, withids=False):
         return self.oem.get_inventory(withids)
 
+    def get_location_information(self):
+        locationinfo = {}
+        for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
+            chassisurl = chassis['@odata.id']
+            data = self._do_web_request(chassisurl)
+            locdata = data.get('Location', {})
+            postaladdress = locdata.get('PostalAddress', {})
+            placement = locdata.get('Placement', {})
+            contactinfo = locdata.get('Contacts', [])
+            currval = postaladdress.get('Room', '')
+            if currval:
+                locationinfo['room'] = currval
+            currval = postaladdress.get('Location', '')
+            if currval:
+                locationinfo['location'] = currval
+            currval = postaladdress.get('Building', '')
+            if currval:
+                locationinfo['building'] = currval
+            currval = placement.get('Rack', '')
+            if currval:
+                locationinfo['rack'] = currval
+            for contact in contactinfo:
+                contact = contact.get('ContactName', '')
+                if not contact:
+                    continue
+                if 'contactnames' not in locationinfo:
+                    locationinfo['contactnames'] = [contact]
+                else:
+                    locationinfo['contactnames'].append(contact)
+        return locationinfo
+
     def set_location_information(self, room=None, contactnames=None,
                                  location=None, building=None, rack=None):
         locationinfo = {}
@@ -1302,7 +1333,8 @@ class Command(object):
         if locationinfo:
             for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
                 chassisurl = chassis['@odata.id']
-                self._do_web_request(chassisurl, locationinfo, method='PATCH')
+                self._do_web_request(chassisurl, {'Location': locationinfo},
+                                     method='PATCH')
 
     @property
     def oem(self):
