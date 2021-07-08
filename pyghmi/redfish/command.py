@@ -1573,6 +1573,8 @@ class Command(object):
                            update process.  Provide if
          :param bank: Indicate a target 'bank' of firmware if supported
         """
+        if progress is None:
+            progress = lambda x: True
         return self.oem.update_firmware(file, data, progress, bank)
 
     def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
