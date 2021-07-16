@@ -515,6 +515,10 @@ class OEMHandler(generic.OEMHandler):
                 write_policy = vol.write_policy
             else:
                 write_policy = props["cpwb"]
+            if vol.default_init is not None:
+                default_init = vol.default_init
+            else:
+                default_init = props["initstate"]
             strsize = 'remainder' if vol.size is None else str(vol.size)
             if strsize in ('all', '100%'):
                 volsize = params['capacity']
@@ -536,7 +540,7 @@ class OEMHandler(generic.OEMHandler):
                     'Requested sizes exceed available capacity')
             vols.append('{0};{1};{2};{3};{4};{5};{6};{7};{8};|'.format(
                 name, volsize, stripsize, write_policy, read_policy,
-                props['cpio'], props['ap'], props['dcp'], props['initstate']))
+                props['cpio'], props['ap'], props['dcp'], default_init))
         url = '/api/function'
         cid = params['controller'].split(',')
         cnum = cid[0]
