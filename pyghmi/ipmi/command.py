@@ -759,7 +759,7 @@ class Command(object):
                 if 'error' in rsp:
                     raise exc.IpmiException(rsp['error'], rsp['code'])
                 return self._sdr.sensors[sensor].decode_sensor_reading(
-                    rsp['data'])
+                    self, rsp['data'])
         self.oem_init()
         return self._oem.get_sensor_reading(sensorname)
 
@@ -980,7 +980,8 @@ class Command(object):
                 if rsp['code'] == 203:  # Sensor does not exist, optional dev
                     continue
                 raise exc.IpmiException(rsp['error'], code=rsp['code'])
-            yield self._sdr.sensors[sensor].decode_sensor_reading(rsp['data'])
+            yield self._sdr.sensors[sensor].\
+                decode_sensor_reading(self, rsp['data'])
         self.oem_init()
         for reading in self._oem.get_sensor_data():
             yield reading

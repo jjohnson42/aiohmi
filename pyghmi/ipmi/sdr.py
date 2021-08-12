@@ -288,7 +288,7 @@ class SDREntry(object):
     external code to pay attention to this class.
     """
 
-    def __init__(self, entrybytes, ipmicmd, reportunsupported=False,
+    def __init__(self, entrybytes, reportunsupported=False,
                  mfg_id=0, prod_id=0):
         self.mfg_id = mfg_id
         self.prod_id = prod_id
@@ -296,7 +296,6 @@ class SDREntry(object):
         # moment
         self.readable = True
         self.reportunsupported = reportunsupported
-        self.ipmicmd = ipmicmd
         if entrybytes[2] != 0x51:
             # only recognize '1.5', the only version defined at time of writing
             raise NotImplementedError
@@ -478,7 +477,7 @@ class SDREntry(object):
             health = const.Health.Warning
         return desc, health
 
-    def decode_sensor_reading(self, reading):
+    def decode_sensor_reading(self, ipmicmd, reading):
         numeric = None
         output = {
             'name': self.sensor_name,
@@ -498,8 +497,8 @@ class SDREntry(object):
         if numeric is not None:
             lowerbound = numeric - (0.5 + (self.tolerance / 2.0))
             upperbound = numeric + (0.5 + (self.tolerance / 2.0))
-            lowerbound = self.decode_value(lowerbound)
-            upperbound = self.decode_value(upperbound)
+            lowerbound = self.decode_value(ipmicmd, lowerbound)
+            upperbound = self.decode_value(ipmicmd, upperbound)
             output['value'] = (lowerbound + upperbound) / 2.0
             output['imprecision'] = output['value'] - lowerbound
             discrete = False
@@ -555,13 +554,13 @@ class SDREntry(object):
                 output['state_ids'].append(self.assert_trap_value(6))
         return SensorReading(output, self.unit_suffix)
 
-    def _set_tmp_formula(self, value):
-        rsp = self.ipmicmd.raw_command(netfn=4, command=0x23,
-                                       data=(self.sensor_number, value))
+    def _set_tmp_formula(self, ipmicmd, value):
+        rsp = ipmicmd.raw_command(netfn=4, command=0x23,
+                                  data=(self.sensor_number, value))
         # skip next reading field, not used in on-demand situation
         self.decode_formula(rsp['data'][1:])
 
-    def decode_value(self, value):
+    def decode_value(self, ipmicmd, value):
         # Take the input value and return meaningful value
         linearization = self.linearization
         if linearization > 11:  # direct calling code to get factors
@@ -571,7 +570,7 @@ class SDREntry(object):
             # fashion.  However for now opt for retrieving rows as needed
             # rather than tracking all that information for a relatively
             # rare behavior
-            self._set_tmp_formula(value)
+            self._set_tmp_formula(ipmicmd, value)
             linearization = 0
         # time to compute the pre-linearization value.
         decoded = float((value * self.m + self.b)
@@ -834,7 +833,7 @@ class SDR(object):
                 yield number
 
     def add_sdr(self, sdrbytes):
-        newent = SDREntry(sdrbytes, self.ipmicmd, False, self.mfg_id,
+        newent = SDREntry(sdrbytes, False, self.mfg_id,
                           self.prod_id)
         if newent.sdrtype == TYPE_SENSOR:
             id = '{0}.{1}.{2}'.format(
