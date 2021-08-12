@@ -528,7 +528,7 @@ class OEMHandler(generic.OEMHandler):
                                                     data=(id_,))
                 except pygexc.IpmiException:
                     continue  # Ignore LEDs we can't retrieve
-                status = led_status.get(ord(rsp['data'][0]),
+                status = led_status.get(bytearray(rsp['data'][:])[0],
                                         led_status_default)
                 yield (name, {'status': status})
 
@@ -821,9 +821,12 @@ class OEMHandler(generic.OEMHandler):
                 data=(0x01, 0xc5, 0x00, 0x00))["data"][1:]
             if not ipv6_addr:
                 return
-            ipv6_prefix = ord(self.ipmicmd.xraw_command(
+            rspdata = self.ipmicmd.xraw_command(
                 netfn=0xc, command=0x02,
-                data=(0x1, 0xc6, 0, 0))['data'][1])
+                data=(0x1, 0xc6, 0, 0))['data']
+            ipv6_prefix_ba = bytearray(rspdata)
+            ipv6_prefix = ipv6_prefix_ba[1]
+
             if hasattr(socket, 'inet_ntop'):
                 ipv6str = socket.inet_ntop(socket.AF_INET6, ipv6_addr)
             else:

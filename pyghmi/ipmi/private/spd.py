@@ -736,7 +736,7 @@ class SPD(object):
         self.info['serial'] = hex(struct.unpack(
             '>I', struct.pack('4B', *spd[122:126]))[0])[2:].rjust(8, '0')
         self.info['model'] = struct.pack('18B', *spd[128:146]).strip(
-            '\x00\xff ')
+            b'\x00\xff ')
 
     def _decode_ddr4(self):
         spd = self.rawdata

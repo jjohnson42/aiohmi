@@ -305,6 +305,10 @@ class LenovoFirmwareConfig(object):
                     readonly = setting.get('gray-if')
                     if readonly:
                         readonly = _convert_syntax(readonly)
+                    else:
+                        access = setting.get('access')
+                        if access == 'readonly':
+                            readonly = 'true'
                     possible = []
                     current = None
                     default = None
@@ -485,10 +489,6 @@ class LenovoFirmwareConfig(object):
         for option in options.keys():
             if options[option]['new_value'] is None:
                 continue
-            if options[option]['current'] == options[option]['new_value']:
-                continue
-            if options[option]['pending'] == options[option]['new_value']:
-                continue
             if options[option]['readonly']:
                 errstr = '{0} is read only'.format(option)
                 if options[option]['readonly_why']:
@@ -496,6 +496,10 @@ class LenovoFirmwareConfig(object):
                         ','.join(sorted(options[option]['readonly_why'])))
                     errstr += ea
                 raise pygexc.InvalidParameterValue(errstr)
+            if options[option]['current'] == options[option]['new_value']:
+                continue
+            if options[option]['pending'] == options[option]['new_value']:
+                continue
             if isinstance(options[option]['new_value'], six.string_types):
                 # Coerce a simple string parameter to the expected list format
                 options[option]['new_value'] = [options[option]['new_value']]
