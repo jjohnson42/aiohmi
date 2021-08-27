@@ -68,7 +68,7 @@ def parse_inventory_category(name, info, countable=True):
 
     cur = 0
     if countable:
-        count = struct.unpack("B", raw[cur])[0]
+        count = bytearray(raw)[cur]
         cur += 1
     else:
         count = 0
@@ -127,7 +127,7 @@ def parse_inventory_category_entry(raw, fields):
             continue
 
         if (field.fmt[-1] == "s"):
-            value = value.rstrip("\x00")
+            value = value.rstrip(b'\x00')
         if (field.mapper and value in field.mapper):
             value = field.mapper[value]
         if (field.valuefunc):
