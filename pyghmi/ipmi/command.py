@@ -1923,15 +1923,11 @@ class Command(object):
                              privilege_level='no_access')
         try:
             # First try to set name to all \x00 explicitly
+            # Fix bug-174389, don't try to send \xff command,
+            # will cause IMM1 can't login
             self.set_user_name(uid, '')
-        except exc.IpmiException as ie:
-            if ie.ipmicode != 0xcc:
-                raise
-            # An invalid data field in request  is frequently reported.
-            # however another convention that exists is all '\xff'
-            # if this fails, pass up the error so that calling code knows
-            # that the deletion did not go as planned for now
-            self.set_user_name(uid, b'\xff' * 16)
+        except exc.IpmiException:
+            raise
         return True
 
     def disable_user(self, uid, mode):
