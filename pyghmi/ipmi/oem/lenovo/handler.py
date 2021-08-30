@@ -1106,3 +1106,19 @@ class OEMHandler(generic.OEMHandler):
         if self.has_xcc:
             return self.immhandler.apply_license(filename, progress, data)
         return super(OEMHandler, self).apply_license(filename, progress, data)
+
+    def set_oem_extended_privilleges(self, uid):
+        """Set user extended privillege as 'KVM & VMedia Allowed'
+
+        |KVM & VMedia Not Allowed	0x00 0x00 0x00 0x00
+        |KVM Only Allowed	0x01 0x00 0x00 0x00
+        |VMedia Only Allowed	0x02  0x00 0x00 0x00
+        |KVM & VMedia Allowed	0x03 0x00 0x00 0x00
+
+        :param uid: User ID.
+        """
+        if self.has_tsm:
+            self.ipmicmd.xraw_command(netfn=0x32, command=0xa3, data=(
+                uid, 0x03, 0x00, 0x00, 0x00))
+            return True
+        return False
