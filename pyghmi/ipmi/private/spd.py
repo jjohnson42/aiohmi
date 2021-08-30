@@ -25,6 +25,7 @@ with discontinuous values for a field that was until that point
 possible to derive in a formulaic way
 """
 
+import math
 import struct
 
 jedec_ids = [
@@ -721,7 +722,7 @@ class SPD(object):
             fineoffset = 0 - ((fineoffset ^ 0xff) + 1)
         fineoffset = (finetime * fineoffset) * 10 ** -3
         mtb = spd[10] / float(spd[11])
-        clock = 2 // ((mtb * spd[12] + fineoffset) * 10 ** -3)
+        clock = math.floor(2 / ((mtb * spd[12] + fineoffset) * 10 ** -3))
         self.info['speed'] = speed_from_clock(clock)
         self.info['ecc'] = (spd[8] & 0b11000) != 0
         self.info['module_type'] = module_types.get(spd[3] & 0xf, 'Unknown')
@@ -744,7 +745,8 @@ class SPD(object):
             fineoffset = spd[125]
             if fineoffset & 0b10000000:
                 fineoffset = 0 - ((fineoffset ^ 0xff) + 1)
-            clock = 2 // ((0.125 * spd[18] + fineoffset * 0.001) * 0.001)
+            clock = math.floor(
+                2 / ((0.125 * spd[18] + fineoffset * 0.001) * 0.001))
             self.info['speed'] = speed_from_clock(clock)
         else:
             self.info['speed'] = 'Unknown'
