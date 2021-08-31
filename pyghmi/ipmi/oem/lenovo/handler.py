@@ -656,7 +656,17 @@ class OEMHandler(generic.OEMHandler):
         if self.has_tsm:
             command = firmware.get_categories()["firmware"]
             rsp = self.ipmicmd.xraw_command(**command["command"])
-            return command["parser"](rsp["data"])
+            # the newest Lenovo ThinkServer versions are returning Bios version
+            # numbers through another command
+            bios_versions = None
+            if self.has_tsm:
+                bios_command = firmware.get_categories()["bios_version"]
+                bios_rsp = self.ipmicmd.xraw_command(**bios_command["command"])
+                bios_versions = bios_command["parser"](bios_rsp["data"])
+
+            # pass bios versions to firmware parser
+            return command["parser"](rsp["data"], bios_versions)
+
         elif self.has_imm:
             return self.immhandler.get_firmware_inventory(bmcver, components)
         elif self.is_fpc:
