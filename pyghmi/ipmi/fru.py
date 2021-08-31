@@ -33,6 +33,7 @@ Information Storage Definition (Document Revision 1.2)
 
 import struct
 import time
+import weakref
 
 import pyghmi.exceptions as iexc
 import pyghmi.ipmi.private.spd as spd
@@ -128,7 +129,7 @@ class FRU(object):
         if self.rawfru is not None:
             self.parsedata()
         elif ipmicmd is not None:
-            self.ipmicmd = ipmicmd
+            self.ipmicmd = weakref.proxy(ipmicmd)
             # Use the ipmicmd to fetch the data
             try:
                 self.fetch_fru(fruid)
