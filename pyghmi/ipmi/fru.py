@@ -298,7 +298,7 @@ class FRU(object):
         inf['Board product name'], offset = self._decode_tlv(offset, language)
         inf['Board serial number'], offset = self._decode_tlv(offset, language)
         inf['Board model'], offset = self._decode_tlv(offset, language)
-        _, offset = self._decode_tlv(offset, language)  # decode but discard
+        inf['Board FRU Id'], offset = self._decode_tlv(offset, language)
         inf['board_extra'] = []
         self.extract_extra(inf['board_extra'], offset, language)
 
