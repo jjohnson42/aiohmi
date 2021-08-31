@@ -43,6 +43,7 @@ sensor_type_codes = {
     0xa: 'Cooling Device',
     0xb: 'Other',
     0xc: 'Memory',
+    0xC6: 'PSU Redundancy',
     0xd: 'Drive Bay',
     0xe: 'POST Memory Resize',
     0xf: 'System Firmware',
