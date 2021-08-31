@@ -34,12 +34,22 @@ firmware_fields = (
     inventory.EntryField("DIAG", "16s"))
 
 
-def parse_firmware_info(raw):
+def parse_firmware_info(raw, bios_versions=None):
     bytes_read, data = inventory.parse_inventory_category_entry(
         raw, firmware_fields)
     del data['Revision']
     for key in data:
         yield key, {'version': data[key]}
+
+    if bios_versions is not None:
+        yield ("Bios_bundle_ver",
+               {'version': bios_versions['new_img_version']})
+        yield ("Bios_current_ver",
+               {'version': bios_versions['cur_img_version']})
+
+
+def parse_bios_number(raw):
+    return inventory.parse_bios_number_entry(raw)
 
 
 def get_categories():
@@ -52,5 +62,15 @@ def get_categories():
                 "command": 0x59,
                 "data": (0x00, 0xc7, 0x00, 0x00)
             }
+        },
+        "bios_version": {
+            "idstr": "Bios Version",
+            "parser": parse_bios_number,
+            "command": {
+                "netfn": 0x32,
+                "command": 0xE8,
+                "data": (0x01, 0x01, 0x02)
+            }
+
         }
     }

@@ -142,3 +142,33 @@ def parse_inventory_category_entry(raw, fields):
     if discard:
         obj = None
     return bytes_read, obj
+
+
+def parse_bios_number_entry(raw):
+    """Parses the Bios number given a raw data.
+
+    :param raw: the raw data to the entry.
+
+    :returns: dict -- structure with read current and newest versions
+    """
+    new_major_version = struct.unpack_from("1B", raw, 25)[0]
+    new_minor_version = struct.unpack_from("1B", raw, 26)[0]
+    new_aux = struct.unpack_from("I", raw, 27)[0]
+
+    cur_major_version = struct.unpack_from("1B", raw, 31)[0]
+    cur_minor_version = struct.unpack_from("1B", raw, 32)[0]
+    cur_aux = struct.unpack_from("I", raw, 33)[0]
+
+    new_image_version = "%s.%s.%s" % (
+        str(new_major_version),
+        str(new_minor_version),
+        str(new_aux))
+    cur_image_version = "%s.%s.%s" % (
+        str(cur_major_version),
+        str(cur_minor_version),
+        str(cur_aux))
+
+    return {
+        'new_img_version': new_image_version,
+        'cur_img_version': cur_image_version
+    }
