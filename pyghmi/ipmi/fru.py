@@ -43,6 +43,7 @@ fruepoch = 820454400  # 1/1/1996, 0:00
 
 # This is from SMBIOS specification Table 16
 enclosure_types = {
+    0: 'Unspecified',
     1: 'Other',
     2: 'Unknown',
     3: 'Desktop',
