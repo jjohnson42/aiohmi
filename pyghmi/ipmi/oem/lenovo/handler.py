@@ -548,13 +548,13 @@ class OEMHandler(generic.OEMHandler):
             try:
                 _, _, wwn1, wwn2, mac1, mac2 = fru['board_extra']
                 if wwn1 not in ('0000000000000000', ''):
-                    fru['WWN 1'] = wwn1
+                    fru['WWN 1'] = wwn1.encode('utf-8')
                 if wwn2 not in ('0000000000000000', ''):
-                    fru['WWN 2'] = wwn2
+                    fru['WWN 2'] = wwn2.encode('utf-8')
                 if mac1 not in ('00:00:00:00:00:00', ''):
-                    fru['MAC Address 1'] = mac1
+                    fru['MAC Address 1'] = mac1.encode('utf-8')
                 if mac2 not in ('00:00:00:00:00:00', ''):
-                    fru['MAC Address 2'] = mac2
+                    fru['MAC Address 2'] = mac2.encode('utf-8')
             except (AttributeError, KeyError):
                 pass
             try:
