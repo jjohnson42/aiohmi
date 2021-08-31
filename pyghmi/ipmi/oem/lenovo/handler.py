@@ -123,8 +123,23 @@ led_status = {
     0x00: "Off",
     0xFF: "On"
 }
+
+asrock_leds = {
+    "SYSTEM_EVENT": 0x00,
+    "BMC_UID": 0x01,
+    "LED_FAN_FAULT_1": 0x02,
+    "LED_FAN_FAULT_2": 0x03,
+    "LED_FAN_FAULT_3": 0x04
+}
+
+asrock_led_status = {
+    0x00: "Off",
+    0x01: "On"
+}
+
 led_status_default = "Blink"
 mac_format = '{0:02x}:{1:02x}:{2:02x}:{3:02x}:{4:02x}:{5:02x}'
+categorie_items = ["cpu", "dimm", "firmware", "bios_version"]
 
 
 def _megarac_abbrev_image(name):
@@ -289,7 +304,7 @@ class OEMHandler(generic.OEMHandler):
         return super(OEMHandler, self).reseat_bay(bay)
 
     def get_ntp_enabled(self):
-        if self.has_tsm:
+        if self.has_tsm or self.has_asrock:
             ntpres = self.ipmicmd.xraw_command(netfn=0x32, command=0xa7)
             return ntpres['data'][0] == '\x01'
         elif self.is_fpc:
@@ -299,7 +314,7 @@ class OEMHandler(generic.OEMHandler):
         return None
 
     def get_ntp_servers(self):
-        if self.has_tsm:
+        if self.has_tsm or self.has_asrock:
             srvs = []
             ntpres = self.ipmicmd.xraw_command(netfn=0x32, command=0xa7)
             srvs.append(ntpres['data'][1:129].rstrip('\x00'))
@@ -312,7 +327,7 @@ class OEMHandler(generic.OEMHandler):
         return None
 
     def set_ntp_enabled(self, enabled):
-        if self.has_tsm:
+        if self.has_tsm or self.has_asrock:
             if enabled:
                 self.ipmicmd.xraw_command(
                     netfn=0x32, command=0xa8, data=(3, 1), timeout=15)
@@ -328,7 +343,7 @@ class OEMHandler(generic.OEMHandler):
         return None
 
     def set_ntp_server(self, server, index=0):
-        if self.has_tsm:
+        if self.has_tsm or self.has_asrock:
             if not (0 <= index <= 1):
                 raise pygexc.InvalidParameterValue("Index must be 0 or 1")
             cmddata = bytearray((1 + index, ))
@@ -405,8 +420,29 @@ class OEMHandler(generic.OEMHandler):
             return True
         return False
 
+    @property
+    def has_asrock(self):
+        # True if this particular server have a ASROCKRACK
+        # based service processor (RS160 or TS460)
+        # RS160 (Riddler) product id is 1182 (049Eh)
+        # TS460 (WildThing) product id is 1184 (04A0h)
+
+        if (self.oemid['manufacturer_id'] == 19046
+                and (self.oemid['product_id'] == 1182
+                     or self.oemid['product_id'] == 1184)):
+            try:
+                self.ipmicmd.xraw_command(netfn=0x3a,
+                                          command=0x50,
+                                          data=(0x00, 0x00, 0x00))
+            except pygexc.IpmiException as ie:
+                if ie.ipmicode == 193:
+                    return False
+                raise
+            return True
+        return False
+
     def get_oem_inventory_descriptions(self):
-        if self.has_tsm:
+        if self.has_tsm or self.has_asrock:
             # Thinkserver with TSM
             if not self.oem_inventory_info:
                 self._collect_tsm_inventory()
@@ -418,7 +454,7 @@ class OEMHandler(generic.OEMHandler):
         return ()
 
     def get_oem_inventory(self):
-        if self.has_tsm:
+        if self.has_tsm or self.has_asrock:
             self._collect_tsm_inventory()
             for compname in self.oem_inventory_info:
                 yield (compname, self.oem_inventory_info[compname])
@@ -460,7 +496,7 @@ class OEMHandler(generic.OEMHandler):
         return ()
 
     def get_inventory_of_component(self, component):
-        if self.has_tsm:
+        if self.has_tsm or self.has_asrock:
             self._collect_tsm_inventory()
             return self.oem_inventory_info.get(component, None)
         if self.has_imm:
@@ -468,24 +504,46 @@ class OEMHandler(generic.OEMHandler):
         if self.is_fpc:
             return self.smmhandler.get_inventory_of_component(component)
 
+    def get_cmd_type(self, categorie_item, catspec):
+        if self.has_asrock:
+            cmd_type = catspec["command"]["asrock"]
+        elif categorie_item in categorie_items:
+            cmd_type = catspec["command"]["lenovo"]
+        else:
+            cmd_type = catspec["command"]
+
+        return cmd_type
+
     def _collect_tsm_inventory(self):
         self.oem_inventory_info = {}
+        asrock = False
+        if self.has_asrock:
+            asrock = True
         for catid, catspec in inventory.categories.items():
-            if (catspec.get("workaround_bmc_bug", False)):
+            # skip the inventory fields if the system is RS160
+            if asrock and catid not in categorie_items:
+                continue
+            if (catspec.get("workaround_bmc_bug", False)
+                    and catspec["workaround_bmc_bug"](
+                        "ami" if self.has_ami else "lenovo")):
                 rsp = None
-                tmp_command = dict(catspec["command"])
+                cmd = self.get_cmd_type(catid, catspec)
+                tmp_command = dict(cmd)
                 tmp_command["data"] = list(tmp_command["data"])
                 count = 0
                 for i in range(0x01, 0xff):
                     tmp_command["data"][-1] = i
                     try:
                         partrsp = self.ipmicmd.xraw_command(**tmp_command)
+                        count += 1
+                        if asrock and partrsp["data"][1] == "\xff":
+                            continue
+
                         if rsp is None:
                             rsp = partrsp
                             rsp["data"] = list(rsp["data"])
                         else:
                             rsp["data"].extend(partrsp["data"][1:])
-                        count += 1
                     except Exception:
                         break
                 # If we didn't get any response, assume we don't have
@@ -496,13 +554,14 @@ class OEMHandler(generic.OEMHandler):
                 rsp["data"] = buffer(bytearray(rsp["data"]))
             else:
                 try:
-                    rsp = self.ipmicmd.xraw_command(**catspec["command"])
+                    cmd = self.get_cmd_type(catid, catspec)
+                    rsp = self.ipmicmd.xraw_command(**cmd)
                 except pygexc.IpmiException:
                     continue
             # Parse the response we got
             try:
                 items = inventory.parse_inventory_category(
-                    catid, rsp,
+                    catid, rsp, asrock,
                     countable=catspec.get("countable", True)
                 )
             except Exception:
@@ -512,7 +571,22 @@ class OEMHandler(generic.OEMHandler):
 
             for item in items:
                 try:
-                    key = catspec["idstr"].format(item["index"])
+                    # Originally on ThinkServer and SD350 (Kent),
+                    # the DIMM is distinguished by slot,
+                    # the key is the value of slot number (item["index"])
+                    # While on RS160/TS460 the DIMMs is distinguished
+                    # by slot number and channel number,
+                    # the key is the value of the sum of slot number
+                    # and channel number
+                    if asrock and catid == "dimm":
+                        if item["channel_number"] == 1:
+                            key = catspec["idstr"].format(item["index"])
+                        else:
+                            key = catspec["idstr"].format(
+                                item["index"] + item["channel_number"])
+                    else:
+                        key = catspec["idstr"].format(item["index"])
+
                     del item["index"]
                     self.oem_inventory_info[key] = item
                 except Exception:
@@ -521,16 +595,34 @@ class OEMHandler(generic.OEMHandler):
                     continue
 
     def get_leds(self):
-        if self.has_tsm:
-            for (name, id_) in leds.items():
-                try:
-                    rsp = self.ipmicmd.xraw_command(netfn=0x3A, command=0x02,
+        cmd = 0x02
+        led_set = leds
+        led_set_status = led_status
+
+        asrock = self.has_asrock
+        if asrock:
+            cmd = 0x50
+            led_set = asrock_leds
+            led_set_status = asrock_led_status
+
+        for (name, id_) in led_set.items():
+            try:
+                if asrock:
+                    rsp = self.ipmicmd.xraw_command(netfn=0x3A, command=cmd,
+                                                    data=(0x03, id_, 0x00))
+                    rdata = bytearray(rsp['data'][:])
+                    status = rdata[1]
+                else:
+                    rsp = self.ipmicmd.xraw_command(netfn=0x3A, command=cmd,
                                                     data=(id_,))
-                except pygexc.IpmiException:
-                    continue  # Ignore LEDs we can't retrieve
-                status = led_status.get(bytearray(rsp['data'][:])[0],
+                    rdata = bytearray(rsp['data'][:])
+                    status = rdata[0]
+
+            except pygexc.IpmiException:
+                continue  # Ignore LEDs we can't retrieve
+            status = led_set_status.get(status,
                                         led_status_default)
-                yield (name, {'status': status})
+            yield (name, {'status': status})
 
     def set_identify(self, on, duration):
         if on and not duration and self.is_sd350:
@@ -608,6 +700,17 @@ class OEMHandler(generic.OEMHandler):
         elif self.is_fpc and self.is_fpc != 6:  # SMM variant
             fru['oem_parser'] = 'lenovo'
             return self.smmhandler.process_fru(fru)
+        elif self.has_asrock:
+            fru['oem_parser'] = 'lenovo'
+            # ASRock RS160 TS460 lays out specific interpretation of the
+            # board extra fields
+            try:
+                mac1 = fru['board_extra']
+                if mac1 not in ('00:00:00:00:00:00', ''):
+                    fru['MAC Address 1'] = mac1.encode('utf-8')
+            except (AttributeError, KeyError):
+                pass
+            return fru
         else:
             fru['oem_parser'] = None
             return fru
@@ -653,20 +756,27 @@ class OEMHandler(generic.OEMHandler):
         return self._hasimm
 
     def get_oem_firmware(self, bmcver, components):
-        if self.has_tsm:
+        if self.has_tsm or self.has_asrock:
             command = firmware.get_categories()["firmware"]
-            rsp = self.ipmicmd.xraw_command(**command["command"])
+            fw_cmd = self.get_cmd_type("firmware", command)
+            rsp = self.ipmicmd.xraw_command(**fw_cmd)
+
             # the newest Lenovo ThinkServer versions are returning Bios version
             # numbers through another command
             bios_versions = None
-            if self.has_tsm:
+            if self.has_tsm or self.has_asrock:
                 bios_command = firmware.get_categories()["bios_version"]
-                bios_rsp = self.ipmicmd.xraw_command(**bios_command["command"])
-                bios_versions = bios_command["parser"](bios_rsp["data"])
+                bios_cmd = self.get_cmd_type("bios_version", bios_command)
+                bios_rsp = self.ipmicmd.xraw_command(**bios_cmd)
+                if self.has_asrock:
+                    bios_versions = bios_rsp['data']
+                else:
+                    bios_versions = bios_command["parser"](bios_rsp['data'])
 
             # pass bios versions to firmware parser
-            return command["parser"](rsp["data"], bios_versions)
-
+            return command["parser"](rsp["data"],
+                                     bios_versions,
+                                     self.has_asrock)
         elif self.has_imm:
             return self.immhandler.get_firmware_inventory(bmcver, components)
         elif self.is_fpc:
@@ -1132,3 +1242,37 @@ class OEMHandler(generic.OEMHandler):
                 uid, 0x03, 0x00, 0x00, 0x00))
             return True
         return False
+
+    def process_zero_fru(self, zerofru):
+        if (self.oemid['manufacturer_id'] == 19046
+                and self.oemid['product_id'] == 13616):
+            # Currently SD350 FRU UUID is synchronized with the Device UUID.
+            # Need to change to System UUID in future.
+            # Since the IPMI get device uuid matches SMBIOS,
+            # no need to decode it.
+            guiddata = self.ipmicmd.raw_command(netfn=6, command=0x8)
+            if 'error' not in guiddata:
+                zerofru['UUID'] = util.decode_wireformat_uuid(
+                    guiddata['data'], True)
+        else:
+            # It is expected that a manufacturer matches SMBIOS to IPMI
+            # get system uuid return data.  If a manufacturer does not
+            # do so, they should handle either deletion or fixup in the
+            # OEM processing pass.  Code optimistically assumes that if
+            # data is returned, than the vendor is properly using it.
+
+            guiddata = self.ipmicmd.raw_command(netfn=6, command=0x37)
+            if 'error' not in guiddata:
+                if (self.oemid['manufacturer_id'] == 19046
+                        and (self.oemid['product_id'] == 1182
+                             or self.oemid['product_id'] == 1184)):
+                    # The manufacturer (Asrockrack) of RS160/TS460
+                    # matches SMBIOS
+                    # to IPMI get system uuid return data,
+                    # no need to decode it.
+                    zerofru['UUID'] = util.decode_wireformat_uuid(
+                        guiddata['data'], True)
+                else:
+                    zerofru['UUID'] = util.decode_wireformat_uuid(
+                        guiddata['data'])
+        return self.process_fru(zerofru)

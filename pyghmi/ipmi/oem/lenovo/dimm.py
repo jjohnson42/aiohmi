@@ -32,6 +32,17 @@ dimm_fields = (
     inventory.EntryField("reserved", "h", include=False)
 )
 
+dimm_cmd = {
+    "lenovo": {
+        "netfn": 0x06,
+        "command": 0x59,
+        "data": (0x00, 0xc1, 0x02, 0x00)},
+    "asrock": {
+        "netfn": 0x3a,
+        "command": 0x50,
+        "data": (0x01, 0x02, 0x01)},
+}
+
 
 def parse_dimm_info(raw):
     return inventory.parse_inventory_category_entry(raw, dimm_fields)
@@ -42,11 +53,7 @@ def get_categories():
         "dimm": {
             "idstr": "DIMM {0}",
             "parser": parse_dimm_info,
-            "command": {
-                "netfn": 0x06,
-                "command": 0x59,
-                "data": (0x00, 0xc1, 0x02, 0x00)
-            },
+            "command": dimm_cmd,
             "workaround_bmc_bug": True
         }
     }

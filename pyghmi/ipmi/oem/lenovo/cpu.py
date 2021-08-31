@@ -26,6 +26,17 @@ cpu_fields = (
                          valuefunc=lambda v: str(v) + " MHz"),
     inventory.EntryField("Reserved", "h", include=False))
 
+cpu_cmd = {
+    "lenovo": {
+        "netfn": 0x06,
+        "command": 0x59,
+        "data": (0x00, 0xc1, 0x01, 0x00)},
+    "asrock": {
+        "netfn": 0x3a,
+        "command": 0x50,
+        "data": (0x01, 0x01, 0x00)},
+}
+
 
 def parse_cpu_info(raw):
     return inventory.parse_inventory_category_entry(raw, cpu_fields)
@@ -36,10 +47,6 @@ def get_categories():
         "cpu": {
             "idstr": "CPU {0}",
             "parser": parse_cpu_info,
-            "command": {
-                "netfn": 0x06,
-                "command": 0x59,
-                "data": (0x00, 0xc1, 0x01, 0x00)
-            }
+            "command": cpu_cmd
         }
     }

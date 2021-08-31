@@ -27,8 +27,9 @@ import pyghmi.ipmi.events as sel
 import pyghmi.ipmi.fru as fru
 import pyghmi.ipmi.oem.generic as genericoem
 from pyghmi.ipmi.oem.lookup import get_oem_handler
-import pyghmi.ipmi.private.util as pygutil
+import pyghmi.ipmi.private.util as util
 from pyghmi.ipmi import sdr
+
 
 try:
     from pyghmi.ipmi.private import session
@@ -648,18 +649,6 @@ class Command(object):
         return self._oem.get_inventory_of_component(component)
 
     def _get_zero_fru(self):
-        # It is expected that a manufacturer matches SMBIOS to IPMI
-        # get system uuid return data.  If a manufacturer does not
-        # do so, they should handle either deletion or fixup in the
-        # OEM processing pass.  Code optimistically assumes that if
-        # data is returned, than the vendor is properly using it.
-        zerofru = fru.FRU(ipmicmd=self).info
-        if zerofru is None:
-            zerofru = {}
-        guiddata = self.raw_command(netfn=6, command=0x37)
-        if 'error' not in guiddata:
-            zerofru['UUID'] = pygutil.decode_wireformat_uuid(
-                guiddata['data'])
         # Add some fields returned by get device ID command to FRU 0
         # Also rename them to something more in line with FRU 0 field naming
         # standards
@@ -668,8 +657,21 @@ class Command(object):
         device_id['Device Revision'] = device_id.pop('device_revision')
         device_id['Manufacturer ID'] = device_id.pop('manufacturer_id')
         device_id['Product ID'] = device_id.pop('product_id')
+
+        zerofru = fru.FRU(ipmicmd=self).info
+        if zerofru is None:
+            zerofru = {}
         zerofru.update(device_id)
-        return self._oem.process_fru(zerofru)
+        zerofru = self._oem.process_zero_fru(zerofru)
+        # If uuid is not returned in OEM processing,
+        # then it is expected that a manufacturer matches SMBIOS to IPMI
+        # get system uuid return data.
+        if 'UUID' not in zerofru:
+            guiddata = self.ipmicmd.raw_command(netfn=6, command=0x37)
+            if 'error' not in guiddata:
+                zerofru['UUID'] = util.\
+                    decode_wireformat_uuid(guiddata['data'])
+        return zerofru
 
     def get_inventory(self):
         """Retrieve inventory of system

@@ -396,3 +396,6 @@ class OEMHandler(object):
         :param uid: User ID.
         """
         return False
+
+    def process_zero_fru(self, zerofru):
+        return self.process_fru(zerofru)
