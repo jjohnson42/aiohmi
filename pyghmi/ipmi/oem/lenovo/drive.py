@@ -47,9 +47,7 @@ drive_fields = (
         0x00: "active",
         0x01: "stopped",
         0xff: "transitioning"
-    }),
-    # There seems to be an undocumented byte at the end
-    inventory.EntryField("Reserved", "B", include=False))
+    }))
 
 
 def parse_drive_info(raw):
