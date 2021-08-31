@@ -1589,7 +1589,7 @@ class Command(object):
 
         :param channel: number [1:7]
 
-        :parm callback: User Restricted to Callback
+        :param callback: User Restricted to Callback
         False = User Privilege Limit is determined by the User Privilege Limit
             parameter, below, for both callback and non-callback connections.
         True  = User Privilege Limit is determined by the User Privilege Limit
