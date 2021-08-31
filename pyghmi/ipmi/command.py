@@ -1654,6 +1654,9 @@ class Command(object):
         response = self.raw_command(netfn=0x06, command=0x43, data=data)
         if 'error' in response:
             raise Exception(response['error'])
+        # Set KVM and VMedia Allowed if is administrator
+        if privilege_level == 'administrator':
+            self.set_extended_privilleges(uid)
         return True
 
     def get_user_access(self, uid, channel=None):
@@ -2070,3 +2073,10 @@ class Command(object):
     def apply_license(self, filename, progress=None, data=None):
         self.oem_init()
         return self._oem.apply_license(filename, progress, data)
+
+    def set_extended_privilleges(self, uid):
+        """Set user extended privillege as 'KVM & VMedia Allowed'
+
+        """
+        self.oem_init()
+        return self._oem.set_oem_extended_privilleges(uid)

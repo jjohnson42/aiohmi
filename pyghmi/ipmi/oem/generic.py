@@ -384,3 +384,15 @@ class OEMHandler(object):
 
     def get_user_expiration(self, uid):
         return None
+
+    def set_oem_extended_privilleges(self, uid):
+        """Set user extended privillege as 'KVM & VMedia Allowed'
+
+        |KVM & VMedia Not Allowed	0x00 0x00 0x00 0x00
+        |KVM Only Allowed	0x01 0x00 0x00 0x00
+        |VMedia Only Allowed	0x02  0x00 0x00 0x00
+        |KVM & VMedia Allowed	0x03 0x00 0x00 0x00
+
+        :param uid: User ID.
+        """
+        return False
