@@ -792,6 +792,7 @@ class OEMHandler(generic.OEMHandler):
         conn.request('POST', '/rpc/WEBSES/create.asp', params, headers)
         rsp = conn.getresponse()
         if rsp.status == 200:
+            conn.cookies = {}
             body = rsp.read().split('\n')
             session_line = None
             for line in body:
