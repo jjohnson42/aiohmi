@@ -420,6 +420,8 @@ class SDREntry(object):
             # or hyphen, so go with space
             self.unit_mod = " "
         self.percent = ''
+        # two bytes of assertion event mask / lower threshold reading mask
+        self.assertion_reading_mask = entry[9:11]
         if entry[15] & 1 == 1:
             self.percent = '% '
         if self.sensor_type_number == 0xb:
@@ -514,44 +516,62 @@ class SDREntry(object):
         output['health'] = const.Health.Ok
         if discrete:
             for state in range(8):
-                if reading[2] & (0b1 << state):
+                if reading[2] & (0b1 << state) & \
+                        self.assertion_reading_mask[0]:
                     statedesc, health = self._decode_state(state)
                     output['health'] |= health
                     output['states'].append(statedesc)
                     output['state_ids'].append(self.assert_trap_value(state))
             if len(reading) > 3:
                 for state in range(7):
-                    if reading[3] & (0b1 << state):
+                    if reading[3] & (0b1 << state) & \
+                            self.assertion_reading_mask[0]:
                         statedesc, health = self._decode_state(state + 8)
                         output['health'] |= health
                         output['states'].append(statedesc)
                         output['state_ids'].append(
                             self.assert_trap_value(state + 8))
         else:
-            if reading[2] & 0b1:
-                output['health'] |= const.Health.Warning
-                output['states'].append(lower + " non-critical threshold")
-                output['state_ids'].append(self.assert_trap_value(1))
-            if reading[2] & 0b10:
-                output['health'] |= const.Health.Critical
-                output['states'].append(lower + " critical threshold")
-                output['state_ids'].append(self.assert_trap_value(2))
-            if reading[2] & 0b100:
-                output['health'] |= const.Health.Failed
-                output['states'].append(lower + " non-recoverable threshold")
-                output['state_ids'].append(self.assert_trap_value(3))
-            if reading[2] & 0b1000:
-                output['health'] |= const.Health.Warning
-                output['states'].append(upper + " non-critical threshold")
-                output['state_ids'].append(self.assert_trap_value(4))
-            if reading[2] & 0b10000:
-                output['health'] |= const.Health.Critical
-                output['states'].append(upper + " critical threshold")
-                output['state_ids'].append(self.assert_trap_value(5))
-            if reading[2] & 0b100000:
-                output['health'] |= const.Health.Failed
-                output['states'].append(upper + " non-recoverable threshold")
-                output['state_ids'].append(self.assert_trap_value(6))
+            # get the event status for threshold sensor
+            rsp = ipmicmd.xraw_command(netfn=4,
+                                       command=0x2b,
+                                       data=(self.sensor_number,))
+            rsp['data'] = bytearray(rsp['data'])
+            for offset in range(8):
+                if rsp['data'][1] & (0b1 << offset) & \
+                        self.assertion_reading_mask[0]:
+                    output['state_ids'].append(self.assert_trap_value(offset))
+            if len(rsp['data']) >= 3:
+                for offset in range(4):
+                    if rsp['data'][2] & (0b1 << offset) & \
+                            self.assertion_reading_mask[1]:
+                        output['state_ids'].append(
+                            self.assert_trap_value(offset + 8))
+
+            # if the sensor trigger the event, then read the status and health
+            if len(output['state_ids']) > 0:
+                if reading[2] & 0b1:
+                    output['health'] |= const.Health.Warning
+                    output['states'].append(lower + " non-critical threshold")
+                if reading[2] & 0b10:
+                    output['health'] |= const.Health.Critical
+                    output['states'].append(lower + " critical threshold")
+                if reading[2] & 0b100:
+                    output['health'] |= const.Health.Failed
+                    output['states'].append(lower
+                                            + " non-recoverable threshold")
+                if reading[2] & 0b1000:
+                    output['health'] |= const.Health.Warning
+                    output['states'].append(upper
+                                            + " non-critical threshold")
+                if reading[2] & 0b10000:
+                    output['health'] |= const.Health.Critical
+                    output['states'].append(upper + " critical threshold")
+                if reading[2] & 0b100000:
+                    output['health'] |= const.Health.Failed
+                    output['states'].append(upper
+                                            + " non-recoverable threshold")
+
         return SensorReading(output, self.unit_suffix)
 
     def _set_tmp_formula(self, ipmicmd, value):
