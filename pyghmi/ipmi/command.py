@@ -1208,25 +1208,7 @@ class Command(object):
         """
         if channel is None:
             channel = self.get_network_channel()
-        if ip is not None:
-            destdata = bytearray((channel, 19, destination))
-            try:
-                parsedip = socket.inet_aton(ip)
-                destdata.extend((0, 0))
-                destdata.extend(parsedip)
-                destdata.extend(b'\x00\x00\x00\x00\x00\x00')
-            except socket.error:
-                if self._supports_standard_ipv6:
-                    parsedip = socket.inet_pton(socket.AF_INET6, ip)
-                    destdata.append(0b10000000)
-                    destdata.extend(parsedip)
-                else:
-                    destdata = None
-                    self.oem_init()
-                    self._oem.set_alert_ipv6_destination(ip, destination,
-                                                         channel)
-            if destdata:
-                self.xraw_command(netfn=0xc, command=1, data=destdata)
+
         if (acknowledge_required is not None
                 or retries is not None
                 or acknowledge_timeout is not None):
@@ -1247,6 +1229,18 @@ class Command(object):
             destreq = bytearray((channel, 18))
             destreq.extend(currtype)
             self.xraw_command(netfn=0xc, command=1, data=destreq)
+        if ip is not None:
+            destdata = bytearray((channel, 19, destination))
+            try:
+                parsedip = socket.inet_pton(socket.AF_INET, ip)
+                destdata.extend((0, 0))
+                destdata.extend(parsedip)
+                destdata.extend('\x00\x00\x00\x00\x00\x00')
+            except socket.error:
+                parsedip = socket.inet_pton(socket.AF_INET6, ip)
+                destdata.append(0b10000000)
+                destdata.extend(parsedip)
+            self.xraw_command(netfn=0xc, command=1, data=destdata)
         if not ip == '0.0.0.0':
             self._assure_alert_policy(channel, destination)
 
