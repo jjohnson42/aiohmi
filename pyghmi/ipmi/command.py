@@ -690,7 +690,9 @@ class Command(object):
             if fruinf is not None:
                 fruinf = self._oem.process_fru(fruinf,
                                                self._sdr.fru[fruid].fru_name)
-            yield (self._sdr.fru[fruid].fru_name, fruinf)
+            # check the fruinf again as the oem process may return None
+            if fruinf:
+                yield (self._sdr.fru[fruid].fru_name, fruinf)
         for componentpair in self._oem.get_oem_inventory():
             yield componentpair
 
