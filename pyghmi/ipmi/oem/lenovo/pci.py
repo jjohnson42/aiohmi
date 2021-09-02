@@ -30,7 +30,7 @@ pci_fields = (
     }),
     inventory.EntryField("BusNumber", "B"),
     inventory.EntryField("DeviceFunction", "B"),
-    inventory.EntryField("VendorID", "<H"),
+    inventory.EntryField("VendorID", "<H", presence=True),
     inventory.EntryField("DeviceID", "<H"),
     inventory.EntryField("SubSystemVendorID", "<H"),
     inventory.EntryField("SubSystemID", "<H"),
