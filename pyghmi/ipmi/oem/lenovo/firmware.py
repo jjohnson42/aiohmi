@@ -33,19 +33,69 @@ firmware_fields = (
     inventory.EntryField("WIND", "16s"),
     inventory.EntryField("DIAG", "16s"))
 
+asrock_firmware_fields = (
+    inventory.EntryField("Major Firmware Revision", "B"),
+    inventory.EntryField("Minor Firmware Revision", "B"),
+    inventory.EntryField("Auxiliary Firmware Revision", "4s"))
 
-def parse_firmware_info(raw, bios_versions=None):
-    bytes_read, data = inventory.parse_inventory_category_entry(
-        raw, firmware_fields)
-    del data['Revision']
-    for key in data:
-        yield key, {'version': data[key]}
+firmware_cmd = {
+    "lenovo": {
+        "netfn": 0x06,
+        "command": 0x59,
+        "data": (0x00, 0xc7, 0x00, 0x00)},
+    "asrock": {
+        "netfn": 0x3a,
+        "command": 0x50,
+        "data": (0x02, 0x00, 0x01)},
+}
 
-    if bios_versions is not None:
-        yield ("Bios_bundle_ver",
-               {'version': bios_versions['new_img_version']})
-        yield ("Bios_current_ver",
-               {'version': bios_versions['cur_img_version']})
+bios_cmd = {
+    "lenovo": {
+        "netfn": 0x32,
+        "command": 0xE8,
+        "data": (0x01, 0x01, 0x02)},
+    "asrock": {
+        "netfn": 0x3a,
+        "command": 0x50,
+        "data": (0x02, 0x01, 0x01)},
+}
+
+
+def parse_firmware_info(raw, bios_versions=None, asrock=False):
+    fields = firmware_fields
+
+    if asrock:
+        fields = asrock_firmware_fields
+
+    bytes_read, data = inventory.parse_inventory_category_entry(raw, fields)
+    if asrock:
+        major_version = data['Major Firmware Revision']
+        minor_version = data['Minor Firmware Revision']
+        # Asrock RS160 the minor version is Binary Coded Decimal,
+        # convert it to Decimal
+        minor_version = (0xff & (minor_version >> 4)) * 10 + \
+                        (0xf & minor_version)
+        aux_reversion = 0
+        if str(data['Auxiliary Firmware Revision']) != '':
+            aux_reversion = ord(data['Auxiliary Firmware Revision'])
+
+        bmc_version = "%s.%s.%s" % (
+            str(major_version),
+            str(minor_version),
+            str(aux_reversion))
+
+        yield ("BMC", {'version': bmc_version})
+        if bios_versions is not None:
+            yield ("Bios", {'version': bios_versions[0:]})
+    else:
+        del data["Revision"]
+        for key in data:
+            yield (key, {'version': data[key]})
+        if bios_versions is not None:
+            yield ("Bios_bundle_ver",
+                   {'version': bios_versions['new_img_version']})
+            yield ("Bios_current_ver",
+                   {'version': bios_versions['cur_img_version']})
 
 
 def parse_bios_number(raw):
@@ -57,20 +107,11 @@ def get_categories():
         "firmware": {
             "idstr": "FW Version",
             "parser": parse_firmware_info,
-            "command": {
-                "netfn": 0x06,
-                "command": 0x59,
-                "data": (0x00, 0xc7, 0x00, 0x00)
-            }
+            "command": firmware_cmd
         },
         "bios_version": {
             "idstr": "Bios Version",
             "parser": parse_bios_number,
-            "command": {
-                "netfn": 0x32,
-                "command": 0xE8,
-                "data": (0x01, 0x01, 0x02)
-            }
-
+            "command": bios_cmd
         }
     }

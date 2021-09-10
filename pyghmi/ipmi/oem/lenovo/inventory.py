@@ -52,7 +52,7 @@ class EntryField(object):
 
 
 # General parameter parsing functions
-def parse_inventory_category(name, info, countable=True):
+def parse_inventory_category(name, info, asrock=False, countable=True):
     """Parses every entry in an inventory category
 
     For example: CPU, memory, PCI, drives
@@ -61,10 +61,14 @@ def parse_inventory_category(name, info, countable=True):
 
     :param name: the name of the parameter (e.g.: "cpu")
     :param info: a list of integers with raw data read from an IPMI requests
+    :param asrock: a boolean represents if RS160 with asrockrack or not
     :param countable: whether the data have an entries count field
     :returns: dict -- a list of entries in the category.
     """
     raw = info["data"][1:]
+
+    if name == "cpu" and asrock:
+        raw = info["data"]
 
     cur = 0
     if countable:
@@ -76,17 +80,17 @@ def parse_inventory_category(name, info, countable=True):
 
     entries = []
     while cur < len(raw):
-        read, cpu = categories[name]["parser"](raw[cur:])
+        read, parser = categories[name]["parser"](raw[cur:])
         cur = cur + read
         # Account for discarded entries (because they are not present)
-        if cpu is None:
+        if parser is None:
             discarded += 1
             continue
         if not countable:
             # count by myself
             count += 1
-            cpu["index"] = count
-        entries.append(cpu)
+            parser["index"] = count
+        entries.append(parser)
 
     # TODO(avidal): raise specific exception to point that there's data left in
     # the buffer
@@ -94,7 +98,7 @@ def parse_inventory_category(name, info, countable=True):
         raise Exception
     # TODO(avidal): raise specific exception to point that the number of
     # entries is different than the expected
-    if count - discarded != len(entries):
+    if count - discarded != len(entries) and not asrock:
         raise Exception
     return entries
 
@@ -119,6 +123,9 @@ def parse_inventory_category_entry(raw, fields):
         value = struct.unpack_from(field.fmt, r)[0]
         read = struct.calcsize(field.fmt)
         bytes_read += read
+        if bytes_read > len(raw):
+            break
+
         r = r[read:]
         # If this entry is not actually present, just parse and then discard it
         if field.presence and not bool(value):
@@ -127,7 +134,7 @@ def parse_inventory_category_entry(raw, fields):
             continue
 
         if (field.fmt[-1] == "s"):
-            value = value.rstrip(b'\x00')
+            value = value.rstrip(b'\x00\xff')
         if (field.mapper and value in field.mapper):
             value = field.mapper[value]
         if (field.valuefunc):
