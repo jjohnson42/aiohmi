@@ -47,6 +47,7 @@ def get_categories():
         "cpu": {
             "idstr": "CPU {0}",
             "parser": parse_cpu_info,
-            "command": cpu_cmd
+            "command": cpu_cmd,
+            "workaround_bmc_bug": lambda t: t == "ami"
         }
     }
