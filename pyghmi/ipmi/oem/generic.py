@@ -271,6 +271,19 @@ class OEMHandler(object):
         """
         return
 
+    def get_oem_identifier(self):
+        """Get host name
+
+        """
+        return None
+
+    def set_oem_identifier(self, name):
+        """Set host name
+
+        :param name: host name to be set
+        """
+        return False
+
     def detach_remote_media(self):
         raise exc.UnsupportedFunctionality()
 
