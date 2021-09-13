@@ -132,6 +132,15 @@ asrock_leds = {
     "LED_FAN_FAULT_3": 0x04
 }
 
+ts460_leds = {
+    "SYSTEM_EVENT": 0x00,
+    "BMC_UID": 0x01,
+    "LED_FAN_FAULT_1": 0x02,
+    "LED_FAN_FAULT_2": 0x03,
+    "LED_FAN_CPU": 0x04,
+    "LED_FAN_REAR": 0x05
+}
+
 asrock_led_status = {
     0x00: "Off",
     0x01: "On"
@@ -441,6 +450,12 @@ class OEMHandler(generic.OEMHandler):
             return True
         return False
 
+    @property
+    def isTS460(self):
+        if self.oemid['product_id'] == 1184:
+            return True
+        return False
+
     def get_oem_inventory_descriptions(self):
         if self.has_tsm or self.has_asrock:
             # Thinkserver with TSM
@@ -602,7 +617,11 @@ class OEMHandler(generic.OEMHandler):
         asrock = self.has_asrock
         if asrock:
             cmd = 0x50
-            led_set = asrock_leds
+            # because rs160 has different led info with ts460
+            if self.isTS460:
+                led_set = ts460_leds
+            else:
+                led_set = asrock_leds
             led_set_status = asrock_led_status
 
         for (name, id_) in led_set.items():
