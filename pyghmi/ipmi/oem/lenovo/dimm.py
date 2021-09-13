@@ -54,6 +54,6 @@ def get_categories():
             "idstr": "DIMM {0}",
             "parser": parse_dimm_info,
             "command": dimm_cmd,
-            "workaround_bmc_bug": True
+            "workaround_bmc_bug": lambda t: True
         }
     }
