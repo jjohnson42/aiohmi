@@ -1266,10 +1266,16 @@ class Command(object):
             return self.get_mci()
 
     def get_mci(self):
-        """Get the Management Controller Identifier, per DCMI specification
+        """Set the management controller identifier.
+
+        Try the OEM command first,if False, then set it per DCMI specification
 
         :returns: The identifier as a string
         """
+        self.oem_init()
+        identifier = self._oem.get_oem_identifier()
+        if identifier:
+            return identifier
         return self._chunkwise_dcmi_fetch(9)
 
     def set_hostname(self, hostname):
@@ -1287,11 +1293,16 @@ class Command(object):
             return self.set_mci(hostname)
 
     def set_mci(self, mci):
-        """Set the management controller identifier, per DCMI specification
+        """Set the management controller identifier.
 
+        Try the OEM command first, if False, then set it per DCMI specification
         """
+        self.oem_init()
         if not isinstance(mci, bytes):
             mci = mci.encode('utf8')
+        ret = self._oem.set_oem_identifier(mci)
+        if ret:
+            return
         return self._chunkwise_dcmi_set(0xa, mci + b'\x00')
 
     def get_asset_tag(self):
