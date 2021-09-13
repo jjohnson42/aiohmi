@@ -388,11 +388,11 @@ generic_type_offsets = {
             'desc': 'Redundant',
             'severity': const.Health.Ok,
             'deassertion_desc': 'Redundant lost',
-            'deassertion_severity': const.Health.Ok,
+            'deassertion_severity': const.Health.Critical,
         },
         1: {
             'desc': 'Not redundant',  # redundancy lost
-            'severity': const.Health.Warning,
+            'severity': const.Health.Critical,
             'deassertion_desc': 'Redundancy restored',
             'deassertion_severity': const.Health.Ok,
         },
@@ -404,7 +404,7 @@ generic_type_offsets = {
         },
         3: {
             'desc': 'Not redundant',  # down to non redundant
-            'severity': const.Health.Ok,
+            'severity': const.Health.Warning,
             'deassertion_desc': 'Redundancy restored',
             'deassertion_severity': const.Health.Ok,
         },
@@ -603,7 +603,7 @@ sensor_type_offsets = {
         },
         8: {
             'desc': 'Disabled',
-            'severity': const.Health.Warning,
+            'severity': const.Health.Ok,
             'deassertion_desc': 'Enabled',
             'deassertion_severity': const.Health.Ok,
         },
@@ -761,13 +761,13 @@ sensor_type_offsets = {
         },
         4: {
             'desc': 'Device disabled',
-            'severity': const.Health.Warning,
+            'severity': const.Health.Ok,
             'deassertion_desc': 'Device enabled',
             'deassertion_severity': const.Health.Ok,
         },
         5: {
             'desc': 'Correctable memory error logging limit reached',
-            'severity': const.Health.Critical,
+            'severity': const.Health.Warning,
             'deassertion_desc': 'Correctable memory error logging restored',
             'deassertion_severity': const.Health.Ok,
         },
@@ -905,7 +905,7 @@ sensor_type_offsets = {
         },
         4: {
             'desc': 'Event log full',
-            'severity': const.Health.Warning,
+            'severity': const.Health.Ok,
             'deassertion_desc': 'Event log no longer full',
             'deassertion_severity': const.Health.Ok,
         },
@@ -963,7 +963,7 @@ sensor_type_offsets = {
     0x13: {  # critical interrupt
         0: {
             'desc': 'Front panel diagnostic interrupt',
-            'severity': const.Health.Ok,
+            'severity': const.Health.Critical,
             'deassertion_desc': 'Front panel diagnostic interrupt deasserted',
             'deassertion_severity': const.Health.Ok,
         },
@@ -1442,19 +1442,19 @@ sensor_type_offsets = {
         },
         0x1: {
             'desc': 'Watchdog hard reset',
-            'severity': const.Health.Failed,
+            'severity': const.Health.Ok,
             'deassertion_desc': 'Watchdog hard reset deasserted',
             'deassertion_severity': const.Health.Ok,
         },
         0x2: {
             'desc': 'Watchdog power down',
-            'severity': const.Health.Failed,
+            'severity': const.Health.Ok,
             'deassertion_desc': 'Watchdog power down deasserted',
             'deassertion_severity': const.Health.Ok,
         },
         0x3: {
             'desc': 'Watchdog power cycle',
-            'severity': const.Health.Failed,
+            'severity': const.Health.Ok,
             'deassertion_desc': 'Watchdog power cycle deasserted',
             'deassertion_severity': const.Health.Ok,
         },
