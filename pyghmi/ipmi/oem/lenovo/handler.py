@@ -124,6 +124,13 @@ led_status = {
     0xFF: "On"
 }
 
+ami_leds = {
+    "BMC_HEARTBEAT": 0x00,
+    "BMC_UID": 0x01,
+    "SYSTEM_FAULT": 0x02,
+    "HDD_FAULT": 0x03
+}
+
 asrock_leds = {
     "SYSTEM_EVENT": 0x00,
     "BMC_UID": 0x01,
@@ -133,6 +140,11 @@ asrock_leds = {
 }
 
 asrock_led_status = {
+    0x00: "Off",
+    0x01: "On"
+}
+
+ami_led_status = {
     0x00: "Off",
     0x01: "On"
 }
@@ -304,7 +316,7 @@ class OEMHandler(generic.OEMHandler):
         return super(OEMHandler, self).reseat_bay(bay)
 
     def get_ntp_enabled(self):
-        if self.has_tsm or self.has_asrock:
+        if self.has_tsm or self.has_ami or self.has_asrock:
             ntpres = self.ipmicmd.xraw_command(netfn=0x32, command=0xa7)
             return ntpres['data'][0] == '\x01'
         elif self.is_fpc:
@@ -314,7 +326,7 @@ class OEMHandler(generic.OEMHandler):
         return None
 
     def get_ntp_servers(self):
-        if self.has_tsm or self.has_asrock:
+        if self.has_tsm or self.has_ami or self.has_asrock:
             srvs = []
             ntpres = self.ipmicmd.xraw_command(netfn=0x32, command=0xa7)
             srvs.append(ntpres['data'][1:129].rstrip('\x00'))
@@ -327,7 +339,7 @@ class OEMHandler(generic.OEMHandler):
         return None
 
     def set_ntp_enabled(self, enabled):
-        if self.has_tsm or self.has_asrock:
+        if self.has_tsm or self.has_ami or self.has_asrock:
             if enabled:
                 self.ipmicmd.xraw_command(
                     netfn=0x32, command=0xa8, data=(3, 1), timeout=15)
@@ -343,7 +355,7 @@ class OEMHandler(generic.OEMHandler):
         return None
 
     def set_ntp_server(self, server, index=0):
-        if self.has_tsm or self.has_asrock:
+        if self.has_tsm or self.has_ami or self.has_asrock:
             if not (0 <= index <= 1):
                 raise pygexc.InvalidParameterValue("Index must be 0 or 1")
             cmddata = bytearray((1 + index, ))
@@ -442,7 +454,7 @@ class OEMHandler(generic.OEMHandler):
         return False
 
     def get_oem_inventory_descriptions(self):
-        if self.has_tsm or self.has_asrock:
+        if self.has_tsm or self.has_ami or self.has_asrock:
             # Thinkserver with TSM
             if not self.oem_inventory_info:
                 self._collect_tsm_inventory()
@@ -454,7 +466,7 @@ class OEMHandler(generic.OEMHandler):
         return ()
 
     def get_oem_inventory(self):
-        if self.has_tsm or self.has_asrock:
+        if self.has_tsm or self.has_ami or self.has_asrock:
             self._collect_tsm_inventory()
             for compname in self.oem_inventory_info:
                 yield (compname, self.oem_inventory_info[compname])
@@ -496,7 +508,7 @@ class OEMHandler(generic.OEMHandler):
         return ()
 
     def get_inventory_of_component(self, component):
-        if self.has_tsm or self.has_asrock:
+        if self.has_tsm or self.has_ami or self.has_asrock:
             self._collect_tsm_inventory()
             return self.oem_inventory_info.get(component, None)
         if self.has_imm:
@@ -600,7 +612,11 @@ class OEMHandler(generic.OEMHandler):
         led_set_status = led_status
 
         asrock = self.has_asrock
-        if asrock:
+        if self.has_ami:
+            cmd = 0x05
+            led_set = ami_leds
+            led_set_status = ami_led_status
+        elif asrock:
             cmd = 0x50
             led_set = asrock_leds
             led_set_status = asrock_led_status
@@ -755,8 +771,28 @@ class OEMHandler(generic.OEMHandler):
         self._hasimm = (rdata[1] & 1 == 1) or (rdata[1] & 16 == 16)
         return self._hasimm
 
+    @property
+    def has_ami(self):
+        """True if this particular server is AMI based lenovo server
+
+        """
+        if(self.oemid['manufacturer_id'] == 19046
+                and self.oemid['product_id'] == 13616):
+            try:
+                rsp = self.ipmicmd.xraw_command(netfn=0x3a, command=0x80)
+            except pygexc.IpmiException as ie:
+                if ie.ipmicode == 193:
+                    return False
+                raise
+            rdata = bytearray(rsp['data'][:])
+            if rdata[0] in range(5):
+                return True
+            else:
+                return False
+        return False
+
     def get_oem_firmware(self, bmcver, components):
-        if self.has_tsm or self.has_asrock:
+        if self.has_tsm or self.has_ami or self.has_asrock:
             command = firmware.get_categories()["firmware"]
             fw_cmd = self.get_cmd_type("firmware", command)
             rsp = self.ipmicmd.xraw_command(**fw_cmd)
