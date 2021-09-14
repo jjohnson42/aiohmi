@@ -14,7 +14,9 @@
 
 import struct
 
+import pyghmi.constants as const
 import pyghmi.exceptions as pygexc
+import pyghmi.ipmi.sdr as sdr
 
 
 class EnergyManager(object):
@@ -70,6 +72,36 @@ class EnergyManager(object):
             data=self.iana + self.modhandle + b'\x01\x82\x00\x08')
         # data is in millijoules, convert to the more recognizable kWh
         return float(struct.unpack('!Q', rsp['data'][3:])[0]) / 1000000 / 3600
+
+
+class Energy(object):
+
+    def __init__(self, ipmicmd):
+        self.ipmicmd = ipmicmd
+
+    def get_energy_sensor(self):
+        # read the cpu usage
+
+        try:
+            rsp = self.ipmicmd.xraw_command(netfn=0x04,
+                                            command=0x2d,
+                                            bridge_request={"addr": 0x2c,
+                                                            "channel": 0x06},
+                                            data=[0xbe])
+        except pygexc.IpmiException:
+            return
+        rdata = bytearray(rsp["data"])
+        cpu_usage = rdata[0] * 100 / 0xff
+        # mimic the power sensor
+        temp = {'name': "CPU_Usage",
+                'health': const.Health.Ok,
+                'states': [],
+                'state_ids': [],
+                'type': "Processor",
+                'units': "%",
+                'value': cpu_usage,
+                'imprecision': None}
+        yield (sdr.SensorReading(temp, temp['units']))
 
 
 if __name__ == '__main__':

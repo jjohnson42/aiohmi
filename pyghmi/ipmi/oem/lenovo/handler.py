@@ -25,6 +25,7 @@ import pyghmi.ipmi.oem.generic as generic
 from pyghmi.ipmi.oem.lenovo import cpu
 from pyghmi.ipmi.oem.lenovo import dimm
 from pyghmi.ipmi.oem.lenovo import drive
+from pyghmi.ipmi.oem.lenovo import energy
 from pyghmi.ipmi.oem.lenovo import firmware
 from pyghmi.ipmi.oem.lenovo import imm
 from pyghmi.ipmi.oem.lenovo import inventory
@@ -504,6 +505,8 @@ class OEMHandler(generic.OEMHandler):
                                                    self._fpc_variant):
                 yield nextscale.get_sensor_reading(name, self.ipmicmd,
                                                    self._fpc_variant)
+        elif self.has_ami:
+            self.get_ami_sensor_data()
 
     def get_sensor_descriptions(self):
         if self.has_imm:
@@ -511,6 +514,8 @@ class OEMHandler(generic.OEMHandler):
         elif self.is_fpc:
             return nextscale.get_sensor_descriptions(
                 self.ipmicmd, self._fpc_variant)
+        elif self.has_ami:
+            self.get_ami_sensor_descriptions()
         return ()
 
     def get_sensor_reading(self, sensorname):
@@ -520,6 +525,8 @@ class OEMHandler(generic.OEMHandler):
         elif self.is_fpc:
             return nextscale.get_sensor_reading(sensorname, self.ipmicmd,
                                                 self._fpc_variant)
+        elif self.has_ami:
+            self.get_ami_sensor_reading(sensorname)
         return ()
 
     def get_inventory_of_component(self, component):
@@ -1332,3 +1339,39 @@ class OEMHandler(generic.OEMHandler):
                     zerofru['UUID'] = util.decode_wireformat_uuid(
                         guiddata['data'])
         return self.process_fru(zerofru)
+
+    def get_ami_sensor_reading(self, sensorname):
+        """Get an OEM sensor
+
+        If software wants to model some OEM behavior as a 'sensor' without
+        doing SDR, this hook provides that ability.  It should mimic
+        the behavior of 'get_sensor_reading' in command.py.
+        """
+        for sensor in self.get_sensor_data():
+            if sensor.name == sensorname:
+                return sensor
+
+    def get_ami_sensor_descriptions(self):
+        """Get list of OEM sensor names and types
+
+        Iterate over dicts describing a label and type for OEM 'sensors'.  This
+        should mimic the behavior of the get_sensor_descriptions function
+        in command.py.
+        """
+        if self.has_ami:
+            energy_sensor = energy.Energy(self.ipmicmd)
+            for sensor in energy_sensor.get_energy_sensor():
+                yield {'name': sensor.name,
+                       'type': sensor.type}
+
+    def get_ami_sensor_data(self):
+        """Get OEM sensor data
+
+        Iterate through all OEM 'sensors' and return data as if they were
+        normal sensors.  This should mimic the behavior of the get_sensor_data
+        function in command.py.
+        """
+        if self.has_ami:
+            energy_sensor = energy.Energy(self.ipmicmd)
+            for sensor in energy_sensor.get_energy_sensor():
+                yield sensor
