@@ -205,6 +205,8 @@ def decode_eventdata(sensor_type, offset, eventdata, sdr):
     elif sensor_type == 8 and offset == 6:  # PSU cfg error
         errtype = eventdata[2] & 0b1111
         return psucfg_errors.get(errtype, 'Unknown')
+    elif sensor_type == 0xC6:
+        return 'PSU Redundancy'
     elif sensor_type == 0xc and offset == 8:  # Memory spare
         return 'Module {0}'.format(eventdata[2])
     elif sensor_type == 0xf:
