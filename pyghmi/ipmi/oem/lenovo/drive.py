@@ -43,6 +43,7 @@ drive_fields = (
         0x04: "12.0 Gb/s"
     }),
     inventory.EntryField("SlotNumber", "B"),
+    inventory.EntryField("ControllerIndex", "B"),
     inventory.EntryField("DeviceState", "B", mapper={
         0x00: "active",
         0x01: "stopped",
