@@ -1226,6 +1226,8 @@ class Command(object):
                     currtype[1] |= 0b10000000
                 else:
                     currtype[1] &= 0b1111111
+            # set PET trap destination
+            currtype[1] &= 0b1111000
             if acknowledge_timeout is not None:
                 currtype[2] = acknowledge_timeout
             if retries is not None:
