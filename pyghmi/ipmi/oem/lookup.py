@@ -12,8 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+import os
+import sys
+
 import pyghmi.ipmi.oem.generic as generic
 import pyghmi.ipmi.oem.lenovo.handler as lenovo
+
+
+logger = logging.getLogger(__name__)
 
 # The mapping comes from
 # http://www.iana.org/assignments/enterprise-numbers/enterprise-numbers
@@ -24,9 +31,84 @@ oemmap = {
 }
 
 
-def get_oem_handler(oemid, ipmicmd):
+def get_oem_handler(oemid, ipmicmd, *args):
     try:
-        return (oemmap[oemid['manufacturer_id']].OEMHandler(oemid, ipmicmd),
-                True)
+        # first try to find with composite key manufacturer_id.product_id,
+        # if found return directly
+        # then try to find with manufacturer_id
+        item = float('.'.join([str(oemid['manufacturer_id']),
+                               str(oemid['product_id'])]))
+        if item in oemmap:
+            return (oemmap[item].OEMHandler(oemid, ipmicmd, *args), True)
+        return (oemmap[oemid['manufacturer_id']].OEMHandler(oemid,
+                ipmicmd, *args), True)
     except KeyError:
-        return generic.OEMHandler(oemid, ipmicmd), False
+        logger.exception(
+            'exception while get_oem_handler, oemid:{0}'.format(oemid))
+        return generic.OEMHandler(oemid, ipmicmd, *args), False
+
+
+def load_plugins():
+    # load plugins and register oemmap
+    path = os.path.dirname(os.path.realpath(__file__))
+
+    for plugindir in os.listdir(path):
+        plugindir = os.path.join(path, plugindir)
+
+        if not os.path.isdir(plugindir):
+            continue
+        sys.path.insert(1, plugindir)
+        # two passes, to avoid adding both py and pyc files
+        find_plugin(path, plugindir)
+        # restore path to not include the plugindir
+        sys.path.pop(1)
+
+
+def find_plugin(base_dir, cur_dir):
+    # scan to process items in the dir
+    # if is a directory, go into the directory to find plugins
+    # if is handler.py try to load and find the key to register
+    # else skip
+    for item in os.listdir(cur_dir):
+        abs_path = os.path.join(cur_dir, item)
+        if os.path.isdir(abs_path):
+            find_plugin(base_dir, abs_path)
+        elif item == 'handler.py':
+            load_and_register(base_dir, cur_dir)
+        else:
+            pass
+
+
+def load_and_register(base_dir, cur_dir):
+    try:
+        oem_handler = __import__(make_plugin_name(base_dir, cur_dir),
+                                 fromlist=['handler'])
+        if 'device_type_supported' in oem_handler.__dict__:
+            for type in oem_handler.device_type_supported:
+                register_oem_map(type, oem_handler)
+        else:
+            logger.debug(
+                'handler in {} does not support plugin.'.format(cur_dir))
+    except Exception as ex:
+        logger.exception('exception while loading handler in {} : {}'
+                         .format(cur_dir, ex))
+
+
+def register_oem_map(type, handler):
+    if type in oemmap:
+        logger.info('type {} already registered as {}, replaced with {}.'
+                    .format(type, oemmap.get(type), handler))
+        oemmap[type] = handler
+    else:
+        oemmap[type] = handler
+
+
+def make_plugin_name(base_dir, cur_dir):
+    return '{}.{}.{}'.format(__package__,
+                             os.path.relpath(cur_dir, base_dir)
+                             .replace('/', '.'),
+                             'handler')
+
+
+# load_plugins
+load_plugins()
