@@ -326,10 +326,12 @@ def get_fpc_firmware(bmcver, ipmicmd, fpcorsmm):
     if fpcorsmm != 6:  # SMM
         if fpcorsmm >> 5:
             name = 'SMM2'
+            buildid = '{0}{1}{2}{3}{4}{5}{6}'.format(
+                *[chr(x) for x in builddata[6:13]])
         else:
             name = 'SMM'
-        buildid = '{0}{1}{2}{3}{4}{5}{6}'.format(
-            *[chr(x) for x in builddata[6:13]])
+            buildid = '{0}{1}{2}{3}{4}{5}{6}'.format(
+                *[chr(x) for x in builddata[5:12]])
     elif len(builddata) == 8:
         builddata = builddata[1:]  # discard the 'completion code'
         name = 'FPC'
