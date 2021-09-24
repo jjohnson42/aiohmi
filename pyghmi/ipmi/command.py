@@ -1310,12 +1310,18 @@ class Command(object):
 
         :returns: The asset tag
         """
+        self.oem_init()
+        if hasattr(self._oem, 'get_asset_tag'):
+            return self._oem.get_asset_tag()
         return self._chunkwise_dcmi_fetch(6)
 
     def set_asset_tag(self, tag):
         """Set the asset tag value
 
         """
+        self.oem_init()
+        if hasattr(self._oem, 'set_asset_tag'):
+            return self._oem.set_asset_tag(tag)
         return self._chunkwise_dcmi_set(8, tag)
 
     def _chunkwise_dcmi_fetch(self, command):
@@ -1343,6 +1349,9 @@ class Command(object):
             chunk = bytearray(chunk)
             cmddata = bytearray((0xdc, offset, len(chunk)))
             cmddata += chunk
+            # set offset, otherwise the last setting will override
+            # the previous setting
+            offset += len(chunk)
             self.xraw_command(netfn=0x2c, command=command, data=cmddata)
 
     def set_channel_access(self, channel=None,
