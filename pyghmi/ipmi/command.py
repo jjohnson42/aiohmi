@@ -937,6 +937,12 @@ class Command(object):
         :param gateway_macs: Whether to retrieve mac addresses for gateways
         :returns: A dictionary of network configuration data
         """
+        self.oem_init()
+
+        # support for huawei 2288H server
+        if hasattr(self._oem, 'get_oem_net_configuration'):
+            return self._oem.get_oem_net_configuration()
+
         if channel is None:
             channel = self.get_network_channel()
         retdata = {}
