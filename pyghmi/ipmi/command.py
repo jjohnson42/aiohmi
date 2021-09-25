@@ -1639,6 +1639,11 @@ class Command(object):
             * proprietary
             * no_access
         """
+        self.oem_init()
+        if hasattr(self._oem, 'oem_user_access'):
+            callback, privilege_level = self._oem.oem_user_access(
+                callback, privilege_level)
+
         if channel is None:
             channel = self.get_network_channel()
         b = 0b10000000
@@ -1733,7 +1738,8 @@ class Command(object):
         name = name.ljust(16, b'\x00')
         name = bytearray(name)
         data.extend(name)
-        self.xraw_command(netfn=0x06, command=0x45, data=data)
+        # set timeout to 2s to avoid retry causing enable failure
+        self.xraw_command(netfn=0x06, command=0x45, data=data, timeout=2)
         return True
 
     def get_user_name(self, uid, return_none_on_error=True):
@@ -1796,6 +1802,9 @@ class Command(object):
             else:
                 password = password.ljust(16, b'\x00')
             data.extend(bytearray(password))
+
+        self.oem_init()
+        data = self._oem.process_password(password, data)
         try:
             self.xraw_command(netfn=0x06, command=0x47, data=data)
         except exc.IpmiException as ie:
@@ -1880,13 +1889,14 @@ class Command(object):
                 privilege_level: (str)[callback, user, operatorm administrator,
                                        proprietary, no_access]
         """
+        self.oem_init()
         if channel is None:
             channel = self.get_network_channel()
         names = {}
         max_ids = self.get_channel_max_user_count(channel)
         for uid in range(1, max_ids + 1):
             name = self.get_user_name(uid=uid)
-            if name is not None:
+            if self._oem.is_valid(name):
                 names[uid] = self.get_user(uid=uid, channel=channel)
         return names
 
@@ -1928,6 +1938,12 @@ class Command(object):
         :param channel: number [1:7]
         """
         # TODO(jjohnson2): Provide OEM extensibility to cover user deletion
+        self.oem_init()
+        if hasattr(self._oem, 'user_delete_privilege_level'):
+            privilege_level = self._oem.user_delete_privilege_level()
+        else:
+            privilege_level = 'no_access'
+
         if channel is None:
             channel = self.get_network_channel()
         self.set_user_password(uid, mode='disable', password=None)
@@ -1935,7 +1951,7 @@ class Command(object):
         # so new users dont get extra access
         self.set_user_access(uid, channel=channel, callback=False,
                              link_auth=False, ipmi_msg=False,
-                             privilege_level='no_access')
+                             privilege_level=privilege_level)
         try:
             # First try to set name to all \x00 explicitly
             # Fix bug-174389, don't try to send \xff command,
@@ -1957,6 +1973,51 @@ class Command(object):
             enable        = enable user connections
         """
         self.set_user_password(uid, mode)
+        return True
+
+    def update_user(self, user):
+        """Update User
+
+        Update user attributes, include name, password, access
+
+        :param user: user attributes
+        """
+        if 'username' in user:
+            self.set_user_name(uid=user['uid'], name=user['username'])
+
+        privilege_level = None
+        if 'privilege_level' in user:
+            privilege_level = user['privilege_level']
+
+        if privilege_level and privilege_level == 'no_access':
+            return self.upate_user_no_access(user, privilege_level)
+        else:
+            return self.update_user_default(user, privilege_level)
+
+    def upate_user_no_access(self, user, privilege_level):
+        # if set to no_access, modify password first
+        if 'password' in user:
+            self.set_user_password(uid=user['uid'], password=user['password'])
+        self.set_user_access(uid=user['uid'], privilege_level=privilege_level)
+
+        return True
+
+    def update_user_default(self, user, privilege_level):
+        if privilege_level:
+            self.set_user_access(uid=user['uid'],
+                                 privilege_level=privilege_level)
+        if 'password' in user:
+            self.set_user_password(uid=user['uid'],
+                                   password=user['password'])
+            self.set_user_password(uid=user['uid'], mode='enable',
+                                   password=user['password'])
+        if 'enabled' in user:
+            if user['enabled'] == 'yes':
+                mode = 'enable'
+            else:
+                mode = 'disable'
+            self.disable_user(user['uid'], mode)
+
         return True
 
     def get_firmware(self, components=()):

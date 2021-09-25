@@ -412,3 +412,9 @@ class OEMHandler(object):
 
     def process_zero_fru(self, zerofru):
         return self.process_fru(zerofru)
+
+    def is_valid(self, name):
+        return name is not None
+
+    def process_password(self, password, data):
+        return data
