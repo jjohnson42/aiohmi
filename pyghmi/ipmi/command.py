@@ -240,6 +240,10 @@ class Command(object):
                 '<I', struct.pack('3B', *response['data'][6:9]) + b'\x00')[0],
             'product_id': struct.unpack(
                 '<H', struct.pack('2B', *response['data'][9:11]))[0],
+            'firmware_version': '{0}.{1}{2}'.format(
+                response['data'][2] & 0b1111111,
+                response['data'][3] >> 4 & 0b1111,
+                response['data'][3] & 0b1111)
         }
 
     def oem_init(self):
