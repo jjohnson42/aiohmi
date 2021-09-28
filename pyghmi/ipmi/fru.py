@@ -174,10 +174,11 @@ class FRU(object):
                 continue
             elif 'error' in response:
                 raise iexc.IpmiException(response['error'], response['code'])
-            self.rawfru.extend(response['data'][1:])
             offset += response['data'][0]
             if response['data'][0] == 0:
                 break
+            # move down to avoid exception when data[0] is zero
+            self.rawfru.extend(response['data'][1:])
             if offset + chunksize > frusize:
                 chunksize = frusize - offset
 
@@ -268,7 +269,9 @@ class FRU(object):
             raise iexc.BmcErrorException("Invalid/Unsupported chassis area")
         inf = self.info
         # ignore length field, just process the data
-        inf['Chassis type'] = enclosure_types[self.databytes[offset + 2]]
+        # add check to avoid exception
+        if self.databytes[offset + 2] in enclosure_types.keys():
+            inf['Chassis type'] = enclosure_types[self.databytes[offset + 2]]
         inf['Chassis part number'], offset = self._decode_tlv(offset + 3)
         inf['Chassis serial number'], offset = self._decode_tlv(offset)
         inf['chassis_extra'] = []
@@ -278,7 +281,9 @@ class FRU(object):
         try:
             while self.databytes[offset] != 0xc1:
                 fielddata, offset = self._decode_tlv(offset, language)
-                target.append(fielddata)
+                # add check to avoid exception
+                if fielddata:
+                    target.append(fielddata)
         except IndexError:
             # If we overrun the end due to malformed FRU,
             # return at least what decoded right
@@ -315,7 +320,7 @@ class FRU(object):
         inf['Hardware Version'], offset = self._decode_tlv(offset, language)
         inf['Serial Number'], offset = self._decode_tlv(offset, language)
         inf['Asset Number'], offset = self._decode_tlv(offset, language)
-        _, offset = self._decode_tlv(offset, language)
+        inf['FRU ID'], offset = self._decode_tlv(offset, language)
         inf['product_extra'] = []
         self.extract_extra(inf['product_extra'], offset, language)
 
