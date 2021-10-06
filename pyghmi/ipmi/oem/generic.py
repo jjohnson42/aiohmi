@@ -418,3 +418,17 @@ class OEMHandler(object):
 
     def process_password(self, password, data):
         return data
+
+    def set_server_capping(self, value):
+        """Set power capping for server
+
+        :param value: power capping value to set.
+        """
+        pass
+
+    def get_server_capping(self):
+        """Get power capping for server
+
+        :return: power capping value.
+        """
+        return None

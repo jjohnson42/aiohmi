@@ -2064,6 +2064,14 @@ class Command(object):
         self.oem_init()
         return self._oem.set_oem_capping_enabled(enable)
 
+    def set_server_capping(self, value):
+        self.oem_init()
+        self._oem.set_oem_server_capping(value)
+
+    def get_server_capping(self):
+        self.oem_init()
+        return self._oem.get_oem_server_capping()
+
     def get_remote_kvm_available(self):
         """Get remote KVM availability"""
 
