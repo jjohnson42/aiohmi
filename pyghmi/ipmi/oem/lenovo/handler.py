@@ -738,6 +738,9 @@ class OEMHandler(generic.OEMHandler):
                 pass
             if self.has_xcc and name and name.startswith('PSU '):
                 self.immhandler.augment_psu_info(fru, name)
+            if (self.has_xcc and 'memory_type' in fru
+                    and fru['memory_type'] == 'Unknown'):
+                self.immhandler.fetch_dimm(name, fru)
             return fru
         elif self.is_fpc and self.is_fpc != 6:  # SMM variant
             fru['oem_parser'] = 'lenovo'

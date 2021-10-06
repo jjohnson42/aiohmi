@@ -867,6 +867,26 @@ class XCCClient(IMMClient):
             raise pygexc.UnsupportedFunctionality(
                 'This platform does not support AC reseat.')
 
+    def fetch_dimm(self, name, fru):
+        meminfo = self.grab_cacheable_json('/api/dataset/imm_memory')
+        meminfo = meminfo.get('items', [{}])[0].get('memory', [])
+        for memi in meminfo:
+            if memi.get('memory_description', None) == name:
+                fru['model'] = memi['memory_part_number']
+                fru['ecc'] = memi.get('memory_ecc_bits', 0) != 0
+                fru['manufacture_location'] = 0
+                fru['memory_type'] = memi['memory_type']
+                fru['module_type'] = fru['memory_type']
+                mdate = memi['memory_manuf_date']
+                mdate = '20{}-W{}'.format(mdate[-2:], mdate[:-2])
+                fru['manufacture_date'] = mdate
+                speed = memi['memory_config_speed'] * 8 / 100 * 100
+                fru['speed'] = speed
+                fru['capacity_mb'] = memi['memory_capacity'] * 1024
+                fru['serial'] = memi['memory_serial_number'].strip()
+                fru['manufacturer'] = memi['memory_manufacturer']
+                break
+
     def get_description(self):
         dsc = self.wc.grab_json_response('/DeviceDescription.json')
         dsc = dsc[0]
