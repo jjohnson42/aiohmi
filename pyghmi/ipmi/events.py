@@ -17,7 +17,6 @@ import time
 
 import pyghmi.constants as pygconst
 import pyghmi.exceptions as pygexc
-import pyghmi.ipmi.private.constants as ipmiconst
 
 try:
     range = xrange
@@ -188,7 +187,7 @@ fru_states = {
 }
 
 
-def decode_eventdata(sensor_type, offset, eventdata, sdr):
+def decode_eventdata(sensor_type, offset, eventdata, event_consts, sdr):
     """Decode extra event data from an alert or log
 
     Provide a textual summary of eventdata per descriptions in
@@ -198,6 +197,7 @@ def decode_eventdata(sensor_type, offset, eventdata, sdr):
     :param sensor_type: The sensor type number from the event
     :param offset:  Sensor specific offset
     :param eventdata: The three bytes from the log or alert
+    :param event_consts: event definition including severity.
     :param sdr: The sdr locator entry to help clarify how to parse data
     """
     if sensor_type == 5 and offset == 4:  # link loss, indicates which port
@@ -280,7 +280,7 @@ def decode_eventdata(sensor_type, offset, eventdata, sdr):
         if oldstate != offset:
             try:
                 cause += '(change from {0})'.format(
-                    ipmiconst.sensor_type_offsets[0x2c][oldstate]['desc'])
+                    event_consts.sensor_type_offsets[0x2c][oldstate]['desc'])
             except KeyError:
                 pass
 
@@ -404,6 +404,7 @@ class EventHandler(object):
     def __init__(self, sdr, ipmicmd):
         self._sdr = sdr
         self._ipmicmd = ipmicmd
+        self.event_consts = ipmicmd.get_event_constants()
 
     def _populate_event(self, deassertion, event, event_data, event_type,
                         sensor_type, sensorid):
@@ -427,9 +428,9 @@ class EventHandler(object):
             event['component_type_id'] = sensor_type
             event['event_id'] = '{0}.{1}'.format(event_type, evtoffset)
             # use generic offset decode for event description
-            event['component_type'] = ipmiconst.sensor_type_codes.get(
+            event['component_type'] = self.event_consts.sensor_type_codes.get(
                 sensor_type, '')
-            evreading = ipmiconst.generic_type_offsets.get(
+            evreading = self.event_consts.generic_type_offsets.get(
                 event_type, {}).get(evtoffset, {})
             if event['deassertion']:
                 event['event'] = evreading.get('deassertion_desc', '')
@@ -442,9 +443,9 @@ class EventHandler(object):
         elif event_type == 0x6f:
             event['component_type_id'] = sensor_type
             event['event_id'] = '{0}.{1}'.format(event_type, evtoffset)
-            event['component_type'] = ipmiconst.sensor_type_codes.get(
+            event['component_type'] = self.event_consts.sensor_type_codes.get(
                 sensor_type, '')
-            evreading = ipmiconst.sensor_type_offsets.get(
+            evreading = self.event_consts.sensor_type_offsets.get(
                 sensor_type, {}).get(evtoffset, {})
             if event['deassertion']:
                 event['event'] = evreading.get('deassertion_desc', '')

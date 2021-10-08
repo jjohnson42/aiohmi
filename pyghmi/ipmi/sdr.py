@@ -40,7 +40,6 @@ import six
 
 import pyghmi.constants as const
 import pyghmi.exceptions as exc
-import pyghmi.ipmi.private.constants as ipmiconst
 
 try:
     import cPickle as pickle
@@ -288,10 +287,11 @@ class SDREntry(object):
     external code to pay attention to this class.
     """
 
-    def __init__(self, entrybytes, reportunsupported=False,
+    def __init__(self, entrybytes, event_consts, reportunsupported=False,
                  mfg_id=0, prod_id=0):
         self.mfg_id = mfg_id
         self.prod_id = prod_id
+        self.event_consts = event_consts
         # ignore record id for now, we only care about the sensor number for
         # moment
         self.readable = True
@@ -379,7 +379,7 @@ class SDREntry(object):
         self.sensor_owner = entry[0]
         self.sensor_lun = entry[1] & 0x03
         self.sensor_number = entry[2]
-        self.entity = ipmiconst.entity_ids.get(
+        self.entity = self.event_consts.entity_ids.get(
             entry[3], 'Unknown entity {0}'.format(entry[3]))
         if self.rectype == 3:
             self.sensor_type_number = entry[5]
@@ -388,7 +388,7 @@ class SDREntry(object):
             self.sensor_type_number = entry[7]
             self.reading_type = entry[8]  # table 42-1
         try:
-            self.sensor_type = ipmiconst.sensor_type_codes[
+            self.sensor_type = self.event_consts.sensor_type_codes[
                 self.sensor_type_number]
         except KeyError:
             self.sensor_type = "UNKNOWN type " + str(self.sensor_type_number)
@@ -456,13 +456,13 @@ class SDREntry(object):
             self.decode_formula(entry[19:25])
 
     def _decode_state(self, state):
-        mapping = ipmiconst.generic_type_offsets
+        mapping = self.event_consts.generic_type_offsets
         try:
             if self.reading_type in mapping:
                 desc = mapping[self.reading_type][state]['desc']
                 health = mapping[self.reading_type][state]['severity']
             elif self.reading_type == 0x6f:
-                mapping = ipmiconst.sensor_type_offsets
+                mapping = self.event_consts.sensor_type_offsets
                 desc = mapping[self.sensor_type_number][state]['desc']
                 health = mapping[self.sensor_type_number][state]['severity']
             elif self.reading_type >= 0x70 and self.reading_type <= 0x7f:
@@ -853,8 +853,8 @@ class SDR(object):
                 yield number
 
     def add_sdr(self, sdrbytes):
-        newent = SDREntry(sdrbytes, False, self.mfg_id,
-                          self.prod_id)
+        newent = SDREntry(sdrbytes, self.ipmicmd.get_event_constants(),
+                          False, self.mfg_id, self.prod_id)
         if newent.sdrtype == TYPE_SENSOR:
             id = '{0}.{1}.{2}'.format(
                 newent.sensor_owner, newent.sensor_number, newent.sensor_lun)

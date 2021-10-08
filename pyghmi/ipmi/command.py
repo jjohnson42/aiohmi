@@ -584,6 +584,10 @@ class Command(object):
             self._sdr = sdr.SDR(self, self._sdrcachedir)
         return self._sdr
 
+    def get_event_constants(self):
+        self.oem_init()
+        return self._oem.get_oem_event_const()
+
     def get_event_log(self, clear=False):
         """Retrieve the log of events, optionally clearing
 
