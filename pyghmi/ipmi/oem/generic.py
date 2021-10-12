@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import pyghmi.exceptions as exc
+import pyghmi.ipmi.private.constants as event_const
 
 
 class OEMHandler(object):
@@ -432,3 +433,6 @@ class OEMHandler(object):
         :return: power capping value.
         """
         return None
+
+    def get_oem_event_const(self):
+        return event_const
