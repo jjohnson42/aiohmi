@@ -1096,6 +1096,9 @@ class Command(object):
             channel = self.get_network_channel()
         rqdata = (channel, 0x11, 0, 0)
         rsp = self.xraw_command(netfn=0xc, command=2, data=rqdata)
+        self.oem_init()
+        if hasattr(self._oem, 'get_alert_destination_count'):
+            return self._oem.get_alert_destination_count(ord(rsp['data'][1]))
         return bytearray(rsp['data'])[1]
 
     def get_alert_destination(self, destination=0, channel=None):
@@ -1115,6 +1118,10 @@ class Command(object):
         :param destination:  The destination number.  Defaults to 0
         :param channel: The channel for alerting.  Defaults to current channel
         """
+        self.oem_init()
+        if hasattr(self._oem, 'get_alert_destination'):
+            return self._oem.get_alert_destination(destination, channel)
+
         destinfo = {}
         if channel is None:
             channel = self.get_network_channel()
@@ -1247,6 +1254,10 @@ class Command(object):
         :param channel: The channel to configure the alert on.  Defaults to
                 current
         """
+        self.oem_init()
+        if hasattr(self._oem, 'set_alert_destination'):
+            self._oem.set_alert_destination(ip)
+            return
         if channel is None:
             channel = self.get_network_channel()
 
