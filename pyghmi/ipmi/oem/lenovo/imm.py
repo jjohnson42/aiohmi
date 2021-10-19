@@ -1565,7 +1565,7 @@ class XCCClient(IMMClient):
         if self._keepalivesession:
             self._refresh_token_wc(self._keepalivesession)
         elif self._wc:
-            self._wc = None
+            self.weblogout()
 
     def fetch_psu_firmware(self):
         psudata = self.get_cached_data('lenovo_cached_psu')
