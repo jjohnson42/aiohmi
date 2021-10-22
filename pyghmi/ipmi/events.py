@@ -462,7 +462,8 @@ class EventHandler(object):
             # sensor specific decode, see sdr module...
             # 2 - 0xc: generic discrete, 0x6f, sensor specific
             additionaldata = decode_eventdata(
-                sensor_type, evtoffset, event_data, self._sdr)
+                sensor_type, evtoffset, event_data, self.event_consts,
+                self._sdr)
             if additionaldata:
                 event['event_data'] = additionaldata
 
