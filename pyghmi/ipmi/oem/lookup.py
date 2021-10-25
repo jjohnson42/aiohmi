@@ -37,8 +37,7 @@ def get_oem_handler(oemid, ipmicmd, *args):
         # first try to find with composite key manufacturer_id.product_id,
         # if found return directly
         # then try to find with manufacturer_id
-        item = float('.'.join([str(oemid['manufacturer_id']),
-                               str(oemid['product_id'])]))
+        item = '{}.{}'.format(oemid['manufacturer_id'], oemid['product_id'])
         if item in oemmap:
             return (oemmap[item].OEMHandler(oemid, ipmicmd, *args), True)
         return (oemmap[oemid['manufacturer_id']].OEMHandler(oemid,
