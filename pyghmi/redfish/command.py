@@ -1091,7 +1091,8 @@ class Command(object):
                 self._set_system_configuration(changeset)
                 return
             except exc.RedfishError as re:
-                if 'etag' not in re.msgid.lower():
+                if ('etag' not in re.msgid.lower()
+                        and 'PreconditionFailed' not in re.msgid):
                     raise
 
     def _set_system_configuration(self, changeset):
@@ -1139,7 +1140,8 @@ class Command(object):
                 if not normval.endswith('*'):
                     normval += '*'
                 for cand in currsettings[change]['possible']:
-                    if fnmatch(cand.lower(), normval):
+                    if fnmatch(cand.lower().replace(' ', ''),
+                               normval.replace(' ', '')):
                         changeset[change] = cand
                         break
                 else:
