@@ -254,6 +254,11 @@ class Command(object):
         self._varfwinventory = None
         self._oem = None
         self._gpool = pool
+        for addrinf in socket.getaddrinfo(bmc, 0, 0, socket.SOCK_STREAM):
+            if addrinf[0] == socket.AF_INET:
+                self._bmcv4ip = socket.inet_pton(addrinf[0], addrinf[-1][0])
+            elif addrinf[0] == socket.AF_INET6:
+                self._bmcv6ip = socket.inet_pton(addrinf[0], addrinf[-1][0])
         self.wc.set_header('Accept', 'application/json')
         self.wc.set_header('User-Agent', 'pyghmi')
         self.wc.set_header('Accept-Encoding', 'gzip')
@@ -807,6 +812,16 @@ class Command(object):
             if not nicinfo.get('InterfaceEnabled', True):
                 # skip disabled interfaces
                 continue
+            for addrs in nicinfo.get('IPv4Addresses', []):
+                v4addr = socket.inet_pton(
+                    socket.AF_INET, addrs.get('Address', '0.0.0.0'))
+                if self._bmcv4ip == v4addr:
+                    return curl
+            for addrs in nicinfo.get('IPv6Addresses', []):
+                v6addr = socket.inet_pton(
+                    socket.AF_INET6, addrs.get('Address', '::'))
+                if self._bmcv6ip == v6addr:
+                    return curl
             foundnics += 1
             lastnicurl = curl
         if name is None and foundnics != 1:
