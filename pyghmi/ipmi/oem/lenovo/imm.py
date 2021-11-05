@@ -1564,7 +1564,7 @@ class XCCClient(IMMClient):
             self.fwo = None
         if self._keepalivesession:
             self._refresh_token_wc(self._keepalivesession)
-        elif self._wc:
+        elif self._wc and self._wc.vintage < util._monotonic_time() - 20:
             self.weblogout()
 
     def fetch_psu_firmware(self):
