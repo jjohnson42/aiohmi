@@ -486,7 +486,7 @@ class EventHandler(object):
         seqnum = struct.unpack_from('>H', buffer(petdata[16:18]))[0]
         ltimestamp = struct.unpack_from('>I', buffer(petdata[18:22]))[0]
         petack = bytearray(struct.pack('<HIBBBBBB', seqnum, ltimestamp,
-                                       petdata[25], petdata[27], sensorid,
+                                       petdata[25], petdata[27], petdata[28],
                                        *event_data))
         try:
             self._ipmicmd.xraw_command(netfn=4, command=0x17, data=petack)
