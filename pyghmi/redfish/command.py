@@ -258,7 +258,9 @@ class Command(object):
             if addrinf[0] == socket.AF_INET:
                 self._bmcv4ip = socket.inet_pton(addrinf[0], addrinf[-1][0])
             elif addrinf[0] == socket.AF_INET6:
-                self._bmcv6ip = socket.inet_pton(addrinf[0], addrinf[-1][0])
+                theip = addrinf[-1][0]
+                theip = theip.split('%')[0]
+                self._bmcv6ip = socket.inet_pton(addrinf[0], theip)
         self.wc.set_header('Accept', 'application/json')
         self.wc.set_header('User-Agent', 'pyghmi')
         self.wc.set_header('Accept-Encoding', 'gzip')
