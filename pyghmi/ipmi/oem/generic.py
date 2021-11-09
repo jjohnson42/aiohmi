@@ -263,7 +263,7 @@ class OEMHandler(object):
         """Get graphical console launcher"""
         return ()
 
-    def add_extra_net_configuration(self, netdata):
+    def add_extra_net_configuration(self, netdata, channel=None):
         """Add additional network configuration data
 
         Given a standard netdata struct, add details as relevant from
