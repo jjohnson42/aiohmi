@@ -281,9 +281,7 @@ class FRU(object):
         try:
             while self.databytes[offset] != 0xc1:
                 fielddata, offset = self._decode_tlv(offset, language)
-                # add check to avoid exception
-                if fielddata:
-                    target.append(fielddata)
+                target.append(fielddata)
         except IndexError:
             # If we overrun the end due to malformed FRU,
             # return at least what decoded right
