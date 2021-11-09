@@ -1000,7 +1000,7 @@ class OEMHandler(generic.OEMHandler):
                                            self.ipmicmd.ipmi_session.userid,
                                            self.ipmicmd.ipmi_session.password)
 
-    def add_extra_net_configuration(self, netdata):
+    def add_extra_net_configuration(self, netdata, channel=None):
         if self.has_tsm:
             ipv6_addr = self.ipmicmd.xraw_command(
                 netfn=0x0c, command=0x02,
