@@ -376,7 +376,7 @@ class Command(object):
                 self.logger.debug(
                     'checking state, current:{}, expected:{}'.format(
                         currpowerstate, waitpowerstate))
-                currpowerstate = self._get_power_state()
+                currpowerstate = self._get_power_state(delay_xmit=1)
                 waitattempts -= 1
             if currpowerstate != waitpowerstate:
                 self.logger.error(
@@ -388,8 +388,8 @@ class Command(object):
         else:
             return lastresponse
 
-    def _get_power_state(self):
-        response = self.raw_command(netfn=0, command=1, delay_xmit=1)
+    def _get_power_state(self, delay_xmit=None):
+        response = self.raw_command(netfn=0, command=1, delay_xmit=delay_xmit)
         if 'error' in response:
             self.logger.error('error while getting power:{0}'.format(
                 json.dumps(response)))
