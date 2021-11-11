@@ -151,7 +151,7 @@ class Command(object):
 
     def __init__(self, bmc=None, userid=None, password=None, port=623,
                  onlogon=None, kg=None, privlevel=None, verifycallback=None,
-                 keepalive=True):
+                 keepalive=True, **kwargs):
         # TODO(jbjohnso): accept tuples and lists of each parameter for mass
         # operations without pushing the async complexities up the stack
         self.logger = logging.getLogger(__name__)
@@ -164,6 +164,7 @@ class Command(object):
         self._netchannel = None
         self._ipv6support = None
         self.certverify = verifycallback
+        self.kwargs = kwargs
         if bmc is None:
             self.ipmi_session = localsession.Session()
         elif onlogon is not None:
