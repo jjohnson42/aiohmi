@@ -16,8 +16,6 @@
 """This represents the low layer message framing portion of IPMI"""
 
 from itertools import chain
-import json
-import logging
 import os
 import socket
 import struct
@@ -154,7 +152,6 @@ class Command(object):
                  keepalive=True, **kwargs):
         # TODO(jbjohnso): accept tuples and lists of each parameter for mass
         # operations without pushing the async complexities up the stack
-        self.logger = logging.getLogger(__name__)
         self.onlogon = onlogon
         self.bmc = bmc
         self._sdrcachedir = None
@@ -360,8 +357,6 @@ class Command(object):
         response = self.raw_command(
             netfn=0, command=2, data=[power_states[newpowerstate]])
         if 'error' in response:
-            self.logger.error('error while setting power:{0}'.format(
-                json.dumps(response)))
             raise exc.IpmiException(response['error'])
         lastresponse = {'pendingpowerstate': newpowerstate}
         waitattempts = 300
@@ -374,15 +369,9 @@ class Command(object):
                 waitpowerstate = newpowerstate
             currpowerstate = None
             while currpowerstate != waitpowerstate and waitattempts > 0:
-                self.logger.debug(
-                    'checking state, current:{}, expected:{}'.format(
-                        currpowerstate, waitpowerstate))
                 currpowerstate = self._get_power_state(delay_xmit=1)
                 waitattempts -= 1
             if currpowerstate != waitpowerstate:
-                self.logger.error(
-                    'set power failed, current:{}, expected:{}'.format(
-                        currpowerstate, waitpowerstate))
                 raise exc.IpmiException(
                     "System did not accomplish power state change")
             return {'powerstate': currpowerstate}
@@ -392,8 +381,6 @@ class Command(object):
     def _get_power_state(self, delay_xmit=None):
         response = self.raw_command(netfn=0, command=1, delay_xmit=delay_xmit)
         if 'error' in response:
-            self.logger.error('error while getting power:{0}'.format(
-                json.dumps(response)))
             raise exc.IpmiException(response['error'])
         assert (response['command'] == 1 and response['netfn'] == 1)
         curr_power_state = 'on' if (response['data'][0] & 1) else 'off'
