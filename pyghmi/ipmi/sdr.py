@@ -836,9 +836,12 @@ class SDR(object):
             if self.sensors[number].readable:
                 yield number
 
+    def make_sdr_entry(self, sdrbytes):
+        return SDREntry(sdrbytes, self.ipmicmd.get_event_constants(),
+                        False, self.mfg_id, self.prod_id)
+
     def add_sdr(self, sdrbytes):
-        newent = SDREntry(sdrbytes, self.ipmicmd.get_event_constants(),
-                          False, self.mfg_id, self.prod_id)
+        newent = self.make_sdr_entry(sdrbytes)
         if newent.sdrtype == TYPE_SENSOR:
             id = '{0}.{1}.{2}'.format(
                 newent.sensor_owner, newent.sensor_number, newent.sensor_lun)

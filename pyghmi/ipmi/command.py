@@ -604,8 +604,12 @@ class Command(object):
         # to store cached copies for given device id, product id, mfg id,
         # sdr timestamp, our data version revision, aux firmware revision,
         # and oem defined field
+        self.oem_init()
         if self._sdr is None:
-            self._sdr = sdr.SDR(self, self._sdrcachedir)
+            if hasattr(self._oem, 'init_sdr'):
+                self._sdr = self._oem.init_sdr()
+            else:
+                self._sdr = sdr.SDR(self, self._sdrcachedir)
         return self._sdr
 
     def get_event_constants(self):
