@@ -1035,18 +1035,14 @@ class XCCClient(IMMClient):
         adata = json.dumps({'username': self.username,
                             'password': self.password
                             })
-        nonce = None
-        wc.request('POST', '/api/providers/get_nonce', '{}')
-        rsp = wc.getresponse()
-        tokbody = rsp.read()
-        if rsp.status == 200:
-            rsp = json.loads(tokbody)
-            nonce = rsp.get('nonce', None)
         headers = {'Connection': 'keep-alive',
                    'Referer': 'https://xcc/',
                    'Host': 'xcc',
                    'Content-Type': 'application/json'}
-        if nonce:
+        rsp, status = wc.grab_json_response_with_status(
+            '/api/providers/get_nonce', {})
+        if status == 200:
+            nonce = rsp.get('nonce', None)
             headers['Content-Security-Policy'] = 'nonce={0}'.format(nonce)
         wc.request('POST', '/api/login', adata, headers)
         rsp = wc.getresponse()
