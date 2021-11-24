@@ -778,7 +778,7 @@ class SDR(object):
                     if size == 0xff:  # get just 5 to get header to know length
                         size = 5
                     elif size > 5:
-                        size /= 2
+                        size //= 2
                         # push things over such that it's less
                         # likely to be just 1 short of a read
                         # and incur a whole new request
