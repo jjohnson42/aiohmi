@@ -318,7 +318,7 @@ class Command(object):
         self.oem_init()
         self._oem.reseat_bay(bay)
 
-    def set_power(self, powerstate, wait=False):
+    def set_power(self, powerstate, wait=False, bridge_request=None):
         """Request power state change (helper)
 
         :param powerstate:
@@ -334,28 +334,33 @@ class Command(object):
                      requested state change for 300 seconds.
                      If a non-zero number, adjust the wait time to the
                      requested number of seconds
+        :param bridge_request: The target slave address and channel number for
+                               the bridge request.
         :raises: IpmiException on an error
         :returns: dict -- A dict describing the response retrieved
         """
         self.oem_init()
 
         if hasattr(self._oem, 'set_power'):
-            return self._oem.set_power(powerstate)
+            return self._oem.set_power(powerstate,
+                                       bridge_request=bridge_request)
 
         if hasattr(self._oem, 'process_power_state'):
-            powerstate = self._oem.process_power_state(powerstate)
+            powerstate = self._oem.process_power_state(
+                powerstate, bridge_request=bridge_request)
 
         if powerstate not in power_states:
             raise exc.InvalidParameterValue(
                 "Unknown power state %s requested" % powerstate)
         newpowerstate = powerstate
-        oldpowerstate = self._get_power_state()
+        oldpowerstate = self._get_power_state(bridge_request=bridge_request)
         if oldpowerstate == newpowerstate:
             return {'powerstate': oldpowerstate}
         if newpowerstate == 'boot':
             newpowerstate = 'on' if oldpowerstate == 'off' else 'reset'
         response = self.raw_command(
-            netfn=0, command=2, data=[power_states[newpowerstate]])
+            netfn=0, command=2, data=[power_states[newpowerstate]],
+            bridge_request=bridge_request)
         if 'error' in response:
             raise exc.IpmiException(response['error'])
         lastresponse = {'pendingpowerstate': newpowerstate}
@@ -369,7 +374,9 @@ class Command(object):
                 waitpowerstate = newpowerstate
             currpowerstate = None
             while currpowerstate != waitpowerstate and waitattempts > 0:
-                currpowerstate = self._get_power_state(delay_xmit=1)
+                currpowerstate = self._get_power_state(
+                    delay_xmit=1,
+                    bridge_request=bridge_request)
                 waitattempts -= 1
             if currpowerstate != waitpowerstate:
                 raise exc.IpmiException(
@@ -378,8 +385,9 @@ class Command(object):
         else:
             return lastresponse
 
-    def _get_power_state(self, delay_xmit=None):
-        response = self.raw_command(netfn=0, command=1, delay_xmit=delay_xmit)
+    def _get_power_state(self, delay_xmit=None, bridge_request=None):
+        response = self.raw_command(netfn=0, command=1, delay_xmit=delay_xmit,
+                                    bridge_request=bridge_request)
         if 'error' in response:
             raise exc.IpmiException(response['error'])
         assert (response['command'] == 1 and response['netfn'] == 1)
@@ -526,19 +534,23 @@ class Command(object):
                                             rslun=rslun)
         return rsp
 
-    def get_power(self):
+    def get_power(self, bridge_request=None):
         """Get current power state of the managed system
 
         The response, if successful, should contain 'powerstate' key and
         either 'on' or 'off' to indicate current state.
 
+        :param bridge_request: The target slave address and channel number for
+                               the bridge request.
         :returns: dict -- {'powerstate': value}
         """
         self.oem_init()
         if hasattr(self._oem, 'get_power'):
-            return {'powerstate': self._oem.get_power()}
+            return {'powerstate': self._oem.get_power(
+                bridge_request=bridge_request)}
 
-        return {'powerstate': self._get_power_state()}
+        return {'powerstate': self._get_power_state(
+            bridge_request=bridge_request)}
 
     def set_identify(self, on=True, duration=None):
         """Request identify light
