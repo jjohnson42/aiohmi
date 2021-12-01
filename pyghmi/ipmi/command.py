@@ -702,7 +702,7 @@ class Command(object):
         # then it is expected that a manufacturer matches SMBIOS to IPMI
         # get system uuid return data.
         if 'UUID' not in zerofru:
-            guiddata = self.ipmicmd.raw_command(netfn=6, command=0x37)
+            guiddata = self.raw_command(netfn=6, command=0x37)
             if 'error' not in guiddata:
                 zerofru['UUID'] = util.\
                     decode_wireformat_uuid(guiddata['data'])
