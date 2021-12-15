@@ -1115,9 +1115,12 @@ class Session(object):
 
     @classmethod
     def pause(cls, timeout):
-        starttime = _monotonic_time()
-        while _monotonic_time() - starttime < timeout:
-            cls.wait_for_rsp(timeout - (_monotonic_time() - starttime))
+        try:
+            starttime = _monotonic_time()
+            while _monotonic_time() - starttime < timeout:
+                cls.wait_for_rsp(timeout - (_monotonic_time() - starttime))
+        except Exception as e:
+            print(repr(e))
 
     @classmethod
     def wait_for_rsp(cls, timeout=None, callout=True):
@@ -1529,8 +1532,12 @@ class Session(object):
                     + self.remoteguid + struct.pack(
                     "2B", self.nameonly | self.privlevel, userlen)
                     + self.userid)
-        expectedhash = hmac.new(self.password, hmacdata,
-                                self.currhashlib).digest()
+        try:
+            expectedhash = hmac.new(self.password, hmacdata,
+                                    self.currhashlib).digest()
+        except TypeError:
+            print('Password for {0} is somehow malformed'.format(self.bmc))
+            return -9
         hashlen = len(expectedhash)
         givenhash = struct.pack("%dB" % hashlen, *data[40:hashlen + 40])
         if givenhash != expectedhash:
