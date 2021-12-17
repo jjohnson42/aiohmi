@@ -33,18 +33,16 @@ oemmap = {
 
 
 def get_oem_handler(oemid, ipmicmd, *args):
-    try:
-        # first try to find with composite key manufacturer_id.product_id,
-        # if found return directly
-        # then try to find with manufacturer_id
-        item = '{}.{}'.format(oemid['manufacturer_id'], oemid['product_id'])
+    # first try to find with composite key manufacturer_id.product_id,
+    # if found return directly
+    # then try to find with manufacturer_id
+    for item in (
+        '{}.{}'.format(oemid['manufacturer_id'], oemid['product_id']),
+        oemid['manufacturer_id'],
+    ):
         if item in oemmap:
             return (oemmap[item].OEMHandler(oemid, ipmicmd, *args), True)
-        return (oemmap[oemid['manufacturer_id']].OEMHandler(oemid,
-                ipmicmd, *args), True)
-    except KeyError:
-        logger.exception(
-            'exception while get_oem_handler, oemid:{0}'.format(oemid))
+    else:
         return generic.OEMHandler(oemid, ipmicmd, *args), False
 
 
