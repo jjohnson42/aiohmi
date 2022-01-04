@@ -1535,14 +1535,21 @@ class Command(object):
             vminfo = self._do_web_request(vmurl, cache=False)
             if vminfo.get('ConnectedVia', None) != 'NotConnected':
                 continue
-            try:
-                self._do_web_request(vmurl, {'Image': url, 'Inserted': True},
-                                     'PATCH')
-            except exc.RedfishError as re:
-                if re.msgid.endswith(u'PropertyUnknown'):
-                    self._do_web_request(vmurl, {'Image': url}, 'PATCH')
-                else:
-                    raise
+            inserturl = vminfo.get(
+                'Actions', {}).get(
+                    '#VirtualMedia.InsertMedia', {}).get('target', None)
+            if inserturl:
+                self._do_web_request(inserturl, {'Image': url})
+            else:
+                try:
+                    self._do_web_request(vmurl,
+                                         {'Image': url, 'Inserted': True},
+                                         'PATCH')
+                except exc.RedfishError as re:
+                    if re.msgid.endswith(u'PropertyUnknown'):
+                        self._do_web_request(vmurl, {'Image': url}, 'PATCH')
+                    else:
+                        raise
             break
 
     def detach_remote_media(self):
@@ -1558,17 +1565,23 @@ class Command(object):
             for vminfo in self._do_bulk_requests(vmurls):
                 vminfo, currl = vminfo
                 if vminfo['Image']:
-                    try:
-                        self._do_web_request(currl,
-                                             {'Image': None,
-                                              'Inserted': False},
-                                             method='PATCH')
-                    except exc.RedfishError as re:
-                        if re.msgid.endswith(u'PropertyUnknown'):
-                            self._do_web_request(currl, {'Image': None},
+                    ejurl = vminfo.get(
+                        'Actions', {}).get(
+                            '#VirtualMedia.EjectMedia', {}).get('target', None)
+                    if ejurl:
+                        self._do_web_request(ejurl, {})
+                    else:
+                        try:
+                            self._do_web_request(currl,
+                                                 {'Image': None,
+                                                  'Inserted': False},
                                                  method='PATCH')
-                        else:
-                            raise
+                        except exc.RedfishError as re:
+                            if re.msgid.endswith(u'PropertyUnknown'):
+                                self._do_web_request(currl, {'Image': None},
+                                                     method='PATCH')
+                            else:
+                                raise
 
     def upload_media(self, filename, progress=None, data=None):
         """Upload a file to be hosted on the target BMC
