@@ -1,4 +1,4 @@
-# Copyright 2019 Lenovo Corporation
+# Copyright 2019-2022 Lenovo Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,6 +18,34 @@ import os
 import pyghmi.exceptions as exc
 import pyghmi.media as media
 
+boot_devices_write = {
+    'net': 'Pxe',
+    'network': 'Pxe',
+    'pxe': 'Pxe',
+    'hd': 'Hdd',
+    'usb': 'Usb',
+    'cd': 'Cd',
+    'cdrom': 'Cd',
+    'optical': 'Cd',
+    'dvd': 'Cd',
+    'floppy': 'Floppy',
+    'default': 'None',
+    'setup': 'BiosSetup',
+    'bios': 'BiosSetup',
+    'f1': 'BiosSetup',
+}
+
+boot_devices_read = {
+    'BiosSetup': 'setup',
+    'Cd': 'optical',
+    'Floppy': 'floppy',
+    'Hdd': 'hd',
+    'None': 'default',
+    'Pxe': 'network',
+    'Usb': 'usb',
+    'SDCard': 'sdcard',
+}
+
 
 class OEMHandler(object):
     hostnic = None
@@ -28,6 +56,54 @@ class OEMHandler(object):
         self._varsysurl = sysurl
         self._urlcache = cache
         self.webclient = webclient
+
+    def set_bootdev(self, bootdev, persist=False, uefiboot=None,
+                    fishclient=None):
+        """Set boot device to use on next reboot
+
+        :param bootdev:
+                        *network -- Request network boot
+                        *hd -- Boot from hard drive
+                        *safe -- Boot from hard drive, requesting 'safe mode'
+                        *optical -- boot from CD/DVD/BD drive
+                        *setup -- Boot into setup utility
+                        *default -- remove any directed boot device request
+        :param persist: If true, ask that system firmware use this device
+                        beyond next boot.  Be aware many systems do not honor
+                        this
+        :param uefiboot: If true, request UEFI boot explicitly.  If False,
+                         request BIOS style boot.
+                         None (default) does not modify the boot mode.
+        :raises: PyghmiException on an error.
+        :returns: dict or True -- If callback is not provided, the response
+        """
+        reqbootdev = bootdev
+        if (bootdev not in boot_devices_write
+                and bootdev not in boot_devices_read):
+            raise exc.InvalidParameterValue('Unsupported device %s'
+                                            % repr(bootdev))
+        bootdev = boot_devices_write.get(bootdev, bootdev)
+        if bootdev == 'None':
+            payload = {'Boot': {'BootSourceOverrideEnabled': 'Disabled'}}
+        else:
+            payload = {'Boot': {
+                'BootSourceOverrideEnabled': 'Continuous' if persist
+                                             else 'Once',
+                'BootSourceOverrideTarget': bootdev,
+            }}
+            if uefiboot is not None:
+                uefiboot = 'UEFI' if uefiboot else 'Legacy'
+                payload['BootSourceOverrideMode'] = uefiboot
+                try:
+                    fishclient._do_web_request(self.sysurl, payload,
+                                               method='PATCH')
+                    return {'bootdev': reqbootdev}
+                except Exception:
+                    del payload['BootSourceOverrideMode']
+        thetag = fishclient.sysinfo.get('@odata.etag', None)
+        fishclient._do_web_request(fishclient.sysurl, payload, method='PATCH',
+                                   etag=thetag)
+        return {'bootdev': reqbootdev}
 
     def _get_cache(self, url):
         now = os.times()[4]

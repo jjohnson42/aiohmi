@@ -12,11 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pyghmi.redfish.oem.dell.main as dell
 import pyghmi.redfish.oem.generic as generic
 import pyghmi.redfish.oem.lenovo.main as lenovo
 
 OEMMAP = {
     'Lenovo': lenovo,
+    'Dell': dell,
 }
 
 

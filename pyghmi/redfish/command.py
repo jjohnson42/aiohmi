@@ -51,22 +51,6 @@ powerstates = {
     'boot': None,
 }
 
-boot_devices_write = {
-    'net': 'Pxe',
-    'network': 'Pxe',
-    'pxe': 'Pxe',
-    'hd': 'Hdd',
-    'usb': 'Usb',
-    'cd': 'Cd',
-    'cdrom': 'Cd',
-    'optical': 'Cd',
-    'dvd': 'Cd',
-    'floppy': 'Floppy',
-    'default': 'None',
-    'setup': 'BiosSetup',
-    'bios': 'BiosSetup',
-    'f1': 'BiosSetup',
-}
 
 boot_devices_read = {
     'BiosSetup': 'setup',
@@ -684,31 +668,7 @@ class Command(object):
         :raises: PyghmiException on an error.
         :returns: dict or True -- If callback is not provided, the response
         """
-        reqbootdev = bootdev
-        if (bootdev not in boot_devices_write
-                and bootdev not in boot_devices_read):
-            raise exc.InvalidParameterValue('Unsupported device %s'
-                                            % repr(bootdev))
-        bootdev = boot_devices_write.get(bootdev, bootdev)
-        if bootdev == 'None':
-            payload = {'Boot': {'BootSourceOverrideEnabled': 'Disabled'}}
-        else:
-            payload = {'Boot': {
-                'BootSourceOverrideEnabled': 'Continuous' if persist
-                                             else 'Once',
-                'BootSourceOverrideTarget': bootdev,
-            }}
-            if uefiboot is not None:
-                uefiboot = 'UEFI' if uefiboot else 'Legacy'
-                payload['BootSourceOverrideMode'] = uefiboot
-                try:
-                    self._do_web_request(self.sysurl, payload, method='PATCH')
-                    return {'bootdev': reqbootdev}
-                except Exception:
-                    del payload['BootSourceOverrideMode']
-        thetag = self.sysinfo.get('@odata.etag', None)
-        self._do_web_request(self.sysurl, payload, method='PATCH', etag=thetag)
-        return {'bootdev': reqbootdev}
+        return self.oem.set_bootdev(bootdev, persist, uefiboot, self)
 
     @property
     def _biosurl(self):
