@@ -478,7 +478,8 @@ class OEMHandler(generic.OEMHandler):
         elif self.has_imm:
             return self.immhandler.get_hw_descriptions()
         elif self.is_fpc:
-            return self.smmhandler.get_inventory_descriptions(self.is_fpc)
+            return self.smmhandler.get_inventory_descriptions(self.ipmicmd,
+                                                              self.is_fpc)
         return ()
 
     def get_oem_inventory(self):
