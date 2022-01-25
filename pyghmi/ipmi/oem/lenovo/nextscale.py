@@ -111,9 +111,9 @@ def fpc_get_psustatus(ipmicmd, number, sz):
     rsp = ipmicmd.xraw_command(netfn=0x32, command=0x91)
     mask = 1 << (number - 1)
     rsp['data'] = bytearray(rsp['data'])
-    if len(rsp['data']) == 10:
+    if len(rsp['data']) >= 10:
         tmpdata = rsp['data']
-        rsp['data'] = list(struct.unpack('<HHHHBB', tmpdata))
+        rsp['data'] = list(struct.unpack('<HHHHBB', tmpdata[:10]))
     if len(rsp['data']) == 6:
         statdata = [0]
     else:
