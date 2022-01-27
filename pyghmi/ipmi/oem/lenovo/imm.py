@@ -1784,7 +1784,96 @@ class XCCClient(IMMClient):
             progress({'phase': 'complete'})
         self.weblogout()
 
+    def grab_redfish_response_emptyonerror(self, url, body=None, method=None):
+        rsp, status = self.grab_redfish_response_with_status(url, body, method)
+        if status >= 200 and status < 300:
+            return rsp
+        return {}
+
+    def grab_redfish_response_with_status(self, url, body=None, method=None):
+        return self.wc.grab_json_response_with_status(url, body, headers={
+            'Authorization': 'Basic %s' % base64.b64encode(
+                (self.username + ':' + self.password).encode('utf8')
+            ).decode('utf8'),
+            'Content-Type': 'application/json'}, method=method)
+
+    def redfish_update_firmware(self, usd, filename, data, progress, bank):
+        if usd['HttpPushUriTargetsBusy']:
+            raise pygexc.TemporaryError('Cannot run multiple updates to same '
+                                        'target concurrently')
+        upurl = usd['HttpPushUri']
+        self.grab_redfish_response_with_status(
+            '/redfish/v1/UpdateService',
+            {'HttpPushUriTargetsBusy': True}, method='PATCH')
+        try:
+            if bank == 'backup':
+                self.grab_redfish_response_with_status(
+                    '/redfish/v1/UpdateService',
+                    {'HttpPushUriTargets':
+                        ['/redfish/v1/UpdateService'
+                         '/FirmwareInventory/BMC-Backup']}, method='PATCH')
+            wc = self.wc.dupe()
+            wc.set_basic_credentials(self.username, self.password)
+            uploadthread = webclient.FileUploader(wc, upurl, filename,
+                                                  data, formwrap=False,
+                                                  excepterror=False)
+            uploadthread.start()
+            while uploadthread.isAlive():
+                uploadthread.join(3)
+                if progress:
+                    progress({'phase': 'upload',
+                              'progress': 100 * wc.get_upload_progress()})
+            if uploadthread.rspstatus >= 300 or uploadthread.rspstatus < 200:
+                rsp = uploadthread.rsp
+                errmsg = ''
+                try:
+                    rsp = json.loads(rsp)
+                    errmsg = Exception(
+                        rsp['error']['@Message.ExtendedInfo'][0]['Message'])
+                except Exception:
+                    raise Exception(uploadthread.rsp)
+                raise Exception(errmsg)
+            rsp = json.loads(uploadthread.rsp)
+            monitorurl = rsp['TaskMonitor']
+            complete = False
+            while not complete:
+                pgress, status = self.grab_redfish_response_with_status(
+                    monitorurl)
+                if status < 200 or status >= 300:
+                    raise Exception(pgress)
+                if not pgress:
+                    break
+                for msg in pgress.get('Messages', []):
+                    if 'Verify failed' in msg.get('Message', ''):
+                        raise Exception(msg['Message'])
+                state = pgress['TaskState']
+                if state in ('Cancelled', 'Exception',
+                             'Interrupted', 'Suspended'):
+                    raise Exception(json.dumps(pgress['Messages']))
+                pct = float(pgress['PercentComplete'])
+                complete = state == 'Completed'
+                progress({'phase': 'apply', 'progress': pct})
+                if not complete:
+                    ipmisession.Session.pause(3)
+            if bank == 'backup':
+                return 'complete'
+            return 'pending'
+        finally:
+            self.grab_redfish_response_with_status(
+                '/redfish/v1/UpdateService',
+                {'HttpPushUriTargetsBusy': False}, method='PATCH')
+            self.grab_redfish_response_with_status(
+                '/redfish/v1/UpdateService',
+                {'HttpPushUriTargets': []}, method='PATCH')
+
     def update_firmware(self, filename, data=None, progress=None, bank=None):
+        usd = self.grab_redfish_response_emptyonerror(
+            '/redfish/v1/UpdateService')
+        rfishurl = usd.get('HttpPushUri', None)
+        if rfishurl:
+            self.weblogout()
+            return self.redfish_update_firmware(
+                usd, filename, data, progress, bank)
         result = None
         if self.updating:
             raise pygexc.TemporaryError('Cannot run multiple updates to same '

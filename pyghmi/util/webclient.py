@@ -48,7 +48,7 @@ uploadforms = {}
 class FileUploader(threading.Thread):
 
     def __init__(self, webclient, url, filename, data=None, formname=None,
-                 otherfields=()):
+                 otherfields=(), formwrap=True, excepterror=True):
         self.wc = webclient
         self.url = url
         self.filename = filename
@@ -57,13 +57,17 @@ class FileUploader(threading.Thread):
         self.formname = formname
         self.rsp = ''
         self.rspstatus = 500
+        self.formwrap = formwrap
+        self.excepterror = excepterror
         super(FileUploader, self).__init__()
 
     def run(self):
         try:
             self.rsp = self.wc.upload(
                 self.url, self.filename, self.data, self.formname,
-                otherfields=self.otherfields)
+                otherfields=self.otherfields, formwrap=self.formwrap,
+                excepterror=self.excepterror)
+            self.rspstatus = self.wc.rspstatus
         except Exception:
             self.rspstatus = self.wc.rspstatus
             raise
@@ -279,7 +283,7 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
             self._currdl.getheader('content-length'))
 
     def upload(self, url, filename, data=None, formname=None,
-               otherfields=()):
+               otherfields=(), formwrap=True, excepterror=True):
         """Upload a file to the url
 
         :param url:
@@ -290,24 +294,34 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         """
         if data is None:
             data = open(filename, 'rb')
-        self._upbuffer = io.BytesIO(get_upload_form(
-            filename, data, formname, otherfields))
-        ulheaders = self.stdheaders.copy()
-        ulheaders['Content-Type'] = b'multipart/form-data; boundary=' + BND
-        ulheaders['Content-Length'] = len(uploadforms[filename])
-        self.ulsize = len(uploadforms[filename])
+        ulhdrs = self.stdheaders.copy()
+        if formwrap:
+            self._upbuffer = io.BytesIO(get_upload_form(
+                filename, data, formname, otherfields))
+            ulhdrs['Content-Type'] = b'multipart/form-data; boundary=' + BND
+            ulhdrs['Content-Length'] = len(uploadforms[filename])
+            self.ulsize = len(uploadforms[filename])
+        else:
+            curroff = data.tell()
+            data.seek(0, 2)
+            self.ulsize = data.tell()
+            data.seek(curroff, 0)
+            self._upbuffer = data
+            ulhdrs['Content-Type'] = b'application/octet-stream'
+            ulhdrs['Content-Length'] = self.ulsize
         webclient = self.dupe()
-        webclient.request('POST', url, self._upbuffer, ulheaders)
+        webclient.request('POST', url, self._upbuffer, ulhdrs)
         rsp = webclient.getresponse()
         # peer updates in progress should already have pointers,
         # subsequent transactions will cause memory to needlessly double,
         # but easiest way to keep memory relatively low
-        try:
-            del uploadforms[filename]
-        except KeyError:  # something could have already deleted it
-            pass
+        if formwrap:
+            try:
+                del uploadforms[filename]
+            except KeyError:  # something could have already deleted it
+                pass
         self.rspstatus = rsp.status
-        if rsp.status != 200:
+        if excepterror and (rsp.status < 200 or rsp.status >= 300):
             raise Exception('Unexpected response in file upload: %s'
                             % rsp.read())
         body = rsp.read()
