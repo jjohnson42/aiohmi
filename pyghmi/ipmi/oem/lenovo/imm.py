@@ -1828,7 +1828,7 @@ class XCCClient(IMMClient):
                 errmsg = ''
                 try:
                     rsp = json.loads(rsp)
-                    errmsg = Exception(
+                    errmsg = (
                         rsp['error']['@Message.ExtendedInfo'][0]['Message'])
                 except Exception:
                     raise Exception(uploadthread.rsp)

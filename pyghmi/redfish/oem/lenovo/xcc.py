@@ -725,8 +725,84 @@ class OEMHandler(generic.OEMHandler):
         if progress:
             progress({'phase': 'complete'})
 
+    def redfish_update_firmware(self, usd, filename, data, progress, bank):
+        if usd['HttpPushUriTargetsBusy']:
+            raise pygexc.TemporaryError('Cannot run multtiple updates to '
+                                        'same target concurrently')
+        upurl = usd['HttpPushUri']
+        self._do_web_request(
+            '/redfish/v1/UpdateService',
+            {'HttpPushUriTargetsBusy': True}, method='PATCH')
+        try:
+            if bank == 'backup':
+                self._do_web_request(
+                    '/redfish/v1/UpdateService',
+                    {'HttpPushUriTargets':
+                        ['/redfish/v1/UpdateService'
+                         '/FirmwareInventory/BMC-Backup']}, method='PATCH')
+            uploadthread = webclient.FileUploader(
+                self.webclient, upurl, filename, data, formwrap=False,
+                excepterror=False)
+            uploadthread.start()
+            wc = self.webclient
+            while uploadthread.isAlive():
+                uploadthread.join(3)
+                if progress:
+                    progress(
+                        {'phase': 'upload',
+                         'progress': 100 * wc.get_upload_progress()})
+                if (uploadthread.rspstatus >= 300
+                        or uploadthread.rspstatus < 200):
+                    rsp = uploadthread.rsp
+                    errmsg = ''
+                    try:
+                        rsp = json.loads(rsp)
+                        errmsg = (
+                            rsp['error'][
+                                '@Message.ExtendedInfo'][0]['Message'])
+                    except Exception:
+                        raise Exception(uploadthread.rsp)
+                    raise Exception(errmsg)
+                rsp = json.loads(uploadthread.rsp)
+                monitorurl = rsp['TaskMonitor']
+                complete = False
+                while not complete:
+                    pgress, status = self._do_web_request(monitorurl)
+                    if status < 200 or status >= 300:
+                        raise Exception(pgress)
+                    if not pgress:
+                        break
+                    for msg in pgress.get('Messages', []):
+                        if 'Verify failed' in msg.get('Message', ''):
+                            raise Exception(msg['Message'])
+                    state = pgress['TaskState']
+                    if state in ('Cancelled', 'Exception', 'Interrupted',
+                                 'Suspended'):
+                        raise Exception(
+                            json.dumps(json.dumps(pgress['Messages'])))
+                    pct = float(pgress['PercentComplete'])
+                    complete = state == 'Completed'
+                    progress({'phase': 'apply', 'progress': pct})
+                    if not complete:
+                        time.sleep(3)
+                if bank == 'backup':
+                    return 'complete'
+                return 'pending'
+        finally:
+            self._do_web_request(
+                '/redfish/v1/UpdateService',
+                {'HttpPushUriTargetsBusy': False}, method='PATCH')
+            self._do_web_request(
+                '/redfish/v1/UpdateService',
+                {'HttpPushUriTargets': []}, method='PATCH')
+
     def update_firmware(self, filename, data=None, progress=None, bank=None):
         result = None
+        usd = self._do_web_request('/redfish/v1/UpdateService')
+        rfishurl = usd.get('HttpPushUri', None)
+        if rfishurl:
+            return self.redfish_update_firmware(
+                usd, filename, data, progress, bank)
         if self.updating:
             raise pygexc.TemporaryError('Cannot run multiple updates to same '
                                         'target concurrently')

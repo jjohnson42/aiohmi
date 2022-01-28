@@ -69,7 +69,10 @@ class FileUploader(threading.Thread):
                 excepterror=self.excepterror)
             self.rspstatus = self.wc.rspstatus
         except Exception:
-            self.rspstatus = self.wc.rspstatus
+            try:
+                self.rspstatus = self.wc.rspstatus
+            except Exception:
+                pass
             raise
 
 
