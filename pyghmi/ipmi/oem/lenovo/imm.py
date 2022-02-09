@@ -102,16 +102,16 @@ def fixup_str(propstr):
 def str_to_size(sizestr):
     if 'GB' in sizestr:
         sizestr = sizestr.replace('GB', '')
-        sizestr = int(float(sizestr * 1024))
+        sizestr = int(float(sizestr) * 1024)
     elif 'GiB' in sizestr:
         sizestr = sizestr.replace('GiB', '')
-        sizestr = int(float(sizestr * 1024))
+        sizestr = int(float(sizestr) * 1024)
     elif 'TB' in sizestr:
         sizestr = sizestr.replace('TB', '')
-        sizestr = int(float(sizestr * 1000 * 1000))
+        sizestr = int(float(sizestr) * 1000 * 1000)
     elif 'TiB' in sizestr:
         sizestr = sizestr.replace('TiB', '')
-        sizestr = int(float(sizestr * 1024 * 1024))
+        sizestr = int(float(sizestr) * 1024 * 1024)
     return sizestr
 
 
