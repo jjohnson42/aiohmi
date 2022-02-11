@@ -484,6 +484,66 @@ class SMMClient(object):
                      'supplies.')
         }
         try:
+            numbays = 12
+            try:
+                chassiscapinfo = self.ipmicmd.xraw_command(
+                    0x32, 0x9d, data=[13])
+            except pygexc.IpmiException as e:
+                if e.ipmicode == 201:  # this must be a 2U
+                    numbays = 4
+                    chassiscapinfo = self.ipmicmd.xraw_command(
+                        0x32, 0x9d, data=[5])
+                else:
+                    raise
+            retoffset = 0
+            if len(chassiscapinfo['data']) > 10:
+                retoffset = 1
+            chassiscapstate = self.ipmicmd.xraw_command(
+                0x32, 0xa0, data=[numbays + 1])
+            capstate = bool(chassiscapstate['data'][retoffset])
+            capmin, capmax, protcap, usercap, thermcap = struct.unpack(
+                '<HHHHH', chassiscapinfo['data'][retoffset:retoffset + 10])
+            settings['chassis_user_cap'] = {
+                'value': usercap,
+                'help': 'Specify a maximum wattage to consume, this specific '
+                        'system implements a range from {0} to {1}.'.format(
+                            capmin, capmax)
+            }
+            settings['chassis_user_cap_active'] = {
+                'value': 'Enable' if capstate else 'Disable',
+                'help': 'Specify whether the user capping setting should be '
+                        'used or not at the chassis level.',
+            }
+            for baynum in range(numbays):
+                baynum += 1
+                baycapinfo = self.ipmicmd.xraw_command(
+                    0x32, 0x9d, data=[baynum])
+                capmin, capmax, protcap, usercap, thermcap = struct.unpack(
+                    '<HHHHH', baycapinfo['data'][retoffset:retoffset + 10])
+                settings['bay{0}_user_cap'.format(baynum)] = {
+                    'value': usercap,
+                    'help': 'Specify a maximum wattage for the server in bay '
+                            '{0} to consume, this specific system implements '
+                            'a range from {1} to {2}'.format(
+                                baynum, capmin, capmax)
+                }
+                settings['bay{0}_protective_cap'.format(baynum)] = {
+                    'value': protcap,
+                    'help': 'Show the current protective cap for the system '
+                            'in bay {0}'.format(baynum)
+                }
+                baycapstate = self.ipmicmd.xraw_command(
+                    0x32, 0xa0, data=[baynum])
+                baycapstate = bool(baycapstate['data'][retoffset])
+                settings['bay{0}_user_cap_active'.format(baynum)] = {
+                    'value': 'Enable' if baycapstate else 'Disable',
+                    'help': 'Specify whether the user capping setting should '
+                            'be used or not for bay {0}'.format(baynum),
+                    'possible': ['Enable', 'Disable'],
+                }
+        except Exception:
+            pass
+        try:
             dhcpsendname = self.ipmicmd.xraw_command(0xc, 0x2,
                                                      data=[1, 0xc5, 0, 0])
             dhcpsendname = bytearray(dhcpsendname['data'])
@@ -507,6 +567,20 @@ class SMMClient(object):
         except Exception:
             pass
         return settings
+
+    def set_bay_cap(self, baynum, val):
+        payload = struct.pack('<BH', baynum, int(val))
+        self.ipmicmd.xraw_command(0x32, 0x9e, data=payload)
+
+    def set_bay_cap_active(self, baynum, val):
+        currstate = self.ipmicmd.xraw_command(0x32, 0xa0, data=[baynum])
+        currstate = currstate['data']
+        if len(currstate) == 5:
+            currstate = currstate[1:]
+        savemode = currstate[3]
+        enable = val.lower().startswith('enable')
+        payload = [baynum, 1 if enable else 0, savemode]
+        self.ipmicmd.xraw_command(0x32, 0x9f, data=payload)
 
     def set_bmc_configuration(self, changeset, variant):
         rules = []
@@ -544,6 +618,20 @@ class SMMClient(object):
                 sendvci = stringtoboolean(
                     changeset[key]['value'],
                     'dhcp_sends_vendor_class_identifier')
+            # Variant low 8 bits is the height in U of chassis, so double that
+            #  to get maxbays
+            numbays = (self.smm_variant & 0x0f) << 1
+            for bayn in range(1, numbays + 1):
+                if fnmatch.fnmatch('bay{0}_user_cap'.format(bayn),
+                                   key.lower()):
+                    self.set_bay_cap(bayn, changeset[key]['value'])
+                if fnmatch.fnmatch(
+                        'bay{0}_user_cap_active'.format(bayn), key.lower()):
+                    self.set_bay_cap_active(bayn, changeset[key]['value'])
+            if fnmatch.fnmatch('chassis_user_cap', key.lower()):
+                self.set_bay_cap(numbays + 1, changeset[key]['value'])
+            if fnmatch.fnmatch('chassis_user_cap_active', key.lower()):
+                self.set_bay_cap_active(numbays + 1, changeset[key]['value'])
             if fnmatch.fnmatch('fanspeed', key.lower()):
                 for mode in self.fanmodes:
                     byteval = mode
@@ -805,7 +893,8 @@ class SMMClient(object):
 
     def update_firmware(self, filename, data=None, progress=None, bank=None):
         if progress is None:
-            progress = lambda x: True
+            def progress(x):
+                return True
         z = None
         if data and hasattr(data, 'read'):
             if zipfile.is_zipfile(data):
