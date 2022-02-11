@@ -955,6 +955,8 @@ class SMMClient(object):
         return 'complete'
 
     def get_inventory_descriptions(self, ipmicmd, variant):
+        if variant >> 5 == 0:
+            return
         psucount = get_psu_count(ipmicmd, variant)
         for idx in range(psucount):
             yield 'PSU {}'.format(idx + 1)
