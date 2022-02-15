@@ -253,8 +253,11 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
                 # gzip
                 pass
         if rsp.status >= 200 and rsp.status < 300:
-            if body and not isinstance(body, str):
-                body = body.decode('utf8')
+            if body and not isinstance(body, type(u'')):
+                try:
+                    body = body.decode('utf8')
+                except Exception:
+                    body = body.decode('iso-8859-1')
             return json.loads(body) if body else {}, rsp.status
         return body, rsp.status
 
