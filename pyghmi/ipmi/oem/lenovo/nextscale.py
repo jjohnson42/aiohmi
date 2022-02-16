@@ -688,6 +688,8 @@ class SMMClient(object):
 
     def get_diagnostic_data(self, savefile, progress=None, autosuffix=False,
                             variant=None):
+        if variant == 6:
+            raise Exception('Service data not supported on FPC')
         rsp = self.ipmicmd.xraw_command(netfn=0x32, command=0xb1, data=[0])
         if bytearray(rsp['data'])[0] != 0:
             raise Exception("Service data generation already in progress")
