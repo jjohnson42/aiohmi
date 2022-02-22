@@ -43,8 +43,21 @@ import pyghmi.exceptions as exc
 
 try:
     import cPickle as pickle
+
+    def restricted_load(s):
+        unp = pickle.Unpickler(s)
+        unp.find_global = None
+        return unp.load()
 except ImportError:
     import pickle
+
+    class Unpickler(pickle.Unpickler):
+        def find_class(self, module, name):
+            raise Exception("Code forbidden")
+
+    def restricted_load(s):
+        return Unpickler(s).load()
+
 
 TYPE_UNKNOWN = 0
 TYPE_SENSOR = 1
@@ -746,7 +759,7 @@ class SDR(object):
             cachefilename = os.path.join(self.cachedir, cachefilename)
         if cachefilename and os.path.isfile(cachefilename):
             with open(cachefilename, 'rb') as cfile:
-                csdrs = pickle.load(cfile)
+                csdrs = restricted_load(cfile)
                 for sdrdata in csdrs:
                     self.add_sdr(sdrdata)
                 for sid in self.broken_sensor_ids:
