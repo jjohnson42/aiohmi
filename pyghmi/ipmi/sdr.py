@@ -41,23 +41,6 @@ import six
 import pyghmi.constants as const
 import pyghmi.exceptions as exc
 
-try:
-    import cPickle as pickle
-
-    def restricted_load(s):
-        unp = pickle.Unpickler(s)
-        unp.find_global = None
-        return unp.load()
-except ImportError:
-    import pickle
-
-    class Unpickler(pickle.Unpickler):
-        def find_class(self, module, name):
-            raise Exception("Code forbidden")
-
-    def restricted_load(s):
-        return Unpickler(s).load()
-
 
 TYPE_UNKNOWN = 0
 TYPE_SENSOR = 1
@@ -753,15 +736,17 @@ class SDR(object):
         cachefilename = None
         self.broken_sensor_ids = {}
         if self.cachedir:
-            cachefilename = 'sdrcache.{0}.{1}.{2}.{3}.{4}.{5}'.format(
+            cachefilename = 'sdrcache-2.{0}.{1}.{2}.{3}.{4}.{5}'.format(
                 self.mfg_id, self.prod_id, self.device_id, self.fw_major,
                 self.fw_minor, modtime)
             cachefilename = os.path.join(self.cachedir, cachefilename)
         if cachefilename and os.path.isfile(cachefilename):
             with open(cachefilename, 'rb') as cfile:
-                csdrs = restricted_load(cfile)
-                for sdrdata in csdrs:
-                    self.add_sdr(sdrdata)
+                csdrlen = cfile.read(2)
+                while csdrlen:
+                    csdrlen = struct.unpack('!H', csdrlen)[0]
+                    self.add_sdr(cfile.read(csdrlen))
+                    csdrlen = cfile.read(2)
                 for sid in self.broken_sensor_ids:
                     try:
                         del self.sensors[sid]
@@ -820,7 +805,7 @@ class SDR(object):
                     size = currlen - offset
             self.add_sdr(sdrdata)
             if sdrraw is not None:
-                sdrraw.append(sdrdata)
+                sdrraw.append(bytes(sdrdata))
             offset = 0
             if size != 0xff:
                 size = 5
@@ -841,7 +826,9 @@ class SDR(object):
             suffix = ''.join(
                 random.choice(string.ascii_lowercase) for _ in range(12))
             with open(cachefilename + '.' + suffix, 'wb') as cfile:
-                pickle.dump(sdrraw, cfile)
+                for csdr in sdrraw:
+                    cfile.write(struct.pack('!H', len(csdr)))
+                    cfile.write(csdr)
             os.rename(cachefilename + '.' + suffix, cachefilename)
 
     def get_sensor_numbers(self):
