@@ -683,8 +683,23 @@ class SMMClient(object):
             rsp.read()
 
     def reseat_bay(self, bay):
+        bay = int(bay)
+        if bay % 2 == 0:
+            # even node may be unable to reseat based on shared io
+            try:
+                rsp = self.ipmicmd.xraw_command(0x32, 0xc5, data=[1])
+            except Exception:
+                rsp = {'data': [1]}
+            rsp['data'] = bytearray(rsp['data'])
+            if rsp['data'][0] == 2:  # shared io
+                rsp = self.ipmicmd.xraw_command(0x32, 0xa7, data=[bay - 1])
+                rsp['data'] = bytearray(rsp['data'])
+                if rsp['data'][1] == 0x80:
+                    raise Exception('Unable to reseat bay {0} due to bay {1} '
+                                    'being on with shared IO'.format(
+                                        bay, bay - 1))
         self.ipmicmd.xraw_command(netfn=0x32, command=0xa4,
-                                  data=[int(bay), 2])
+                                  data=[bay, 2])
 
     def get_diagnostic_data(self, savefile, progress=None, autosuffix=False,
                             variant=None):
