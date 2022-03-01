@@ -841,6 +841,8 @@ class SDR(object):
                         False, self.mfg_id, self.prod_id)
 
     def add_sdr(self, sdrbytes):
+        if not isinstance(sdrbytes[0], int):
+            sdrbytes = bytearray(sdrbytes)
         newent = self.make_sdr_entry(sdrbytes)
         if newent.sdrtype == TYPE_SENSOR:
             id = '{0}.{1}.{2}'.format(
