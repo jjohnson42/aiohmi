@@ -180,7 +180,7 @@ def get_psu_count(ipmicmd, variant):
     if variant == 0x26:
         mymsg = ipmicmd.xraw_command(netfn=0x32, command=0xa8)
         builddata = bytearray(mymsg['data'])
-        if builddata[13] == 3:
+        if builddata[13] in (3, 6):
             return 9
         else:
             return 6
