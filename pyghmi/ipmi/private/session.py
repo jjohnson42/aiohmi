@@ -84,6 +84,12 @@ MAX_IDLE = 29
 # incorrect idle
 
 
+def unmatched(response, netfn, cmd):
+    if not response:
+        return True
+    return response['command'] != cmd or response['netfn'] != netfn
+
+
 def define_worker():
     class _IOWorker(threading.Thread):
         def join(self):
@@ -497,6 +503,8 @@ class Session(object):
         else:
             self.privlevel = 4
             self.autopriv = True
+        self.onlogpayload = None
+        self.onlogpayloadtype = None
         self.logoutexpiry = None
         self.autokeepalive = keepalive
         self.maxtimeout = 3  # be aggressive about giving up on initial packet
@@ -578,12 +586,18 @@ class Session(object):
         while self.logonwaiters:
             waiter = self.logonwaiters.pop()
             waiter(parameter)
+        if self.onlogpayload:
+            self.lastpayload = self.onlogpayload
+            self.last_payload_type = self.onlogpayloadtype
+            self.onlogpayload = None
+            self.send_payload()
 
     def _initsession(self):
         # NOTE(jbjohnso): this number can be whatever we want.
         #                 I picked 'xCAT' minus 1 so that a hexdump of packet
         #                 would show xCAT
         self.localsid = 2017673555
+        self.remseqnumber = None
         self.confalgo = 0
         self.aeskey = None
         self.integrityalgo = 0
@@ -742,8 +756,9 @@ class Session(object):
         while self._isincommand():
             _io_wait(self._isincommand(), self.sockaddr, self.evq)
 
-    def awaitresponse(self, retry):
-        while retry and self.lastresponse is None and self.logged:
+    def awaitresponse(self, retry, netfn, command):
+        while (retry and unmatched(self.lastresponse, netfn, command)
+                and (self.logged or self.onlogpayload)):
             timeout = self.expiration - _monotonic_time()
             _io_wait(timeout, self.sockaddr)
             while self.iterwaiters:
@@ -798,8 +813,9 @@ class Session(object):
         # behavior of only the constructor needing a callback.  From then on,
         # synchronous usage of the class acts in a greenthread style governed
         # by order of data on the network
-        self.awaitresponse(retry)
+        self.awaitresponse(retry, netfn + 1, command)
         lastresponse = self.lastresponse
+        self.lastresponse = None
         self.incommand = False
         while self.evq:
             self.evq.popleft().set()
@@ -963,7 +979,6 @@ class Session(object):
         if 'error' in response:
             self.onlogon(response)
             return
-        self.maxtimeout = 6  # we have a confirmed bmc, be more tenacious
         if response['code'] == 0xcc and self.ipmi15only is not None:
             # tried ipmi 2.0 against a 1.5 which should work, but some bmcs
             # thought 'reserved' meant 'must be zero'
@@ -1022,6 +1037,8 @@ class Session(object):
     def _req_priv_level(self):
         self.logged = 1
         self.logoutexpiry = None
+        self.maxtimeout = 2  # Switch quickly to the relogin recovery
+        self.logontries = 1  # have one relogin waiting to heal
         response = self.raw_command(netfn=0x6, command=0x3b,
                                     data=[self.privlevel])
         if response['code']:
@@ -1331,7 +1348,7 @@ class Session(object):
                 iserver.pktqueue.append(qent)
                 iserver.process_pktqueue()
                 return
-            if (hasattr(self, 'remseqnumber')
+            if (self.remseqnumber is not None
                     and remseqnumber < self.remseqnumber):
                 return -5  # remote sequence number is too low, reject it
             self.remseqnumber = remseqnumber
@@ -1409,7 +1426,7 @@ class Session(object):
             if sid != self.localsid:  # session id mismatch, drop it
                 return
             remseqnumber = struct.unpack("<I", bytes(data[10:14]))[0]
-            if (hasattr(self, 'remseqnumber')
+            if (self.remseqnumber is not None
                     and (remseqnumber < self.remseqnumber)
                     and (self.remseqnumber != 0xffffffff)):
                 return
@@ -1715,11 +1732,16 @@ class Session(object):
         self.nowait = True
         self.timeout += 1
         if self.timeout > self.maxtimeout:
-            response = {'error': 'timeout', 'code': 0xffff}
-            self.ipmicallback(response)
-            self.nowait = False
-            self._mark_broken()
-            return
+            if not self.logontries:
+                response = {'error': 'timeout', 'code': 0xffff}
+                self.ipmicallback(response)
+                self.nowait = False
+                self._mark_broken()
+                return
+            else:
+                self.onlogpayload = self.lastpayload
+                self.onlogpayloadtype = self.last_payload_type
+                self._relog()
         elif self.sessioncontext == 'FAILED':
             self.lastpayload = None
             self.nowait = False
