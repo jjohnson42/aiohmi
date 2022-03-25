@@ -23,6 +23,7 @@ import six
 import pyghmi.constants as pygconst
 import pyghmi.exceptions as pygexc
 import pyghmi.ipmi.private.session as ipmisession
+import pyghmi.ipmi.private.util as util
 from pyghmi.ipmi import sdr
 import pyghmi.util.webclient as webclient
 
@@ -414,13 +415,14 @@ class SMMClient(object):
 
     def get_bmc_configuration(self):
         settings = {}
-        self.wc.request(
+        wc = self.wc
+        wc.request(
             'POST', '/data',
             ('get=passwordMinLength,passwordForceChange,passwordDurationDays,'
              'passwordExpireWarningDays,passwordChangeInterval,'
              'passwordReuseCheckNum,passwordFailAllowdNum,'
              'passwordLockoutTimePeriod'))
-        rsp = self.wc.getresponse()
+        rsp = wc.getresponse()
         rspbody = rsp.read()
         accountinfo = fromstring(rspbody)
         for rule in self.rulemap:
@@ -646,8 +648,9 @@ class SMMClient(object):
                             changeset[key]['value']))
         if rules:
             rules = 'set={0}'.format(','.join(rules))
-            self.wc.request('POST', '/data', rules)
-            self.wc.getresponse().read()
+            wc = self.wc
+            wc.request('POST', '/data', rules)
+            wc.getresponse().read()
         if powercfg != [None, None]:
             if variant != 6:
                 if None in powercfg:
@@ -676,10 +679,11 @@ class SMMClient(object):
             username = bytes(rsp['data']).rstrip(b'\x00')
             if not isinstance(username, str):
                 username = username.decode('utf8')
-            self.wc.request(
+            wc = self.wc
+            wc.request(
                 'POST', '/data', 'set=user({0},1,{1},511,,4,15,0)'.format(
                     uid, username))
-            rsp = self.wc.getresponse()
+            rsp = wc.getresponse()
             rsp.read()
 
     def reseat_bay(self, bay):
@@ -723,21 +727,22 @@ class SMMClient(object):
             rsp = self.ipmicmd.xraw_command(netfn=0x34, command=0x12, data=[1])
             if progress:
                 progress({'phase': 'initializing', 'progress': initpct})
-        if self.wc is None:
+        wc = self.wc
+        if wc is None:
             raise Exception("Failed to connect to web api")
         if variant and variant >> 5:
-            url = '/preview/smm2-ffdc.tgz?ST1={0}'.format(self.st1)
+            url = '/preview/smm2-ffdc.tgz?ST1={0}'.format(wc.st1)
         else:
-            url = '/preview/smm-ffdc.tgz?ST1={0}'.format(self.st1)
+            url = '/preview/smm-ffdc.tgz?ST1={0}'.format(wc.st1)
         if autosuffix and not savefile.endswith('.tgz'):
             savefile += '-smm-ffdc.tgz'
-        fd = webclient.FileDownloader(self.wc, url, savefile)
+        fd = webclient.FileDownloader(wc, url, savefile)
         fd.start()
         while fd.isAlive():
             fd.join(1)
-            if progress and self.wc.get_download_progress():
+            if progress and wc.get_download_progress():
                 progress({'phase': 'download',
-                          'progress': 100 * self.wc.get_download_progress()})
+                          'progress': 100 * wc.get_download_progress()})
         if progress:
             progress({'phase': 'complete'})
         return savefile
@@ -759,6 +764,7 @@ class SMMClient(object):
     def get_webclient(self):
         cv = self.ipmicmd.certverify
         wc = webclient.SecureHTTPConnection(self.smm, 443, verifycallback=cv)
+        wc.vintage = util._monotonic_time()
         wc.connect()
         loginform = urlencode(
             {
@@ -779,13 +785,13 @@ class SMMClient(object):
             if 'renew' in data.text:
                 raise Exception("Account password has expired on remote "
                                 "device")
-        self.st1 = None
-        self.st2 = None
+        wc.st1 = None
+        wc.st2 = None
         for data in authdata.findall('st1'):
-            self.st1 = data.text
+            wc.st1 = data.text
         for data in authdata.findall('st2'):
-            self.st2 = data.text
-        if not self.st2:
+            wc.st2 = data.text
+        if not wc.st2:
             # This firmware puts tokens in the html file, parse that
             wc.request('GET', '/index.html')
             rsp = wc.getresponse()
@@ -796,12 +802,12 @@ class SMMClient(object):
                 indexhtml = indexhtml.decode('utf8')
             for line in indexhtml.split('\n'):
                 if '"ST1"' in line:
-                    self.st1 = line.split()[-1].replace(
+                    wc.st1 = line.split()[-1].replace(
                         '"', '').replace(',', '')
                 if '"ST2"' in line:
-                    self.st2 = line.split()[-1].replace(
+                    wc.st2 = line.split()[-1].replace(
                         '"', '').replace(',', '')
-        if not self.st2:
+        if not wc.st2:
             wc.request('GET', '/scripts/index.ajs')
             rsp = wc.getresponse()
             body = rsp.read()
@@ -811,19 +817,20 @@ class SMMClient(object):
                 body = body.decode('utf8')
             for line in body.split('\n'):
                 if '"ST1"' in line:
-                    self.st1 = line.split()[-1].replace(
+                    wc.st1 = line.split()[-1].replace(
                         '"', '').replace(',', '')
                 if '"ST2"' in line:
-                    self.st2 = line.split()[-1].replace(
+                    wc.st2 = line.split()[-1].replace(
                         '"', '').replace(',', '')
-        if not self.st2:
+        if not wc.st2:
             raise Exception('Unable to locate ST2 token')
-        wc.set_header('ST2', self.st2)
+        wc.set_header('ST2', wc.st2)
         return wc
 
     def set_hostname(self, hostname):
-        self.wc.request('POST', '/data', 'set=hostname:' + hostname)
-        rsp = self.wc.getresponse()
+        wc = self.wc
+        wc.request('POST', '/data', 'set=hostname:' + hostname)
+        rsp = wc.getresponse()
         if rsp.status != 200:
             raise Exception(rsp.read())
         rsp.read()
@@ -836,12 +843,13 @@ class SMMClient(object):
             return data.text
 
     def get_netinfo(self):
-        self.wc.request('POST', '/data', 'get=hostname')
-        rsp = self.wc.getresponse()
+        wc = self.wc
+        wc.request('POST', '/data', 'get=hostname')
+        rsp = wc.getresponse()
         data = rsp.read()
         if rsp.status == 400:
-            self.wc.request('POST', '/data?get=hostname', '')
-            rsp = self.wc.getresponse()
+            wc.request('POST', '/data?get=hostname', '')
+            rsp = wc.getresponse()
             data = rsp.read()
         if rsp.status != 200:
             raise Exception(data)
@@ -849,8 +857,9 @@ class SMMClient(object):
         return currinfo
 
     def set_domain(self, domain):
-        self.wc.request('POST', '/data', 'set=dnsDomain:' + domain)
-        rsp = self.wc.getresponse()
+        wc = self.wc
+        wc.request('POST', '/data', 'set=dnsDomain:' + domain)
+        rsp = wc.getresponse()
         if rsp.status != 200:
             raise Exception(rsp.read())
         rsp.read()
@@ -863,17 +872,19 @@ class SMMClient(object):
             return data.text
 
     def get_ntp_enabled(self, variant):
-        self.wc.request('POST', '/data', 'get=ntpOpMode')
-        rsp = self.wc.getresponse()
+        wc = self.wc
+        wc.request('POST', '/data', 'get=ntpOpMode')
+        rsp = wc.getresponse()
         info = fromstring(rsp.read())
         self.logout()
         for data in info.findall('ntpOpMode'):
             return data.text == '1'
 
     def set_ntp_enabled(self, enabled):
-        self.wc.request('POST', '/data', 'set=ntpOpMode:{0}'.format(
+        wc = self.wc
+        wc.request('POST', '/data', 'set=ntpOpMode:{0}'.format(
             1 if enabled else 0))
-        rsp = self.wc.getresponse()
+        rsp = wc.getresponse()
         result = rsp.read()
         if not isinstance(result, str):
             result = result.decode('utf8')
@@ -882,9 +893,10 @@ class SMMClient(object):
             raise Exception("Unrecognized result: " + result)
 
     def set_ntp_server(self, server, index):
-        self.wc.request('POST', '/data', 'set=ntpServer{0}:{1}'.format(
+        wc = self.wc
+        wc.request('POST', '/data', 'set=ntpServer{0}:{1}'.format(
             index + 1, server))
-        rsp = self.wc.getresponse()
+        rsp = wc.getresponse()
         result = rsp.read()
         if not isinstance(result, str):
             result = result.decode('utf8')
@@ -894,9 +906,10 @@ class SMMClient(object):
         return True
 
     def get_ntp_servers(self):
-        self.wc.request(
+        wc = self.wc
+        wc.request(
             'POST', '/data', 'get=ntpServer1,ntpServer2,ntpServer3')
-        rsp = self.wc.getresponse()
+        rsp = wc.getresponse()
         result = fromstring(rsp.read())
         srvs = []
         for data in result.findall('ntpServer1'):
@@ -927,37 +940,38 @@ class SMMClient(object):
                     data = z.open(filename)
                     break
         progress({'phase': 'upload', 'progress': 0.0})
-        self.wc.request('POST', '/data', 'set=fwType:10')  # SMM firmware
-        rsp = self.wc.getresponse()
+        wc = self.wc
+        wc.request('POST', '/data', 'set=fwType:10')  # SMM firmware
+        rsp = wc.getresponse()
         rsp.read()
-        url = '/fwupload/fwupload.esp?ST1={0}'.format(self.st1)
+        url = '/fwupload/fwupload.esp?ST1={0}'.format(wc.st1)
         fu = webclient.FileUploader(
-            self.wc, url, filename, data, formname='fileUpload',
+            wc, url, filename, data, formname='fileUpload',
             otherfields={'preConfig': 'on'})
         fu.start()
         while fu.isAlive():
             fu.join(3)
             if progress:
                 progress({'phase': 'upload',
-                          'progress': 100 * self.wc.get_upload_progress()})
+                          'progress': 100 * wc.get_upload_progress()})
         progress({'phase': 'validating', 'progress': 0.0})
         url = '/data'
-        self.wc.request('POST', url, 'get=fwVersion,spfwInfo')
-        rsp = self.wc.getresponse()
+        wc.request('POST', url, 'get=fwVersion,spfwInfo')
+        rsp = wc.getresponse()
         rsp.read()
         if rsp.status != 200:
             raise Exception('Error validating firmware')
         progress({'phase': 'apply', 'progress': 0.0})
-        self.wc.request('POST', '/data', 'set=securityrollback:1')
-        self.wc.getresponse().read()
-        self.wc.request('POST', '/data', 'set=fwUpdate:1')
-        rsp = self.wc.getresponse()
+        wc.request('POST', '/data', 'set=securityrollback:1')
+        wc.getresponse().read()
+        wc.request('POST', '/data', 'set=fwUpdate:1')
+        rsp = wc.getresponse()
         rsp.read()
         complete = False
         while not complete:
             ipmisession.Session.pause(3)
-            self.wc.request('POST', '/data', 'get=fwProgress,fwUpdate')
-            rsp = self.wc.getresponse()
+            wc.request('POST', '/data', 'get=fwProgress,fwUpdate')
+            rsp = wc.getresponse()
             progdata = rsp.read()
             if rsp.status != 200:
                 raise Exception('Error applying firmware')
@@ -1016,13 +1030,15 @@ class SMMClient(object):
         return psui
 
     def logout(self):
-        self.wc.request('POST', '/data/logout', None)
-        rsp = self.wc.getresponse()
+        wc = self.wc
+        wc.request('POST', '/data/logout', None)
+        rsp = wc.getresponse()
         rsp.read()
         self._wc = None
 
     @property
     def wc(self):
-        if not self._wc or self._wc.broken:
+        if (not self._wc or self._wc.broken
+                or self._wc.vintage < util._monotonic_time() + 30):
             self._wc = self.get_webclient()
         return self._wc
