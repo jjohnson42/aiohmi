@@ -1348,7 +1348,7 @@ class Session(object):
                 iserver.pktqueue.append(qent)
                 iserver.process_pktqueue()
                 return
-            if (hasattr(self, 'remseqnumber')
+            if (hasattr(self, 'remseqnumber') and self.remseqnumber is not None
                     and remseqnumber < self.remseqnumber):
                 return -5  # remote sequence number is too low, reject it
             self.remseqnumber = remseqnumber
@@ -1426,7 +1426,7 @@ class Session(object):
             if sid != self.localsid:  # session id mismatch, drop it
                 return
             remseqnumber = struct.unpack("<I", bytes(data[10:14]))[0]
-            if (hasattr(self, 'remseqnumber')
+            if (hasattr(self, 'remseqnumber') and self.remseqnumber is not None
                     and (remseqnumber < self.remseqnumber)
                     and (self.remseqnumber != 0xffffffff)):
                 return
