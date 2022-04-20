@@ -2134,16 +2134,8 @@ class XCCClient(IMMClient):
             raise pygexc.BypassGenericBehavior()
         rsp = wc.grab_json_response('/api/providers/imm_active_events')
         if 'items' in rsp and len(rsp['items']) == 0:
-            ledcheck = self.wc.grab_json_response(
-                '/api/dataset/imm_status_power')
-            for led in ledcheck.get('items', [{}])[0].get('LEDs', ()):
-                if led.get('name', None) == 'Fault':
-                    if led.get('status', 0) == 0:
-                        raise pygexc.BypassGenericBehavior()
-                    break
-            else:
-                # The XCC reports healthy, no need to interrogate
-                raise pygexc.BypassGenericBehavior()
+            # The XCC reports healthy, no need to interrogate
+            raise pygexc.BypassGenericBehavior()
         fallbackdata = []
         hmap = {
             'I': pygconst.Health.Ok,
