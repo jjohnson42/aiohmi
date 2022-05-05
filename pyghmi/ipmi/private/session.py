@@ -507,7 +507,7 @@ class Session(object):
         self.onlogpayloadtype = None
         self.logoutexpiry = None
         self.autokeepalive = keepalive
-        self.maxtimeout = 3  # be aggressive about giving up on initial packet
+        self.maxtimeout = 2  # be aggressive about giving up on initial packet
         self.incommand = False
         self.nameonly = 16  # default to name only lookups in RAKP exchange
         self.servermode = False
@@ -1126,7 +1126,7 @@ class Session(object):
                                         data=[0x8e, self.privlevel])
 
     def login(self):
-        self.logontries = 5
+        self.logontries = 2
         self._initsession()
         self._get_channel_auth_cap()
 
