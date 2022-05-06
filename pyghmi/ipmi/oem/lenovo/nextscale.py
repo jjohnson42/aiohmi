@@ -688,6 +688,9 @@ class SMMClient(object):
 
     def reseat_bay(self, bay):
         bay = int(bay)
+        if bay == -1:
+            self.ipmicmd.xraw_command(0x32, 0xf5)
+            return
         if bay % 2 == 0:
             # even node may be unable to reseat based on shared io
             try:
