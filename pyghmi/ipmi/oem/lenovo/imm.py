@@ -1456,7 +1456,7 @@ class XCCClient(IMMClient):
         therminfo = self.grab_cacheable_json(
             '/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
         if therminfo:
-            for name in sorted(therminfo['items'][0]):
+            for name in sorted(therminfo.get('items', [[]])[0]):
                 if 'DIMM' in name and 'Temp' in name:
                     oemsensornames = oemsensornames + (name,)
         return oemsensornames
