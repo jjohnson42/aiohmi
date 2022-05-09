@@ -507,7 +507,7 @@ class Session(object):
         self.onlogpayloadtype = None
         self.logoutexpiry = None
         self.autokeepalive = keepalive
-        self.maxtimeout = 2  # be aggressive about giving up on initial packet
+        self.maxtimeout = 3  # be aggressive about giving up on initial packet
         self.incommand = False
         self.nameonly = 16  # default to name only lookups in RAKP exchange
         self.servermode = False
@@ -562,6 +562,7 @@ class Session(object):
         # since our connection has failed retries
         # deregister our keepalive facility
         self.lastpayload = None
+        self.onlogpayload = None
         with util.protect(KEEPALIVE_SESSIONS):
             Session.keepalive_sessions.pop(self, None)
         with util.protect(WAITING_SESSIONS):
@@ -1050,6 +1051,7 @@ class Session(object):
                                             data=[self.privlevel])
             if response['code']:
                 self.logged = 0
+                self.onlogpayload = None
                 self.logging = False
                 mysuffix = " while requesting privelege level %d for %s" % (
                     self.privlevel, self.userid)
@@ -1842,6 +1844,7 @@ class Session(object):
         with util.protect(KEEPALIVE_SESSIONS):
             Session.keepalive_sessions.pop(self, None)
         self.logged = 0
+        self.onlogpayload = None
         self.logging = False
         if self._customkeepalives:
             for ka in list(self._customkeepalives):
