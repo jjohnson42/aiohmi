@@ -1375,6 +1375,10 @@ class Command(object):
                         entries = self._do_web_request(entriesurl, cache=False)
                         newloginfo = self._do_web_request(lurl, cache=False)
             for log in entries.get('Members', []):
+                if ('Created' not in log and 'Message' not in log
+                        and 'Severity' not in log):
+                    # without any data, this log entry isn't actionable
+                    continue
                 record = {}
                 record['log_id'] = logid
                 parsedtime = parse_time(log.get('Created', ''))
@@ -1386,7 +1390,7 @@ class Command(object):
                     record['timestamp'] = log.get('Created', '')
                 record['message'] = log.get('Message', None)
                 record['severity'] = _healthmap.get(
-                    entries.get('Severity', 'Warning'), const.Health.Critical)
+                    log.get('Severity', 'Warning'), const.Health.Ok)
                 yield record
 
     def get_sensor_descriptions(self):
