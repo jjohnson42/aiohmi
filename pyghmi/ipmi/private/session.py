@@ -1827,18 +1827,19 @@ class Session(object):
                 Session.waiting_sessions[self]['timeout'] = self.expiration
 
     def logout(self, sessionok=True):
-        if not self.logged:
-            return {'success': True}
+
         if self.cleaningup:
             self.nowait = True
-        if self.sol_handler:
-            self.raw_command(netfn=6, command=0x49, data=(1, 1, 0, 0, 0, 0),
-                             retry=sessionok)
-        self.raw_command(command=0x3c,
-                         netfn=6,
-                         data=struct.unpack("4B",
-                                            struct.pack("I", self.sessionid)),
-                         retry=False)
+        if self.logged:
+            if self.sol_handler:
+                self.raw_command(
+                    netfn=6, command=0x49, data=(1, 1, 0, 0, 0, 0),
+                    retry=sessionok)
+            self.raw_command(
+                command=0x3c, netfn=6,
+                data=struct.unpack(
+                    "4B", struct.pack("I", self.sessionid)),
+                retry=False)
         # stop trying for a keepalive,
         self.lastpayload = None
         with util.protect(KEEPALIVE_SESSIONS):
