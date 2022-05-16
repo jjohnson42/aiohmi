@@ -494,6 +494,9 @@ class Session(object):
                 else:
                     self.iterwaiters.append(onlogon)
             return
+        self.awaitingresponse = False
+        self.lastresponse = None
+        self.atomicop = threading.RLock()
         self.broken = False
         self.socket = None
         self.logged = 0
@@ -507,7 +510,7 @@ class Session(object):
         self.onlogpayloadtype = None
         self.logoutexpiry = None
         self.autokeepalive = keepalive
-        self.maxtimeout = 3  # be aggressive about giving up on initial packet
+        self.maxtimeout = 2  # be aggressive about giving up on initial packet
         self.incommand = False
         self.nameonly = 16  # default to name only lookups in RAKP exchange
         self.servermode = False
@@ -584,14 +587,16 @@ class Session(object):
     def onlogon(self, parameter):
         if 'error' in parameter:
             self._mark_broken(parameter['error'])
+        elif self.onlogpayload:
+            self._cmdwait()
+            payload = self.onlogpayload
+            payload_type = self.onlogpayloadtype
+            self.incommand = _monotonic_time() + self._getmaxtimeout()
+            self.onlogpayload = None
+            self.send_payload(payload, payload_type)
         while self.logonwaiters:
             waiter = self.logonwaiters.pop()
             waiter(parameter)
-        if self.onlogpayload:
-            self.lastpayload = self.onlogpayload
-            self.last_payload_type = self.onlogpayloadtype
-            self.onlogpayload = None
-            self.send_payload()
 
     def _initsession(self):
         # NOTE(jbjohnso): this number can be whatever we want.
@@ -751,26 +756,36 @@ class Session(object):
         while incrementtime < self.maxtimeout:
             cumulativetime += incrementtime
             incrementtime += 1
-        return cumulativetime + 1
+        return (cumulativetime + 1) * (self.logontries + 1)
 
     def _cmdwait(self):
         while self._isincommand():
             _io_wait(self._isincommand(), self.sockaddr, self.evq)
 
     def awaitresponse(self, retry, netfn, command):
-        while (retry and unmatched(self.lastresponse, netfn, command)
-                and (self.logged or self.onlogpayload)):
-            timeout = self.expiration - _monotonic_time()
-            _io_wait(timeout, self.sockaddr)
-            while self.iterwaiters:
-                waiter = self.iterwaiters.pop()
-                waiter({'success': True})
-            self.process_pktqueue()
-            with util.protect(WAITING_SESSIONS):
-                if (self in self.waiting_sessions
-                        and self.expiration < _monotonic_time()):
-                    self.waiting_sessions.pop(self, None)
-                    self._timedout()
+        self.awaitingresponse = True
+        try:
+            alltimeout = _monotonic_time() + (self._getmaxtimeout() * 2)
+            while (retry and unmatched(self.lastresponse, netfn, command)
+                    and (self.logging or self.logged or self.onlogpayload)):
+                timeout = self.expiration - _monotonic_time()
+                _io_wait(timeout, self.sockaddr)
+                while self.iterwaiters:
+                    waiter = self.iterwaiters.pop()
+                    waiter({'success': True})
+                self.process_pktqueue()
+                if _monotonic_time() > alltimeout:
+                    self._mark_broken()
+                    raise exc.IpmiException('Session no longer connected')
+                with util.protect(WAITING_SESSIONS):
+                    if (self in self.waiting_sessions
+                            and self.expiration < _monotonic_time()):
+                        self.waiting_sessions.pop(self, None)
+                        if not self.lastpayload and not self.logging:
+                            return
+                        self._timedout()
+        finally:
+            self.awaitingresponse = False
 
     def raw_command(self,
                     netfn,
@@ -782,15 +797,19 @@ class Session(object):
                     timeout=None,
                     callback=None,
                     rslun=0):
+        while (self.logging and not self.logged
+                and _monotonic_time() < self.logoutexpiry):
+            self.pause(1)
         if not self.logged:
             if (self.logoutexpiry is not None
                     and _monotonic_time() > self.logoutexpiry):
                 self._mark_broken()
             raise exc.IpmiException('Session no longer connected')
-        self._cmdwait()
-        if not self.logged:
-            raise exc.IpmiException('Session no longer connected')
-        self.incommand = _monotonic_time() + self._getmaxtimeout()
+        with util.protect(self.atomicop):
+            self._cmdwait()
+            if not self.logged:
+                raise exc.IpmiException('Session no longer connected')
+            self.incommand = _monotonic_time() + self._getmaxtimeout()
         self.lastresponse = None
         if callback is None:
             self.ipmicallback = self._generic_callback
@@ -1038,7 +1057,7 @@ class Session(object):
     def _req_priv_level(self):
         self.logged = 1
         self.logoutexpiry = None
-        self.maxtimeout = 2  # Switch quickly to the relogin recovery
+        self.maxtimeout = 4  # Switch quickly to the relogin recovery
         self.logontries = 1  # have one relogin waiting to heal
         response = self.raw_command(netfn=0x6, command=0x3b,
                                     data=[self.privlevel])
@@ -1128,7 +1147,7 @@ class Session(object):
                                         data=[0x8e, self.privlevel])
 
     def login(self):
-        self.logontries = 2
+        self.logontries = 1
         self._initsession()
         self._get_channel_auth_cap()
 
@@ -1271,6 +1290,7 @@ class Session(object):
         def _keptalive(response):
             self._generic_callback(response)
             response = self.lastresponse
+            self.lastresponse = None
             self.incommand = False
             while self.evq:
                 self.evq.popleft().set()
@@ -1281,7 +1301,8 @@ class Session(object):
 
     def _keepalive(self):
         """Performs a keepalive to avoid idle disconnect"""
-
+        if self.awaitingresponse:
+            return
         try:
             keptalive = False
             if self._customkeepalives:
@@ -1594,6 +1615,7 @@ class Session(object):
             payload=payload, payload_type=constants.payload_types['rakp3'])
 
     def _relog(self):
+        self.logging = True
         self._initsession()
         self.logontries -= 1
         return self._get_channel_auth_cap()
@@ -1743,9 +1765,12 @@ class Session(object):
             else:
                 self.onlogpayload = self.lastpayload
                 self.onlogpayloadtype = self.last_payload_type
+                self.maxtimeout = 6
                 self._relog()
+                return
         elif self.sessioncontext == 'FAILED':
             self.lastpayload = None
+            self.onlogpayload = None
             self.nowait = False
             return
         if self.sessioncontext == 'OPENSESSION':
@@ -1759,7 +1784,6 @@ class Session(object):
             # If we can't be sure which RAKP was dropped or if RAKP3/4 was just
             # delayed, the most reliable thing to do is rewind and start over
             # bmcs do not take kindly to receiving RAKP1 or RAKP3 twice
-            self.lastpayload = None
             self._relog()
         else:  # in IPMI case, the only recourse is to act as if the packet is
             # idempotent.  SOL has more sophisticated retry handling
