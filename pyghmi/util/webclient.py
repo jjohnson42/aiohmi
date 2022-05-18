@@ -151,6 +151,11 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         if '[' not in host and '%' in host and 'Host'not in self.stdheaders:
             self.stdheaders['Host'] = '[' + host[:host.find('%')] + ']'
 
+    def __del__(self):
+        if self.sock:
+            self.sock.close()
+            self.sock = None
+
     def dupe(self):
         return SecureHTTPConnection(self.thehost, self.theport, clone=self,
                                     timeout=self.mytimeout)
