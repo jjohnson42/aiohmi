@@ -1485,9 +1485,12 @@ class Command(object):
         # identify the correct resource ahead of time.
         # As such it's OEM specific until the standard
         # provides a better way.
-        bmcinfo = self._do_web_request(self._bmcurl)
-        vmcoll = bmcinfo.get('VirtualMedia', {}).get('@odata.id', None)
-        vmurls = None
+        vmurls = []
+        vmcoll = self.sysinfo.get(
+            'VirtualMedia', {}).get('@odata.id', None)
+        if not vmcoll:
+            vmcoll = self.bmcinfo.get(
+                'VirtualMedia', {}).get('@odata.id', None)
         if vmcoll:
             vmlist = self._do_web_request(vmcoll)
             vmurls = [x['@odata.id'] for x in vmlist.get('Members', [])]
@@ -1517,12 +1520,14 @@ class Command(object):
             break
 
     def detach_remote_media(self):
-        bmcinfo = self._do_web_request(self._bmcurl)
-        vmcoll = bmcinfo.get('VirtualMedia', {}).get('@odata.id', None)
         try:
             self.oem.detach_remote_media()
         except exc.BypassGenericBehavior:
             return
+        vmcoll = self.sysinfo.get('VirtualMedia', {}).get('@odata.id', None)
+        if not vmcoll:
+            bmcinfo = self._do_web_request(self._bmcurl)
+            vmcoll = bmcinfo.get('VirtualMedia', {}).get('@odata.id', None)
         if vmcoll:
             vmlist = self._do_web_request(vmcoll)
             vmurls = [x['@odata.id'] for x in vmlist.get('Members', [])]
