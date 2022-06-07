@@ -568,6 +568,30 @@ class SMMClient(object):
             }
         except Exception:
             pass
+        try:
+            chassisvpd = self.ipmicmd.xraw_command(0x32, 0xb0, data=(5, 0))
+            chassisvpd = bytearray(chassisvpd['data'][2:])
+            chassisvpd = bytes(chassisvpd).strip()
+            if not isinstance(chassisvpd, str):
+                chassisvpd = chassisvpd.decode('utf8')
+            settings['chassis_model'] = {
+                'value': chassisvpd,
+                'help': ('Configure the chassis model number')
+            }
+        except Exception:
+            pass
+        try:
+            chassisvpd = self.ipmicmd.xraw_command(0x32, 0xb0, data=(5, 1))
+            chassisvpd = bytearray(chassisvpd['data'][2:])
+            chassisvpd = bytes(chassisvpd).strip()
+            if not isinstance(chassisvpd, str):
+                chassisvpd = chassisvpd.decode('utf8')
+            settings['chassis_serial'] = {
+                'value': chassisvpd,
+                'help': ('Configure the chassis serial number')
+            }
+        except Exception:
+            pass
         return settings
 
     def set_bay_cap(self, baynum, val):
@@ -589,6 +613,8 @@ class SMMClient(object):
         powercfg = [None, None]
         sendhost = None
         sendvci = None
+        newserial = None
+        newmodel = None
         for key in changeset:
             if not key:
                 raise pygexc.InvalidParameterValue('Empty key is invalid')
@@ -620,6 +646,10 @@ class SMMClient(object):
                 sendvci = stringtoboolean(
                     changeset[key]['value'],
                     'dhcp_sends_vendor_class_identifier')
+            if fnmatch.fnmatch('chassis_serial', key.lower()):
+                newserial = changeset[key]['value']
+            if fnmatch.fnmatch('chassis_model', key.lower()):
+                newmodel = changeset[key]['value']
             # Variant low 8 bits is the height in U of chassis, so double that
             #  to get maxbays
             numbays = (self.smm_variant & 0x0f) << 1
@@ -672,6 +702,14 @@ class SMMClient(object):
         if sendvci is not None:
             sendvci = 1 if sendvci else 0
             self.ipmicmd.xraw_command(0xc, 1, data=[1, 0xc6, sendvci])
+        if newserial:
+            newserial = newserial.ljust(10).encode('utf8')
+            cmdata = b'\x05\x01' + newserial
+            self.ipmicmd.xraw_command(0x32, 0xaf, data=cmdata)
+        if newmodel:
+            newmodel = newmodel.ljust(10).encode('utf8')
+            cmdata = b'\x05\x00' + newmodel
+            self.ipmicmd.xraw_command(0x32, 0xaf, data=cmdata)
 
     def set_user_priv(self, uid, priv):
         if priv.lower() == 'administrator':
