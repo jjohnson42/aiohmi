@@ -1493,7 +1493,7 @@ class Session(object):
 
     def _got_rmcp_response(self, data):
         # see RMCP+ open session response table
-        if not (self.sessioncontext and self.sessioncontext != "Established"):
+        if not (self.sessioncontext and self.sessioncontext != "ESTABLISHED"):
             return -9
             # ignore payload as we are not in a state valid it
         if data[0] != self.rmcptag:
@@ -1763,8 +1763,9 @@ class Session(object):
                 self._mark_broken()
                 return
             else:
-                self.onlogpayload = self.lastpayload
-                self.onlogpayloadtype = self.last_payload_type
+                if self.sessioncontext == 'ESTABLISHED':
+                    self.onlogpayload = self.lastpayload
+                    self.onlogpayloadtype = self.last_payload_type
                 self.maxtimeout = 6
                 self._relog()
                 return
