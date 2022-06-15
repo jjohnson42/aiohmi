@@ -1763,10 +1763,11 @@ class Session(object):
                 self._mark_broken()
                 return
             else:
+                self.maxtimeout = 6
                 if self.sessioncontext == 'ESTABLISHED':
                     self.onlogpayload = self.lastpayload
                     self.onlogpayloadtype = self.last_payload_type
-                self.maxtimeout = 6
+                    self.maxtimeout = 2
                 self._relog()
                 return
         elif self.sessioncontext == 'FAILED':
