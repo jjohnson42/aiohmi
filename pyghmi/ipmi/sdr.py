@@ -416,8 +416,6 @@ class SDREntry(object):
             # or hyphen, so go with space
             self.unit_mod = " "
         self.percent = ''
-        # two bytes of assertion event mask / lower threshold reading mask
-        self.assertion_reading_mask = entry[9:11]
         if entry[15] & 1 == 1:
             self.percent = '% '
         if self.sensor_type_number == 0xb:
@@ -512,43 +510,41 @@ class SDREntry(object):
         output['health'] = const.Health.Ok
         if discrete:
             for state in range(8):
-                if reading[2] & (0b1 << state) & \
-                        self.assertion_reading_mask[0]:
+                if reading[2] & (0b1 << state):
                     statedesc, health = self._decode_state(state)
                     output['health'] |= health
                     output['states'].append(statedesc)
                     output['state_ids'].append(self.assert_trap_value(state))
             if len(reading) > 3:
                 for state in range(7):
-                    if reading[3] & (0b1 << state) & \
-                            self.assertion_reading_mask[0]:
+                    if reading[3] & (0b1 << state):
                         statedesc, health = self._decode_state(state + 8)
                         output['health'] |= health
                         output['states'].append(statedesc)
                         output['state_ids'].append(
                             self.assert_trap_value(state + 8))
         else:
-            if reading[2] & 0b1 & self.assertion_reading_mask[0]:
+            if reading[2] & 0b1:
                 output['health'] |= const.Health.Warning
                 output['states'].append(lower + " non-critical threshold")
                 output['state_ids'].append(self.assert_trap_value(1))
-            if reading[2] & 0b10 & self.assertion_reading_mask[0]:
+            if reading[2] & 0b10:
                 output['health'] |= const.Health.Critical
                 output['states'].append(lower + " critical threshold")
                 output['state_ids'].append(self.assert_trap_value(2))
-            if reading[2] & 0b100 & self.assertion_reading_mask[0]:
+            if reading[2] & 0b100:
                 output['health'] |= const.Health.Failed
                 output['states'].append(lower + " non-recoverable threshold")
                 output['state_ids'].append(self.assert_trap_value(3))
-            if reading[2] & 0b1000 & self.assertion_reading_mask[0]:
+            if reading[2] & 0b1000:
                 output['health'] |= const.Health.Warning
                 output['states'].append(upper + " non-critical threshold")
                 output['state_ids'].append(self.assert_trap_value(4))
-            if reading[2] & 0b10000 & self.assertion_reading_mask[0]:
+            if reading[2] & 0b10000:
                 output['health'] |= const.Health.Critical
                 output['states'].append(upper + " critical threshold")
                 output['state_ids'].append(self.assert_trap_value(5))
-            if reading[2] & 0b100000 & self.assertion_reading_mask[0]:
+            if reading[2] & 0b100000:
                 output['health'] |= const.Health.Failed
                 output['states'].append(upper + " non-recoverable threshold")
                 output['state_ids'].append(self.assert_trap_value(6))
