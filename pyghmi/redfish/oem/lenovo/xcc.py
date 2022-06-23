@@ -92,6 +92,7 @@ class OEMHandler(generic.OEMHandler):
         super(OEMHandler, self).__init__(sysinfo, sysurl, webclient, cache,
                                          gpool)
         self._wc = None
+        self.weblogging = False
         self.updating = False
         self.datacache = {}
 
@@ -698,12 +699,30 @@ class OEMHandler(generic.OEMHandler):
             if pool.disks:
                 self._create_array(pool)
 
+    def weblogout(self):
+        if self._wc:
+            try:
+                self._wc.grab_json_response(self.logouturl)
+            except Exception:
+                pass
+            self._wc = None
+
     @property
     def wc(self):
-        if (not self._wc or (self._wc.vintage
-                             and self._wc.vintage < util._monotonic_time()
-                             - 30)):
-            self._wc = self.get_webclient()
+        while self.weblogging:
+            time.sleep(0.25)
+        self.weblogging = True
+        try:
+            if (not self._wc or (self._wc.vintage
+                                and self._wc.vintage < util._monotonic_time()
+                                - 30)):
+                if not self.updating and self._wc:
+                    # in case the existing session is still valid
+                    # dispose of the session
+                    self.weblogout()
+                self._wc = self.get_webclient()
+        finally:
+            self.weblogging = False
         return self._wc
 
     def get_webclient(self, login=True):

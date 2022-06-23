@@ -137,6 +137,7 @@ class IMMClient(object):
     DEVNO = 'generic.devNo'
 
     def __init__(self, ipmicmd):
+        self.weblogging = False
         self.ipmicmd = weakref.proxy(ipmicmd)
         self.updating = False
         self.imm = ipmicmd.bmc
@@ -395,14 +396,20 @@ class IMMClient(object):
 
     @property
     def wc(self):
-        if (not self._wc or (self._wc.vintage
-                             and self._wc.vintage < util._monotonic_time()
-                             - 30)):
-            if not self.updating and self._wc:
-                # in case the existing session is still valid
-                # dispose of the session
-                self.weblogout()
-            self._wc = self.get_webclient()
+        while self.weblogging:
+            ipmisession.Session.pause(0.25)
+        self.weblogging = True
+        try:
+            if (not self._wc or (self._wc.vintage
+                                and self._wc.vintage < util._monotonic_time()
+                                - 30)):
+                if not self.updating and self._wc:
+                    # in case the existing session is still valid
+                    # dispose of the session
+                    self.weblogout()
+                self._wc = self.get_webclient()
+        finally:
+            self.weblogging = False
         return self._wc
 
     def fetch_grouped_properties(self, groupinfo):
