@@ -1557,24 +1557,26 @@ class XCCClient(IMMClient):
 
     def get_oem_sensor_names(self, ipmicmd):
         oemsensornames = super(XCCClient, self).get_oem_sensor_names(ipmicmd)
-        therminfo = self.grab_cacheable_json(
-            '/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
-        if therminfo:
-            for name in sorted(therminfo.get('items', [[]])[0]):
-                if 'DIMM' in name and 'Temp' in name:
-                    oemsensornames = oemsensornames + (name,)
         return oemsensornames
+        # therminfo = self.grab_cacheable_json(
+        #     '/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
+        # if therminfo:
+        #     for name in sorted(therminfo.get('items', [[]])[0]):
+        #         if 'DIMM' in name and 'Temp' in name:
+        #             oemsensornames = oemsensornames + (name,)
+        # return oemsensornames
 
     def get_oem_sensor_descriptions(self, ipmicmd):
         oemdesc = [{'name': x, 'type': 'Energy'} for x in super(
             XCCClient, self).get_oem_sensor_names(ipmicmd)]
-        therminfo = self.grab_cacheable_json(
-            '/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
-        if therminfo:
-            for name in sorted(therminfo['items'][0]):
-                if 'DIMM' in name and 'Temp' in name:
-                    oemdesc.append({'name': name, 'type': 'Temperature'})
         return oemdesc
+        # therminfo = self.grab_cacheable_json(
+        #     '/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
+        # if therminfo:
+        #     for name in sorted(therminfo['items'][0]):
+        #         if 'DIMM' in name and 'Temp' in name:
+        #             oemdesc.append({'name': name, 'type': 'Temperature'})
+        # return oemdesc
 
     def get_oem_sensor_reading(self, name, ipmicmd):
         if 'Energy' in name:
