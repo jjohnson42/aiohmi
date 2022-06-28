@@ -1444,7 +1444,7 @@ class XCCClient(IMMClient):
         url = '/api/function/raid_conf?params=raidlink_GetDefaultVolProp'
         args = (url, cid, 0, params['drives'])
         props = self.wc.grab_json_response(','.join([str(x) for x in args]))
-        if not props:  # newer firmwarerequires raidlevel too
+        if not props:  # newer firmware requires raidlevel too
             args = (url, cid, params['raidlevel'], 0, params['drives'])
             props = self.wc.grab_json_response(','.join([str(x) for x in args]))
         props = props['items'][0]
@@ -1517,13 +1517,14 @@ class XCCClient(IMMClient):
         parms = {'raidlink_AddNewVolWithNaAsync': arglist}
         rsp = self.wc.grab_json_response(url, parms)
         if rsp['return'] == 14:  # newer firmware
-            arglist = '{0},{1},{2},{3},{4},{5},{6},'.format(
-                cnum, params['raidlevel'], params['spans'],
-                params['perspan'], 0, params['drives'], params['hotspares'])
-            arglist += ''.join(vols)
-            parms = {'raidlink_AddNewVolWithNaAsync': arglist}
-            rsp = self.wc.grab_json_response(url, parms)
-            if not rsp: # Purley
+            if 'supported_cpwb' in props: # Whitley
+                arglist = '{0},{1},{2},{3},{4},{5},{6},'.format(
+                    cnum, params['raidlevel'], params['spans'],
+                    params['perspan'], 0, params['drives'], params['hotspares'])
+                arglist += ''.join(vols)
+                parms = {'raidlink_AddNewVolWithNaAsync': arglist}
+                rsp = self.wc.grab_json_response(url, parms)
+            else: # Purley
                 if cid[2] == 2:
                     cnum = cid[1]
                 arglist = '{0},{1},{2},{3},{4},{5},'.format(
