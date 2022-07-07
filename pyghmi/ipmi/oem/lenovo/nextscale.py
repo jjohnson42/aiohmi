@@ -599,6 +599,14 @@ class SMMClient(object):
         payload = struct.pack('<BH', baynum, int(val))
         self.ipmicmd.xraw_command(0x32, 0x9e, data=payload)
 
+    def augment_zerofru(self, zerofru, variant):
+        if variant & 0x20 != 0x20:
+            return
+        model = self.ipmicmd.xraw_command(
+            netfn=0x32, command=0xb0, data=[5, 11])['data'][2:]
+        zerofru['Product name'] = bytes(model).strip()
+        zerofru['Manufacturer'] = 'Lenovo'
+
     def set_bay_cap_active(self, baynum, val):
         currstate = self.ipmicmd.xraw_command(0x32, 0xa0, data=[baynum])
         currstate = currstate['data']

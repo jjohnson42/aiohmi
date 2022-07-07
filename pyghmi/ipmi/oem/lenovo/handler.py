@@ -1342,6 +1342,8 @@ class OEMHandler(generic.OEMHandler):
                 else:
                     zerofru['UUID'] = util.decode_wireformat_uuid(
                         guiddata['data'])
+        if self.is_fpc:
+            self.smmhandler.augment_zerofru(zerofru, self._fpc_variant)
         return self.process_fru(zerofru)
 
     def get_ami_sensor_reading(self, sensorname):
