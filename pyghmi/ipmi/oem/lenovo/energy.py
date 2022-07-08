@@ -27,6 +27,15 @@ class EnergyManager(object):
         # We start with a 'find firmware instance' to test the water and
         # get the handle (which has always been the same, but just in case
         self.iana = bytearray(b'\x66\x4a\x00')
+        self._usefapm = False
+        try:
+            rsp = ipmicmd.xraw_command(netfn=0x3a, command=0x32, data=[4, 2, 0, 0, 0])
+            self.supportedmeters = ('DC Energy',)
+            self._usefapm = True
+            return
+        except pygexc.IpmiException:
+            pass
+
         try:
             rsp = ipmicmd.xraw_command(netfn=0x2e, command=0x82,
                                        data=self.iana + b'\x00\x00\x01')
@@ -46,6 +55,12 @@ class EnergyManager(object):
             self.supportedmeters = ('AC Energy', 'DC Energy')
         else:
             self.supportedmeters = ('DC Energy',)
+
+    def get_fapm_energy(self, ipmicmd):
+        rsp = ipmicmd.xraw_command(netfn=0x3a, command=0x32, data=[4, 2, 0, 0, 0])
+        j, mj = struct.unpack('<IH', rsp['data'][2:8])
+        mj = mj + (j * 1000)
+        return float(mj / 1000000 / 3600)
 
     def get_energy_precision(self, ipmicmd):
         rsp = ipmicmd.xraw_command(
@@ -67,6 +82,8 @@ class EnergyManager(object):
             raise
 
     def get_dc_energy(self, ipmicmd):
+        if self._usefapm:
+            return self.get_fapm_energy(ipmicmd)
         rsp = ipmicmd.xraw_command(
             netfn=0x2e, command=0x81,
             data=self.iana + self.modhandle + b'\x01\x82\x00\x08')
