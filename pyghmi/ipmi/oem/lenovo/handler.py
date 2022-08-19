@@ -386,7 +386,7 @@ class OEMHandler(generic.OEMHandler):
 
     def set_user_access(self, uid, channel, callback, link_auth, ipmi_msg,
                         privilege_level):
-        if self.is_fpc and self._fpc_variant == 2:
+        if self.is_fpc and self._fpc_variant != 6:
             self.smmhandler.set_user_priv(uid, privilege_level)
 
     @property
