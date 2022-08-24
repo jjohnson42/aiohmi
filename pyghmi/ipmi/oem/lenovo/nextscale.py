@@ -403,6 +403,7 @@ class SMMClient(object):
         'password_login_failures': 'passwordFailAllowdNum',
         'password_min_length': 'passwordMinLength',
         'password_lockout_period': 'passwordLockoutTimePeriod',
+        'timezone': 'timeZone',
     }
 
     fanmodes = {
@@ -422,13 +423,17 @@ class SMMClient(object):
             ('get=passwordMinLength,passwordForceChange,passwordDurationDays,'
              'passwordExpireWarningDays,passwordChangeInterval,'
              'passwordReuseCheckNum,passwordFailAllowdNum,'
-             'passwordLockoutTimePeriod'))
+             'passwordLockoutTimePeriod,timeZone'))
         rsp = wc.getresponse()
         rspbody = rsp.read()
         accountinfo = fromstring(rspbody)
         for rule in self.rulemap:
             ruleinfo = accountinfo.find(self.rulemap[rule])
             if ruleinfo is not None:
+                try:
+                    val = int(ruleinfo.text)
+                except ValueError:
+                    val = ruleinfo.text
                 settings[rule] = {'value': int(ruleinfo.text)}
         dwc = self.ipmicmd.xraw_command(0x32, 0x94)
         dwc = bytearray(dwc['data'])
