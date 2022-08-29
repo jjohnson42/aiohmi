@@ -434,7 +434,7 @@ class SMMClient(object):
                     val = int(ruleinfo.text)
                 except ValueError:
                     val = ruleinfo.text
-                settings[rule] = {'value': int(ruleinfo.text)}
+                settings[rule] = {'value': val}
         dwc = self.ipmicmd.xraw_command(0x32, 0x94)
         dwc = bytearray(dwc['data'])
         if len(dwc) not in (3, 4) or dwc[0] == 1:
