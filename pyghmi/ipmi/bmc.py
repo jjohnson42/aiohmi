@@ -30,6 +30,9 @@ class Bmc(serversession.IpmiServer):
     sol = None
     iohandler = None
 
+    def get_system_guid(self):
+        raise NotImplementedError
+
     def cold_reset(self):
         raise NotImplementedError
 
@@ -166,6 +169,9 @@ class Bmc(serversession.IpmiServer):
                     return self.send_device_id(session)
                 elif request['command'] == 2:  # cold reset
                     return session.send_ipmi_response(code=self.cold_reset())
+                elif request['command'] == 0x37:  # get system guid
+                    guid = self.get_system_guid()
+                    return session.send_ipmi_response(code=0x00, data=guid.bytes_le)
                 elif request['command'] == 0x48:  # activate payload
                     return self.activate_payload(request, session)
                 elif request['command'] == 0x49:  # deactivate payload
