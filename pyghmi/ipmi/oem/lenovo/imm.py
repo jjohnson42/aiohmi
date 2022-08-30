@@ -1680,8 +1680,10 @@ class XCCClient(IMMClient):
                     'Given location was unreachable by the XCC')
             raise Exception('Unhandled return: ' + repr(rt))
         if not self._keepalivesession:
+            # keep at least one session alive so that the
+            # XCC doesn't unmount the media
             self._keepalivesession = self._wc
-        self._wc = None
+            self._wc = None
 
     def keepalive(self):
         if self.fwo and util._monotonic_time() - self.fwovintage > 15:
@@ -1803,7 +1805,13 @@ class XCCClient(IMMClient):
                 yield firm
 
     def detach_remote_media(self):
-        self._keepalivesession = None
+        if self._keepalivesession:
+            # log out from the extra session
+            try:
+                self._keepalivesession.grab_json_response(self.logouturl)
+            except Exception:
+                pass
+            self._keepalivesession = None
         rt = self.wc.grab_json_response('/api/providers/rp_vm_remote_getdisk')
         if 'items' in rt:
             slots = []
