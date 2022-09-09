@@ -1233,6 +1233,8 @@ class OEMHandler(generic.OEMHandler):
             return self.immhandler.clear_bmc_configuration()
         elif self.is_fpc:
             return self.smmhandler.clear_bmc_configuration()
+        elif self.has_tsma:
+            return self.tsmahandler.clear_bmc_configuration()
         return super(OEMHandler, self).clear_system_configuration()
 
     def clear_system_configuration(self):

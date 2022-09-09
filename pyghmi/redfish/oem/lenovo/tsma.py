@@ -114,6 +114,27 @@ class TsmHandler(generic.OEMHandler):
         self.tsm = webclient.thehost
         self._certverify = webclient._certverify
 
+    def clear_bmc_configuration(self):
+        wc = self.wc
+        rsp, status = wc.grab_json_response_with_status(
+                '/api/maintenance/restore_defaults',
+                {"id": 1,
+                 "sdr": 0,
+                 "fru": 1,
+                 "sel": 1,
+                 "ipmi": 1,
+                 "network": 1,
+                 "ntp": 1,
+                 "snmp": 1,
+                 "ssh": 1,
+                 "kvm": 1,
+                 "authentication": 1,
+                 "syslog": 0,
+                 "web": 1,
+                 "extlog": 0,
+                 "redfish": 1},
+                method='PUT')
+
     def get_bmc_configuration(self):
         wc = self.wc
         rsp, status = wc.grab_json_response_with_status(
