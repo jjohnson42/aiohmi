@@ -258,7 +258,7 @@ class OEMHandler(generic.OEMHandler):
         if 'cryptography_mode' in secparms:
             secmode = secparms['cryptography_mode'].lower()
             for sm in sec_mode:
-                if sec_mode[sm].lower().startswith(secmode):
+                if sec_mode[sm][0].lower().startswith(secmode):
                     secmode = sm
                     break
             else:
