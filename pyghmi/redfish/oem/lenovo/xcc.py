@@ -43,6 +43,22 @@ funtypes = {
     12: 'Fabric Controller',
 }
 
+tls_ver = {
+    1: 'TLS1.1',
+    2: 'TLS1.2',
+    3: 'TLS1.3'
+}
+
+sec_mode = {
+    0: ('Compatible',
+        'Maximum compatibility of cipher suites, without NIST compliance'),
+    1: ('NIST',
+        'Maximum compatibility within the constraints of being NIST '
+        'compliant with perfect forward secrecy'),
+    2: ('High', 'Support only modern and strong ciphers, NIST '
+                'compliant with perfect forward security'),
+}
+
 
 def naturalize_string(key):
     """Analyzes string in a human way to enable natural sort
@@ -138,6 +154,26 @@ class OEMHandler(generic.OEMHandler):
             settings['presence_assert'] = {
                 'value': 'Enable' if asserted else 'Disable'
             }
+        secparms = self.wc.grab_json_response('/api/providers/imm_tls_mode')
+        if secparms and secparms.get('return', 1) == 0:
+            tlsmode = secparms.get('tls_ver', -1)
+            if tlsmode in tls_ver:
+                settings['minimum_tls_version'] = {
+                    'value': tls_ver[tlsmode],
+                    'help': 'The minimum TLS level allowed by the XCC when '
+                            'communicating',
+                    'possible': [tls_ver[x] for x in tls_ver],
+                }
+            secmode = secparms.get('sec_mode', -1)
+            if secmode in sec_mode:
+                settings['cryptography_mode'] = {
+                    'value': sec_mode[secmode][0],
+                    'help': 'Select cryptography mode, compatible allows all '
+                            'supported ciphers, NIST restricts to NIST '
+                            'compliant ciphers, and High further restricts '
+                            'to a modern subset of NIST compliance',
+                    'possible': [sec_mode[x][0] for x in sec_mode],
+                }
         usbparms = self.wc.grab_json_response('/api/dataset/imm_usb')
         if usbparms:
             usbparms = usbparms.get('items', [{}])[0]
@@ -177,6 +213,7 @@ class OEMHandler(generic.OEMHandler):
     def set_bmc_configuration(self, changeset):
         ruleset = {}
         usbsettings = {}
+        secparms = {}
         for key in changeset:
             if isinstance(changeset[key], six.string_types):
                 changeset[key] = {'value': changeset[key]}
@@ -203,13 +240,56 @@ class OEMHandler(generic.OEMHandler):
                     'usb_ethernet', 'usb_ethernet_port_forwarding',
                     'usb_forwarded_ports'):
                 usbsettings[key] = changeset[key]['value']
+            elif key.lower() in ('cryptography_mode', 'minimum_tls_version'):
+                secparms[key] = changeset[key]['value']
             else:
                 raise pygexc.InvalidParameterValue(
                     '{0} not a known setting'.format(key))
         if usbsettings:
             self.apply_usb_configuration(usbsettings)
+        if secparms:
+            self.apply_sec_configuration(secparms)
         if ruleset:
             self.wc.grab_json_response('/api/dataset', ruleset)
+
+    def apply_sec_configuration(self, secparms):
+        secmode = None
+        tlsver = None
+        if 'cryptography_mode' in secparms:
+            secmode = secparms['cryptography_mode'].lower()
+            for sm in sec_mode:
+                if sec_mode[sm].lower().startswith(secmode):
+                    secmode = sm
+                    break
+            else:
+                raise pygexc.InvalidParameterValue(
+                    '"{0}" is not a recognized cryptography mode'.format(
+                        secparms['cryptography_mode']
+                    )
+                )
+        if 'minimum_tls_version' in secparms:
+            tlsver = secparms['minimum_tls_version'].lower()
+            for tv in tls_ver:
+                if tls_ver[tv].lower() == tlsver:
+                    tlsver = tv
+                    break
+            else:
+                raise pygexc.InvalidParameterValue(
+                    '"{0}" is not a recognized TLS version'.format(
+                        secparms['minimum_tls_version'])
+                )
+        if len(secparms) < 2:
+            currsecparms = self.wc.grab_json_response(
+                '/api/providers/imm_tls_mode')
+            del currsecparms['return']
+        else:
+            currsecparms = {}
+        if secmode is not None:
+            currsecparms['sec_mode'] = secmode
+        if tlsver is not None:
+            currsecparms['tls_ver'] = tlsver
+        self.wc.grab_json_response('/api/providers/imm_tls_mode',
+                                   currsecparms)
 
     def apply_usb_configuration(self, usbsettings):
         def numify(val):
