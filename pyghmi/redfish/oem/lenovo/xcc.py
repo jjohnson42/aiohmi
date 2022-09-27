@@ -875,18 +875,31 @@ class OEMHandler(generic.OEMHandler):
                 'XCC does not have required license for operation')
 
     def upload_media(self, filename, progress=None, data=None):
-        xid = random.randint(0, 1000000000)
+        wc = self.wc
         self._refresh_token()
-        uploadthread = webclient.FileUploader(
-            self.wc, '/upload?X-Progress-ID={0}'.format(xid), filename, data)
+        rsp, statu = wc.grab_json_response_with_status('/rdocupload')
+        newmode = False
+        if statu == 404:
+            xid = random.randint(0, 1000000000)
+            uploadthread = webclient.FileUploader(
+                wc, '/upload?X-Progress-ID={0}'.format(xid), filename, data)
+        else:
+            newmode = True
+            uploadthread = webclient.FileUploader(
+                wc, '/rdocupload', filename, data)
         uploadthread.start()
         while uploadthread.isAlive():
             uploadthread.join(3)
-            rsp = self.wc.grab_json_response(
-                '/upload/progress?X-Progress-ID={0}'.format(xid))
-            if progress and rsp['state'] == 'uploading':
-                progress({'phase': 'upload',
-                          'progress': 100.0 * rsp['received'] / rsp['size']})
+            if newmode:
+                if progress:
+                    progress({'phase': 'upload',
+                          'progress': 100 * wc.get_upload_progress()})
+            else:
+                rsp = self.wc.grab_json_response(
+                    '/upload/progress?X-Progress-ID={0}'.format(xid))
+                if progress and rsp['state'] == 'uploading':
+                    progress({'phase': 'upload',
+                            'progress': 100.0 * rsp['received'] / rsp['size']})
             self._refresh_token()
         rsp = json.loads(uploadthread.rsp)
         if progress:
