@@ -57,6 +57,15 @@ class OEMHandler(object):
         self._urlcache = cache
         self.webclient = webclient
 
+    def user_delete(self, uid):
+        # Redfish doesn't do so well with Deleting users either...
+        # Blanking the username seems to be the convention
+        # First, set a bogus password in case the implementation does honor
+        # blank user, at least render such an account harmless
+        self.set_user_password(uid, base64.b64encode(os.urandom(15)))
+        self.set_user_name(uid, '')
+        return True
+
     def set_bootdev(self, bootdev, persist=False, uefiboot=None,
                     fishclient=None):
         """Set boot device to use on next reboot

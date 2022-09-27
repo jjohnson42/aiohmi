@@ -2000,6 +2000,11 @@ class Command(object):
         """
         # TODO(jjohnson2): Provide OEM extensibility to cover user deletion
         self.oem_init()
+        if hasattr(self._oem, 'user_delete'):
+            try:
+                self._oem.user_delete(uid, channel)
+            except exc.BypassGenericBehavior:
+                return
         if hasattr(self._oem, 'user_delete_privilege_level'):
             privilege_level = self._oem.user_delete_privilege_level()
         else:

@@ -383,6 +383,10 @@ class OEMHandler(generic.OEMHandler):
                 raise pygexc.InvalidParameterValue("Index must be 0 or 1")
             return self.tsmahandler.set_ntp_server(server, index)
         return None
+    
+    def user_delete(self, uid, channel):
+        if self.has_xcc:
+            return self.immhandler.user_delete(uid)
 
     def set_user_access(self, uid, channel, callback, link_auth, ipmi_msg,
                         privilege_level):

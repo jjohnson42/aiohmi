@@ -1305,6 +1305,17 @@ class OEMHandler(generic.OEMHandler):
                     license_errors[rsp['return']])
         return self.get_licenses()
 
+    def user_delete(self, uid):
+        userinfo = self.wc.grab_json_response('/api/dataset/imm_users')
+        uidtonamemap = {}
+        for user in userinfo.get('items', [{'users': []}])[0].get('users', []):
+            uidtonamemap[user['users_user_id']] = user['users_user_name']
+        if uid in uidtonamemap:
+            deltarget = '{0},{1}'.format(uid, uidtonamemap[uid])
+            self.wc.grab_json_response('/api/function', {"USER_UserDelete": deltarget})
+            return True
+        return super(OEMHandler, self).user_delete(uid)
+
     def get_user_expiration(self, uid):
         userinfo = self.wc.grab_json_response('/api/dataset/imm_users')
         for user in userinfo['items'][0]['users']:

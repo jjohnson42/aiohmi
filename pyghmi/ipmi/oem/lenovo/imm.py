@@ -927,6 +927,17 @@ class XCCClient(IMMClient):
                 del immsettings[setting]
         return immsettings
 
+    def user_delete(self, uid):
+        uid = uid - 1
+        userinfo = self.wc.grab_json_response('/api/dataset/imm_users')
+        uidtonamemap = {}
+        for user in userinfo.get('items', [{'users': []}])[0].get('users', []):
+            uidtonamemap[user['users_user_id']] = user['users_user_name']
+        if uid in uidtonamemap:
+            deltarget = '{0},{1}'.format(uid, uidtonamemap[uid])
+            self.wc.grab_json_response('/api/function', {"USER_UserDelete": deltarget})
+            raise pygexc.BypassGenericBehavior()
+
     def get_bmc_configuration(self):
         settings = {}
         passrules = self.wc.grab_json_response('/api/dataset/imm_users_global')

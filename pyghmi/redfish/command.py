@@ -463,13 +463,7 @@ class Command(object):
         return True
 
     def user_delete(self, uid):
-        # Redfish doesn't do so well with Deleting users either...
-        # Blanking the username seems to be the convention
-        # First, set a bogus password in case the implementation does honor
-        # blank user, at least render such an account harmless
-        self.set_user_password(uid, base64.b64encode(os.urandom(15)))
-        self.set_user_name(uid, '')
-        return True
+        self.oem.user_delete(uid)
 
     def set_user_name(self, uid, name):
         """Set user name
