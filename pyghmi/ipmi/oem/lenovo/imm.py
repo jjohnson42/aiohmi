@@ -883,6 +883,20 @@ class XCCClient(IMMClient):
         self.ipmicmd.ipmi_session.register_keepalive(self.keepalive, None)
         self.adp_referer = None
 
+    def set_user_access(self, uid, privilege_level):
+        uid = uid - 1
+        role = None
+        if privilege_level == 'administrator':
+            role = 'Administrator'
+        elif privilege_level == 'operator':
+            role = 'Operator'
+        elif privileg_level == 'user':
+            role = 'ReadOnly'
+        if role:
+            self.grab_redfish_response_with_status(
+                '/redfish/v1/AccountService/Accounts/{0}'.format(uid),
+                {'RoleId': role}, method='PATCH')
+
     def reseat(self):
         rsp = self.wc.grab_json_response_with_status(
             '/api/providers/virt_reseat', '{}')

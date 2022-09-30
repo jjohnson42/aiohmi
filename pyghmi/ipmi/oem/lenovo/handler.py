@@ -1316,6 +1316,10 @@ class OEMHandler(generic.OEMHandler):
             return True
         return False
 
+    def set_user_access(self, uid, channel, callback, link_auth, ipmi_msg, privilege_level):
+        if self.has_xcc:
+            self.immhandler.set_user_access(uid, privilege_level)
+
     def process_zero_fru(self, zerofru):
         if (self.oemid['manufacturer_id'] == 19046
                 and self.oemid['product_id'] == 13616):
