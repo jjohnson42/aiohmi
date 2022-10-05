@@ -890,7 +890,7 @@ class XCCClient(IMMClient):
             role = 'Administrator'
         elif privilege_level == 'operator':
             role = 'Operator'
-        elif privileg_level == 'user':
+        elif privilege_level == 'user':
             role = 'ReadOnly'
         if role:
             self.grab_redfish_response_with_status(
