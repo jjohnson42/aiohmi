@@ -60,6 +60,8 @@ class FileUploader(threading.Thread):
         self.formwrap = formwrap
         self.excepterror = excepterror
         super(FileUploader, self).__init__()
+        if not hasattr(self, 'isAlive'):
+            self.isAlive = self.is_alive
 
     def run(self):
         try:
@@ -84,6 +86,8 @@ class FileDownloader(threading.Thread):
         self.savefile = savefile
         self.exc = None
         super(FileDownloader, self).__init__()
+        if not hasattr(self, 'isAlive'):
+            self.isAlive = self.is_alive
 
     def run(self):
         try:
