@@ -26,6 +26,7 @@ import six
 
 import pyghmi.exceptions as pygexc
 import pyghmi.ipmi.private.util as util
+import pyghmi.ipmi.oem.lenovo.config as config
 import pyghmi.media as media
 import pyghmi.redfish.oem.generic as generic
 import pyghmi.storage as storage
@@ -111,6 +112,134 @@ class OEMHandler(generic.OEMHandler):
         self.weblogging = False
         self.updating = False
         self.datacache = {}
+        self.fwc = None
+        self.fwo = None
+
+    def get_system_configuration(self, hideadvanced=True, fishclient=None,
+                                 fetchimm=False):
+        if not self.fwc:
+            self.fwc = config.LenovoFirmwareConfig(self, useipmi=False)
+        try:
+            self.fwo = self.fwc.get_fw_options(fetchimm=fetchimm)
+        except config.Unsupported:
+            return super(OEMHandler, self).get_system_configuration(
+                hideadvanced, fishclient)
+        except Exception:
+            raise Exception('%s failed to retrieve UEFI configuration'
+                            % self.bmcname)
+        self.fwovintage = util._monotonic_time()
+        retcfg = {}
+        for opt in self.fwo:
+            if 'MegaRAIDConfigurationTool' in opt:
+                # Suppress the Avago configuration to be consistent with
+                # other tools.
+                continue
+            if (hideadvanced and self.fwo[opt]['lenovo_protect']
+                    or self.fwo[opt]['hidden']):
+                # Do not enumerate hidden settings
+                continue
+            retcfg[opt] = {}
+            retcfg[opt]['value'] = self.fwo[opt]['current']
+            retcfg[opt]['default'] = self.fwo[opt]['default']
+            retcfg[opt]['help'] = self.fwo[opt]['help']
+            retcfg[opt]['possible'] = self.fwo[opt]['possible']
+            retcfg[opt]['sortid'] = self.fwo[opt]['sortid']
+        return retcfg
+
+    def set_system_configuration(self, changeset, fishclient):
+        if not self.fwc:
+            self.fwc = config.LenovoFirmwareConfig(self, useipmi=False)
+        fetchimm = False
+        if not self.fwo or util._monotonic_time() - self.fwovintage > 30:
+            try:
+                self.fwo = self.fwc.get_fw_options(fetchimm=fetchimm)
+            except config.Unsupported:
+                return super(OEMHandler, self).set_system_configuration(
+                    changeset, fishclient)
+            self.fwovintage = util._monotonic_time()
+        for key in list(changeset):
+            if key not in self.fwo:
+                found = False
+                for rkey in self.fwo:
+                    if fnmatch.fnmatch(rkey.lower(), key.lower()):
+                        changeset[rkey] = changeset[key]
+                        found = True
+                    elif self.fwo[rkey].get('alias', None) != rkey:
+                        calias = self.fwo[rkey]['alias']
+                        if fnmatch.fnmatch(calias.lower(), key.lower()):
+                            changeset[rkey] = changeset[key]
+                            found = True
+                if not found and not fetchimm:
+                    fetchimm = True
+                    self.fwo = self.fwc.get_fw_options(fetchimm=fetchimm)
+                    if key in self.fwo:
+                        continue
+                    else:
+                        found = False
+                        for rkey in self.fwo:
+                            if fnmatch.fnmatch(rkey.lower(), key.lower()):
+                                changeset[rkey] = changeset[key]
+                                found = True
+                            elif self.fwo[rkey].get('alias', None) != rkey:
+                                calias = self.fwo[rkey]['alias']
+                                if fnmatch.fnmatch(
+                                        calias.lower(), key.lower()):
+                                    changeset[rkey] = changeset[key]
+                                    found = True
+                if found:
+                    del changeset[key]
+                else:
+                    raise pygexc.InvalidParameterValue(
+                        '{0} not a known setting'.format(key))
+        self.merge_changeset(changeset)
+        if changeset:
+            try:
+                self.fwc.set_fw_options(self.fwo)
+            finally:
+                self.fwo = None
+                self.fwovintage = 0
+
+    def merge_changeset(self, changeset):
+        for key in changeset:
+            if isinstance(changeset[key], six.string_types):
+                changeset[key] = {'value': changeset[key]}
+            newvalue = changeset[key]['value']
+            if self.fwo[key]['is_list'] and not isinstance(newvalue, list):
+                if '=' in newvalue:
+                    # ASU set a precedent of = delimited settings
+                    # for now, honor that delimiter as well
+                    newvalues = newvalue.split('=')
+                else:
+                    newvalues = newvalue.split(',')
+            else:
+                newvalues = [newvalue]
+            newnewvalues = []
+            for newvalue in newvalues:
+                newv = re.sub(r'\s+', ' ', newvalue)
+                if (self.fwo[key]['possible']
+                        and newvalue not in self.fwo[key]['possible']):
+                    candlist = []
+                    for candidate in self.fwo[key]['possible']:
+                        candid = re.sub(r'\s+', ' ', candidate)
+                        if newv.lower().startswith(candid.lower()):
+                            newvalue = candidate
+                            break
+                        if candid.lower().startswith(newv.lower()):
+                            candlist.append(candidate)
+                    else:
+                        if len(candlist) == 1:
+                            newvalue = candlist[0]
+                        else:
+                            raise pygexc.InvalidParameterValue(
+                                '{0} is not a valid value for {1} '
+                                '({2})'.format(
+                                    newvalue, key,
+                                    ','.join(self.fwo[key]['possible'])))
+                newnewvalues.append(newvalue)
+            if len(newnewvalues) == 1:
+                self.fwo[key]['new_value'] = newnewvalues[0]
+            else:
+                self.fwo[key]['new_value'] = newnewvalues
 
     def reseat_bay(self, bay):
         if bay != -1:
@@ -841,6 +970,11 @@ class OEMHandler(generic.OEMHandler):
             if '_csrf_token' in wc.cookies:
                 wc.set_header('X-XSRF-TOKEN', wc.cookies['_csrf_token'])
             return wc
+
+    def grab_redfish_response_with_status(self, url, body=None, method=None):
+        wc = self.webclient.dupe()
+        res = wc.grab_json_response_with_status(url, body, method=method)
+        return res
 
     def list_media(self, fishclient):
         rt = self.wc.grab_json_response('/api/providers/rp_vm_remote_getdisk')

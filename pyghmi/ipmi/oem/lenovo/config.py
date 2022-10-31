@@ -44,6 +44,8 @@ WRITE_COMMAND = [0x03]
 CLOSE_COMMAND = [0x05]
 SIZE_COMMAND = [0x06]
 
+class Unsupported(Exception):
+    pass
 
 def fromstring(inputdata):
     if b'!entity' in inputdata.lower():
@@ -133,11 +135,14 @@ def _eval_conditional(expression, cfg, setting):
 
 
 class LenovoFirmwareConfig(object):
-    def __init__(self, xc):
+    def __init__(self, xc, useipmi=True):
         if not etree:
             raise Exception("python-lxml and python-eficompressor required "
                             "for this function")
-        self.connection = xc.ipmicmd
+        if useipmi:
+            self.connection = xc.ipmicmd
+        else:
+            self.connection = None
         self.xc = xc
 
     def imm_size(self, filename):
@@ -274,6 +279,8 @@ class LenovoFirmwareConfig(object):
             data = base64.b64decode(data)
             data = EfiCompressor.FrameworkDecompress(data, len(data))
         else:
+            if self.connection is None:
+                raise Unsupported('Not Supported')
             for _ in range(0, 30):
                 filehandle = self.imm_open(cfgfilename)
                 size = self.imm_size(cfgfilename)
@@ -566,6 +573,8 @@ class LenovoFirmwareConfig(object):
             {'Action': 'DSWriteFile', 'Resize': len(data),
              'FileName': 'asu_update.efi', 'Content': bdata})
         if rsp[1] != 204:
+            if self.connection is None:
+                raise Unsupported('Not Supported')
             filehandle = self.imm_open("asu_update.efi", write=True,
                                     size=len(data))
             self.imm_write(filehandle, len(data), data)
