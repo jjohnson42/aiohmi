@@ -203,7 +203,7 @@ class IMMClient(object):
 
     def get_system_configuration(self, hideadvanced=True, fetchimm=False):
         if not self.fwc:
-            self.fwc = config.LenovoFirmwareConfig(self.ipmicmd)
+            self.fwc = config.LenovoFirmwareConfig(self)
         try:
             self.fwo = self.fwc.get_fw_options(fetchimm=fetchimm)
         except Exception:
@@ -230,7 +230,7 @@ class IMMClient(object):
 
     def set_system_configuration(self, changeset):
         if not self.fwc:
-            self.fwc = config.LenovoFirmwareConfig(self.ipmicmd)
+            self.fwc = config.LenovoFirmwareConfig(self)
         fetchimm = False
         if not self.fwo or util._monotonic_time() - self.fwovintage > 30:
             self.fwo = self.fwc.get_fw_options(fetchimm=fetchimm)

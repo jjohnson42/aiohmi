@@ -18,6 +18,7 @@ This contains functions to manage the firmware configuration of Lenovo servers
 """
 
 import ast
+import base64
 import random
 import struct
 
@@ -132,11 +133,12 @@ def _eval_conditional(expression, cfg, setting):
 
 
 class LenovoFirmwareConfig(object):
-    def __init__(self, ipmicmd):
+    def __init__(self, xc):
         if not etree:
             raise Exception("python-lxml and python-eficompressor required "
                             "for this function")
-        self.connection = ipmicmd
+        self.connection = xc.ipmicmd
+        self.xc = xc
 
     def imm_size(self, filename):
         data = bytearray()
@@ -264,15 +266,23 @@ class LenovoFirmwareConfig(object):
             cfgfilename = "config"
         options = {}
         data = None
-        for _ in range(0, 30):
-            filehandle = self.imm_open(cfgfilename)
-            size = self.imm_size(cfgfilename)
-            data = self.imm_read(filehandle, size)
-            self.imm_close(filehandle)
+        rsp = self.xc.grab_redfish_response_with_status(
+            '/redfish/v1/Systems/1/Actions/Oem/LenovoComputerSystem.DSReadFile',
+            {'Action': 'DSReadFile', 'FileName': cfgfilename})
+        if rsp[1] == 200:
+            data = rsp[0]['Content']
+            data = base64.b64decode(data)
             data = EfiCompressor.FrameworkDecompress(data, len(data))
-            if len(data) != 0:
-                break
-            self.connection.ipmi_session.pause(2)
+        else:
+            for _ in range(0, 30):
+                filehandle = self.imm_open(cfgfilename)
+                size = self.imm_size(cfgfilename)
+                data = self.imm_read(filehandle, size)
+                self.imm_close(filehandle)
+                data = EfiCompressor.FrameworkDecompress(data, len(data))
+                if len(data) != 0:
+                    break
+                self.connection.ipmi_session.pause(2)
         if not data:
             raise Exception("BMC failed to return configuration information")
         xml = fromstring(data)
@@ -549,12 +559,19 @@ class LenovoFirmwareConfig(object):
 
         xml = etree.tostring(configurations)
         data = EfiCompressor.FrameworkCompress(xml, len(xml))
-        filehandle = self.imm_open("asu_update.efi", write=True,
-                                   size=len(data))
-        self.imm_write(filehandle, len(data), data)
-        stubread = len(data)
-        if stubread > 8:
-            stubread = 8
-        self.imm_read(filehandle, stubread)
-        self.imm_close(filehandle)
+        bdata = base64.b64encode(data).decode('utf8')
+        rsp = self.xc.grab_redfish_response_with_status(
+            '/redfish/v1/Systems/1/Actions/Oem/'
+            'LenovoComputerSystem.DSWriteFile',
+            {'Action': 'DSWriteFile', 'Resize': len(data),
+             'FileName': 'asu_update.efi', 'Content': bdata})
+        if rsp[1] != 204:
+            filehandle = self.imm_open("asu_update.efi", write=True,
+                                    size=len(data))
+            self.imm_write(filehandle, len(data), data)
+            stubread = len(data)
+            if stubread > 8:
+                stubread = 8
+            self.imm_read(filehandle, stubread)
+            self.imm_close(filehandle)
         return True
