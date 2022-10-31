@@ -145,80 +145,6 @@ class SensorReading(object):
         self.unavailable = unavailable
 
 
-class AttrDependencyHandler(object):
-    def __init__(self, dependencies, currsettings, pendingsettings):
-        self.dependencymap = {}
-        for dep in dependencies.get('Dependencies', [{}]):
-            if 'Dependency' not in dep:
-                continue
-            if dep['Type'] != 'Map':
-                continue
-            if dep['DependencyFor'] in self.dependencymap:
-                self.dependencymap[
-                    dep['DependencyFor']].append(dep['Dependency'])
-            else:
-                self.dependencymap[
-                    dep['DependencyFor']] = [dep['Dependency']]
-        self.curr = currsettings
-        self.pend = pendingsettings
-        self.reg = dependencies['Attributes']
-
-    def get_overrides(self, setting):
-        overrides = {}
-        blameattrs = []
-        if setting not in self.dependencymap:
-            return {}, []
-        for depinfo in self.dependencymap[setting]:
-            lastoper = None
-            lastcond = None
-            for mapfrom in depinfo.get('MapFrom', []):
-                if lastcond is not None and not lastoper:
-                    break  # MapTerm required to make sense of this, give up
-                currattr = mapfrom['MapFromAttribute']
-                blameattrs.append(currattr)
-                currprop = mapfrom['MapFromProperty']
-                if currprop == 'CurrentValue':
-                    if currattr in self.pend:
-                        currval = self.pend[currattr]
-                    else:
-                        currval = self.curr[currattr]
-                else:
-                    currval = self.reg[currattr][currprop]
-                lastcond = self.process(currval, mapfrom, lastcond, lastoper)
-                lastoper = mapfrom.get('MapTerms', None)
-            if lastcond:
-                if setting not in overrides:
-                    overrides[setting] = {}
-                if depinfo['MapToAttribute'] not in overrides[setting]:
-                    overrides[depinfo['MapToAttribute']] = {}
-                overrides[depinfo['MapToAttribute']][
-                    depinfo['MapToProperty']] = depinfo['MapToValue']
-        return overrides, blameattrs
-
-    def process(self, currval, mapfrom, lastcond, lastoper):
-        newcond = None
-        mfc = mapfrom['MapFromCondition']
-        if mfc == 'EQU':
-            newcond = currval == mapfrom['MapFromValue']
-        if mfc == 'NEQ':
-            newcond = currval != mapfrom['MapFromValue']
-        if mfc == 'GEQ':
-            newcond = float(currval) >= float(mapfrom['MapFromValue'])
-        if mfc == 'GTR':
-            newcond = float(currval) > float(mapfrom['MapFromValue'])
-        if mfc == 'LEQ':
-            newcond = float(currval) <= float(mapfrom['MapFromValue'])
-        if mfc == 'LSS':
-            newcond = float(currval) < float(mapfrom['MapFromValue'])
-        if lastcond is not None:
-            if lastoper == 'AND':
-                return lastcond and newcond
-            elif lastoper == 'OR':
-                return lastcond or newcond
-            return None
-        return newcond
-
-
 class Command(object):
 
     def __init__(self, bmc, userid, password, verifycallback, sysurl=None,
@@ -902,40 +828,6 @@ class Command(object):
             summary['badreadings'].append(unkinf)
         return summary
 
-    def _get_biosreg(self, url):
-        addon = {}
-        valtodisplay = {}
-        displaytoval = {}
-        reg = self._do_web_request(url)
-        reg = reg['RegistryEntries']
-        for attr in reg['Attributes']:
-            vals = attr.get('Value', [])
-            if vals:
-                valtodisplay[attr['AttributeName']] = {}
-                displaytoval[attr['AttributeName']] = {}
-                for val in vals:
-                    valtodisplay[
-                        attr['AttributeName']][val['ValueName']] = val[
-                            'ValueDisplayName']
-                    displaytoval[
-                        attr['AttributeName']][val['ValueDisplayName']] = val[
-                            'ValueName']
-            defaultval = attr.get('DefaultValue', None)
-            defaultval = valtodisplay.get(attr['AttributeName'], {}).get(
-                defaultval, defaultval)
-            if attr['Type'] == 'Integer' and defaultval:
-                defaultval = int(defaultval)
-            if attr['Type'] == 'Boolean':
-                vals = [{'ValueDisplayName': 'True'},
-                        {'ValueDisplayName': 'False'}]
-            addon[attr['AttributeName']] = {
-                'default': defaultval,
-                'help': attr.get('HelpText', None),
-                'sortid': attr.get('DisplayOrder', None),
-                'possible': [x['ValueDisplayName'] for x in vals],
-            }
-        return addon, valtodisplay, displaytoval, reg
-
     def get_bmc_configuration(self):
         """Get miscellaneous BMC configuration
 
@@ -960,6 +852,9 @@ class Command(object):
         # For now, this is a stub, no implementation for redfish currently
         return self.oem.set_bmc_configuration(changeset)
 
+    def set_system_configuration(self, changeset):
+        return self.oem.set_system_configuration(changeset, self)
+
     def clear_bmc_configuration(self):
         """Reset BMC to factory default
 
@@ -971,64 +866,7 @@ class Command(object):
             'Clear BMC configuration not supported in redfish yet')
 
     def get_system_configuration(self, hideadvanced=True):
-        return self._getsyscfg()[0]
-
-    def _getsyscfg(self):
-        biosinfo = self._do_web_request(self._biosurl, cache=False)
-        reginfo = ({}, {}, {}, {})
-        extrainfo = {}
-        valtodisplay = {}
-        self.attrdeps = {'Dependencies': [], 'Attributes': []}
-        if 'AttributeRegistry' in biosinfo:
-            overview = self._do_web_request('/redfish/v1/')
-            reglist = overview['Registries']['@odata.id']
-            reglist = self._do_web_request(reglist)
-            regurl = None
-            for cand in reglist.get('Members', []):
-                cand = cand.get('@odata.id', '')
-                candname = cand.split('/')[-1]
-                if candname == '':  # implementation uses trailing slash
-                    candname = cand.split('/')[-2]
-                if candname == biosinfo['AttributeRegistry']:
-                    regurl = cand
-                    break
-            if not regurl:
-                # Workaround a vendor bug where they link to a
-                # non-existant name
-                for cand in reglist.get('Members', []):
-                    cand = cand.get('@odata.id', '')
-                    candname = cand.split('/')[-1]
-                    candname = candname.split('.')[0]
-                    if candname == biosinfo[
-                            'AttributeRegistry'].split('.')[0]:
-                        regurl = cand
-                        break
-            if regurl:
-                reginfo = self._do_web_request(regurl)
-                for reg in reginfo.get('Location', []):
-                    if reg.get('Language', 'en').startswith('en'):
-                        reguri = reg['Uri']
-                        reginfo = self._get_biosreg(reguri)
-                        extrainfo, valtodisplay, _, self.attrdeps = reginfo
-        currsettings = {}
-        try:
-            pendingsettings = self._do_web_request(self._setbiosurl)
-        except exc.UnsupportedFunctionality:
-            pendingsettings = {}
-        pendingsettings = pendingsettings.get('Attributes', {})
-        for setting in biosinfo.get('Attributes', {}):
-            val = biosinfo['Attributes'][setting]
-            currval = val
-            if setting in pendingsettings:
-                val = pendingsettings[setting]
-            val = valtodisplay.get(setting, {}).get(val, val)
-            currval = valtodisplay.get(setting, {}).get(currval, currval)
-            val = {'value': val}
-            if currval != val['value']:
-                val['active'] = currval
-            val.update(**extrainfo.get(setting, {}))
-            currsettings[setting] = val
-        return currsettings, reginfo
+        return self.oem.get_system_configuration(hideadvanced, self)
 
     def clear_system_configuration(self):
         """Clear the BIOS/UEFI configuration
@@ -1056,83 +894,6 @@ class Command(object):
         if not parms:
             parms = {'Action': 'Bios.ResetBios'}
         self._do_web_request(rb, parms)
-
-    def set_system_configuration(self, changeset):
-        while True:
-            try:
-                self._set_system_configuration(changeset)
-                return
-            except exc.RedfishError as re:
-                if ('etag' not in re.msgid.lower()
-                        and 'PreconditionFailed' not in re.msgid):
-                    raise
-
-    def _set_system_configuration(self, changeset):
-        currsettings, reginfo = self._getsyscfg()
-        rawsettings = self._do_web_request(self._biosurl, cache=False)
-        rawsettings = rawsettings.get('Attributes', {})
-        pendingsettings = self._do_web_request(self._setbiosurl)
-        etag = pendingsettings.get('@odata.etag', None)
-        pendingsettings = pendingsettings.get('Attributes', {})
-        dephandler = AttrDependencyHandler(self.attrdeps, rawsettings,
-                                           pendingsettings)
-        for change in list(changeset):
-            if change not in currsettings:
-                found = False
-                for attr in currsettings:
-                    if fnmatch(attr.lower(), change.lower()):
-                        found = True
-                        changeset[attr] = changeset[change]
-                    if fnmatch(attr.lower(),
-                               change.replace('.', '_').lower()):
-                        found = True
-                        changeset[attr] = changeset[change]
-                if found:
-                    del changeset[change]
-        for change in changeset:
-            changeval = changeset[change]
-            overrides, blameattrs = dephandler.get_overrides(change)
-            meta = {}
-            for attr in self.attrdeps['Attributes']:
-                if attr['AttributeName'] == change:
-                    meta = dict(attr)
-                    break
-            meta.update(**overrides.get(change, {}))
-            if meta.get('ReadOnly', False) or meta.get('GrayOut', False):
-                errstr = '{0} is read only'.format(change)
-                if blameattrs:
-                    errstr += (' due to one of the following settings: '
-                               '{0}'.format(','.join(sorted(blameattrs)))
-                               )
-                raise exc.InvalidParameterValue(errstr)
-            if (currsettings.get(change, {}).get('possible', [])
-                    and changeval not in currsettings[change]['possible']):
-                normval = changeval.lower()
-                normval = re.sub(r'\s+', ' ', normval)
-                if not normval.endswith('*'):
-                    normval += '*'
-                for cand in currsettings[change]['possible']:
-                    if fnmatch(cand.lower().replace(' ', ''),
-                               normval.replace(' ', '')):
-                        changeset[change] = cand
-                        break
-                else:
-                    raise exc.InvalidParameterValue(
-                        '{0} is not a valid value for {1} ({2})'.format(
-                            changeval, change, ','.join(
-                                currsettings[change]['possible'])))
-            if changeset[change] in reginfo[2].get(change, {}):
-                changeset[change] = reginfo[2][change][changeset[change]]
-            for regentry in reginfo[3].get('Attributes', []):
-                if change in (regentry.get('AttributeName', ''),
-                              regentry.get('DisplayName', '')):
-                    if regentry.get('Type', None) == 'Integer':
-                        changeset[change] = int(changeset[change])
-                    if regentry.get('Type', None) == 'Boolean':
-                        changeset[change] = _to_boolean(changeset[change])
-        redfishsettings = {'Attributes': changeset}
-        self._do_web_request(self._setbiosurl, redfishsettings, 'PATCH',
-                             etag=etag)
 
     def set_net_configuration(self, ipv4_address=None, ipv4_configuration=None,
                               ipv4_gateway=None, name=None):
