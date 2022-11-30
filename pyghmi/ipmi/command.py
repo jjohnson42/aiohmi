@@ -407,8 +407,7 @@ class Command(object):
 
     def reset_bmc(self):
         """Do a cold reset in BMC"""
-
-        response = self.raw_command(netfn=6, command=2)
+        response = self.raw_command(netfn=6, command=2, retry=False)
         if 'error' in response:
             raise exc.IpmiException(response['error'])
 
