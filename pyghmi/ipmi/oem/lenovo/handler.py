@@ -1316,6 +1316,11 @@ class OEMHandler(generic.OEMHandler):
             return True
         return False
 
+    def get_user_privilege_level(self, uid):
+        if self.has_xcc:
+            return self.immhandler.get_user_privilege_level(uid)
+        return None
+
     def set_user_access(self, uid, channel, callback, link_auth, ipmi_msg, privilege_level):
         if self.has_xcc:
             self.immhandler.set_user_access(uid, privilege_level)

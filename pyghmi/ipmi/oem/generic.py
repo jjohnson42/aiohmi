@@ -329,6 +329,8 @@ class OEMHandler(object):
 
     def set_user_access(self, uid, channel, callback, link_auth, ipmi_msg,
                         privilege_level):
+        if privilege_level.startswith('custom.'):
+            raise exc.UnsupportedFunctionality()
         return  # Nothing to do
 
     def set_alert_ipv6_destination(self, ip, destination, channel):
@@ -397,6 +399,9 @@ class OEMHandler(object):
         raise exc.UnsupportedFunctionality()
 
     def get_user_expiration(self, uid):
+        return None
+    
+    def get_user_privilege_level(self, uid):
         return None
 
     def set_oem_extended_privilleges(self, uid):

@@ -883,6 +883,14 @@ class XCCClient(IMMClient):
         self.ipmicmd.ipmi_session.register_keepalive(self.keepalive, None)
         self.adp_referer = None
 
+    def get_user_privilege_level(self, uid):
+        uid = uid - 1
+        accurl = '/redfish/v1/AccountService/Accounts/{0}'.format(uid)
+        accinfo, status = self.grab_redfish_response_with_status(accurl)
+        if status == 200:
+            return accinfo.get('RoleId', None)
+        return None
+
     def set_user_access(self, uid, privilege_level):
         uid = uid - 1
         role = None
@@ -892,6 +900,8 @@ class XCCClient(IMMClient):
             role = 'Operator'
         elif privilege_level == 'user':
             role = 'ReadOnly'
+        elif privilege_level.startswith('custom.'):
+            role = privilege_level.replace('custom.', '')
         if role:
             self.grab_redfish_response_with_status(
                 '/redfish/v1/AccountService/Accounts/{0}'.format(uid),
@@ -2019,6 +2029,9 @@ class XCCClient(IMMClient):
                 '/redfish/v1/UpdateService',
                 {'HttpPushUriTargets': []}, method='PATCH')
 
+    def set_custom_user_privilege(self, uid, privilege):
+        return self.set_user_access(self, uid, privilege)
+       
     def update_firmware(self, filename, data=None, progress=None, bank=None):
         usd = self.grab_redfish_response_emptyonerror(
             '/redfish/v1/UpdateService')

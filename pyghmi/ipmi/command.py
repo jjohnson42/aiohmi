@@ -1698,6 +1698,7 @@ class Command(object):
             * administrator
             * proprietary
             * no_access
+            * custom.<name>
         """
         self.oem_init()
         if hasattr(self._oem, 'oem_user_access'):
@@ -1726,6 +1727,8 @@ class Command(object):
         self.oem_init()
         self._oem.set_user_access(
             uid, channel, callback, link_auth, ipmi_msg, privilege_level)
+        if privilege_level.startswith('custom.'):
+            return True  # unable to proceed with standard support
         data = [b, uid & 0b00111111,
                 privilege_levels[privilege_level] & 0b00001111, 0]
         response = self.raw_command(netfn=0x06, command=0x43, data=data)
@@ -1772,16 +1775,21 @@ class Command(object):
         r['access']['callback'] = (data[3] & 0b01000000) != 0
         r['access']['link_auth'] = (data[3] & 0b00100000) != 0
         r['access']['ipmi_msg'] = (data[3] & 0b00010000) != 0
-        privilege_levels = {
-            0: 'reserved',
-            1: 'callback',
-            2: 'user',
-            3: 'operator',
-            4: 'administrator',
-            5: 'proprietary',
-            0x0F: 'no_access'
-        }
-        r['access']['privilege_level'] = privilege_levels[data[3] & 0b00001111]
+        self.oem_init()
+        oempriv = self._oem.get_user_privilege_level(uid)
+        if oempriv:
+            r['access']['privilege_level'] = oempriv
+        else:
+            privilege_levels = {
+                0: 'reserved',
+                1: 'callback',
+                2: 'user',
+                3: 'operator',
+                4: 'administrator',
+                5: 'proprietary',
+                0x0F: 'no_access'
+            }
+            r['access']['privilege_level'] = privilege_levels[data[3] & 0b00001111]
         return r
 
     def set_user_name(self, uid, name):

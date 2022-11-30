@@ -354,6 +354,8 @@ class Command(object):
         return True
 
     def set_user_access(self, uid, privilege_level='ReadOnly'):
+        if privilege_level.startswith('custom.'):
+            privilege_level = privilege_level.replace('custom.', '')
         accinfo = self._account_url_info_by_id(uid)
         if not accinfo:
             raise Exception("Unable to find indicated uid")
@@ -375,6 +377,8 @@ class Command(object):
         accinfo = self._account_url_info_by_id(uid)
         if not accinfo:
             raise Exception("Unable to find indicated uid")
+        if privilege_level.startswith('custom.'):
+            privilege_level = privilege_level.replace('custom.', '')
         for role in self._validroles:
             if role.lower() == privilege_level.lower():
                 privilege_level = role
