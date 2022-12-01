@@ -568,19 +568,25 @@ class LenovoFirmwareConfig(object):
         data = EfiCompressor.FrameworkCompress(xml, len(xml))
         bdata = base64.b64encode(data).decode('utf8')
         rsp = self.xc.grab_redfish_response_with_status(
-            '/redfish/v1/Systems/1/Actions/Oem/'
-            'LenovoComputerSystem.DSWriteFile',
-            {'Action': 'DSWriteFile', 'Resize': len(data),
-             'FileName': 'asu_update.efi', 'Content': bdata})
-        if rsp[1] != 204:
-            if self.connection is None:
-                raise Unsupported('Not Supported')
-            filehandle = self.imm_open("asu_update.efi", write=True,
-                                    size=len(data))
-            self.imm_write(filehandle, len(data), data)
-            stubread = len(data)
-            if stubread > 8:
-                stubread = 8
-            self.imm_read(filehandle, stubread)
-            self.imm_close(filehandle)
+                '/redfish/v1/Managers/1')
+        if rsp[1] == 200:
+            if 'purley' not in rsp[0].get('Oem', {}).get('Lenovo', {}).get(
+                    'release_name', 'purley'):
+                rsp = self.xc.grab_redfish_response_with_status(
+                    '/redfish/v1/Systems/1/Actions/Oem/'
+                    'LenovoComputerSystem.DSWriteFile',
+                    {'Action': 'DSWriteFile', 'Resize': len(data),
+                     'FileName': 'asu_update.efi', 'Content': bdata})
+                if rsp[1] == 204:
+                    return True
+        if self.connection is None:
+            raise Unsupported('Not Supported')
+        filehandle = self.imm_open("asu_update.efi", write=True,
+                                size=len(data))
+        self.imm_write(filehandle, len(data), data)
+        stubread = len(data)
+        if stubread > 8:
+            stubread = 8
+        self.imm_read(filehandle, stubread)
+        self.imm_close(filehandle)
         return True
