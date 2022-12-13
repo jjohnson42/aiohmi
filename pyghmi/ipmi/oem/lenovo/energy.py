@@ -30,9 +30,10 @@ class EnergyManager(object):
         self._usefapm = False
         try:
             rsp = ipmicmd.xraw_command(netfn=0x3a, command=0x32, data=[4, 2, 0, 0, 0])
-            self.supportedmeters = ('DC Energy',)
-            self._usefapm = True
-            return
+            if len(rsp['data']) >= 8:
+                self.supportedmeters = ('DC Energy',)
+                self._usefapm = True
+                return
         except pygexc.IpmiException:
             pass
 
