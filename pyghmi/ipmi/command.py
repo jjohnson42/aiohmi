@@ -869,6 +869,48 @@ class Command(object):
         self.oem_init()
         self._oem.clear_system_configuration()
 
+    def set_net6_configuration(self, static_addresses=None, static_gateway=None, channel=None):
+        if static_addrs is None and static_gateway is None:
+            return
+        if channel is None:
+            channel = self.get_network_channel()
+        if static_addresses is not None:
+            i = 0
+            for va in static_addresses:
+                if '/' in va:
+                    va, plen = va.split('/', 1)
+                else:
+                    plen = '64'
+                plen = int(plen)
+                vab = bytearray(socket.inet_pton(socket.AF_INET6, va))
+                cmddata = bytearray([channel, 56, 0, 0x80]) + vab + bytearray([plen, 0])
+                self.xraw_command(netfn=0xc, command=1, data=cmddata)
+        if static_gateway is not None:
+            gwb = bytearray(socket.inet_pton(socket.AF_INET6, static_gateway))
+            cmddata = bytearray([channel, 65]) + gwb
+            self.xraw_command(netfn=0xc, command=1, data=cmddata)
+    
+    def get_net6_configuration(self, channel=None):
+        if channel is None:
+            channel = self.get_network_channel()
+        retdata = {}
+        ip6a = self.xraw_command(netfn=0xc, command=2, data=(channel, 56, 0, 0))
+        ip6d = bytearray(ip6a['data'])
+        if ip6d[0] != 0x11:
+            raise Exception('Unsupported reply')
+        if ip6d[2] & 0x80 == 0x80:
+            ip6b = ip6d[3:19]
+            ip6addr = socket.inet_ntop(socket.AF_INET6, ip6b)
+            plen = ip6d[19]
+            retdata['static_addrs'] = ['{}/{}'.format(ip6addr, plen)]
+        ip6g = self.xraw_command(netfn=0xc, command=2, data=(channel, 65, 0, 0))
+        ip6gd = bytearray(ip6g['data'])
+        if ip6gd[0] != 0x11:
+            raise Exception('Unsupported reply')
+        gwa = socket.inet_ntop(socket.AF_INET6, ip6gd[1:17])
+        retdata['static_gateway'] = gwa
+        return retdata
+
     def set_net_configuration(self, ipv4_address=None, ipv4_configuration=None,
                               ipv4_gateway=None, channel=None):
         """Set network configuration data.
@@ -883,6 +925,9 @@ class Command(object):
         :param ipv4_gateway: IP address of gateway to use.
         :param channel:  LAN channel to configure, defaults to autodetect
         """
+        if (ipv4_address is None and ipv4_configuration is None
+                and ipv4_gateway is None):
+            return
         if channel is None:
             channel = self.get_network_channel()
         if ipv4_configuration is not None:

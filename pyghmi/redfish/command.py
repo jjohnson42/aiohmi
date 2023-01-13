@@ -899,12 +899,37 @@ class Command(object):
             parms = {'Action': 'Bios.ResetBios'}
         self._do_web_request(rb, parms)
 
+    def set_net6_configuration(self, static_addresses=None, static_gateway=None, name=None):
+        patch = {}
+        if static_addresses is not None:
+            sa = []
+            patch['IPv6StaticAddresses'] = sa
+            for addr in static_addresses:
+                if '/' in addr:
+                    addr, plen = addr.split('/', 1)
+                else:
+                    plen = '64'
+                sa.append({
+                    'PrefixLength': int(plen),
+                    'Address': addr
+                })
+        if static_gateway:
+            patch['IPv6StaticDefaultGateways'] = [{
+                'Address': static_gateway,
+            }]
+        if patch:
+            nicurl = self._get_bmc_nic_url(name)
+            self._do_web_request(nicurl, patch, 'PATCH')
+
     def set_net_configuration(self, ipv4_address=None, ipv4_configuration=None,
                               ipv4_gateway=None, name=None):
         patch = {}
         ipinfo = {}
         dodhcp = None
         netmask = None
+        if (ipv4_address is None and ipv4_configuration is None
+                and ipv4_gateway is None):
+            return
         if ipv4_address:
             if '/' in ipv4_address:
                 ipv4_address, cidr = ipv4_address.split('/')
@@ -918,7 +943,7 @@ class Command(object):
             patch['IPv4StaticAddresses'] = [ipinfo]
             ipinfo['Gateway'] = ipv4_gateway
             ipv4_configuration = 'static'
-        if ipv4_configuration.lower() == 'dhcp':
+        if ipv4_configuration and ipv4_configuration.lower() == 'dhcp':
             dodhcp = True
             patch['DHCPv4'] = {'DHCPEnabled': True}
         elif (ipv4_configuration == 'static'
@@ -936,6 +961,21 @@ class Command(object):
                 elif dodhcp is not None:
                     ipinfo['AddressOrigin'] = 'Static'
                 self._do_web_request(nicurl, patch, 'PATCH')
+
+    def get_net6_configuration(self, name=None):
+        nicurl = self._get_bmc_nic_url(name)
+        netcfg = self._do_web_request(nicurl, cache=False)
+        retdata = {}
+        saddrs = netcfg.get('IPv6StaticAddresses', ())
+        retdata['static_addrs'] = []
+        for sa in saddrs:
+            ca = '{}/{}'.format(sa['Address'], sa['PrefixLength'])
+            retdata['static_addrs'].append(ca)
+        gws = netcfg.get('IPv6StaticDefaultGateways', None)
+        if gws:
+            for gw in gws:
+                retdata['static_gateway'] = gw['Address']
+        return retdata
 
     def get_net_configuration(self, name=None):
         nicurl = self._get_bmc_nic_url(name)
