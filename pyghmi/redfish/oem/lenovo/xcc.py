@@ -14,6 +14,7 @@
 
 
 import errno
+import fnmatch
 import json
 import math
 import os

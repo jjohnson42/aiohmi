@@ -21,7 +21,6 @@ for redfish compliant endpoints
 import base64
 from datetime import datetime
 from datetime import timedelta
-from fnmatch import fnmatch
 import json
 import os
 import re
