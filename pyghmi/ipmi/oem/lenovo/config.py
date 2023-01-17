@@ -272,8 +272,15 @@ class LenovoFirmwareConfig(object):
         options = {}
         data = None
         rsp = self.xc.grab_redfish_response_with_status(
-            '/redfish/v1/Systems/1/Actions/Oem/LenovoComputerSystem.DSReadFile',
-            {'Action': 'DSReadFile', 'FileName': cfgfilename})
+                '/redfish/v1/Managers/1')
+        if rsp[1] == 200:
+            if 'purley' not in rsp[0].get('Oem', {}).get('Lenovo', {}).get(
+                                    'release_name', 'purley'):
+                rsp = self.xc.grab_redfish_response_with_status(
+                    '/redfish/v1/Systems/1/Actions/Oem/LenovoComputerSystem.DSReadFile',
+                    {'Action': 'DSReadFile', 'FileName': cfgfilename})
+            else:
+                rsp = (None, 500)
         if rsp[1] == 200:
             data = rsp[0]['Content']
             data = base64.b64decode(data)
