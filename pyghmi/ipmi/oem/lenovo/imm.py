@@ -550,6 +550,7 @@ class IMMClient(object):
         return []
 
     def fetch_agentless_firmware(self):
+        skipkeys = set([])
         cd = self.get_cached_data('lenovo_cached_adapters_fu')
         if cd:
             adapterdata, fwu = cd
@@ -606,11 +607,22 @@ class IMMClient(object):
                         yield '{0} {1}'.format(aname, fname), bdata
                 for fwi in fwu.get('items', []):
                     if fwi.get('key', -1) == adata.get('key', -2):
+                        skipkeys.add(fwi['key'])
                         if fwi.get('fw_status', 0) == 2:
                             bdata = {}
                             if 'fw_version_pend' in fwi:
                                 bdata['version'] = fwi['fw_version_pend']
                             yield '{0} Pending Update'.format(aname), bdata
+        for fwi in fwu.get('items', []):
+            if fwi.get('key', -1) > 0 and fwi['key'] not in skipkeys:
+                bdata = {}
+                bdata['version'] = fwi['fw_version']
+                yield fwi['adapterName'], bdata
+                if fwi.get('fw_status', 0) == 2:
+                    bdata = {}
+                    if 'fw_version_pend' in fwi:
+                        bdata['version'] = fwi['fw_version_pend']
+                    yield '{0} Pending Update'.format(fwi['adapterName']), bdata
         for disk in self.disk_inventory():
             yield disk
         self.weblogout()

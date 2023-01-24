@@ -493,8 +493,11 @@ class OEMHandler(generic.OEMHandler):
         return {'height': u_height, 'slot': slot}
 
     def _get_agentless_firmware(self, components):
+        skipkeys = set([])
         adata = self.wc.grab_json_response(
             '/api/dataset/imm_adapters?params=pci_GetAdapters')
+        fdata = self.wc.grab_json_response(
+            '/api/function/adapter_update?params=pci_GetAdapterListAndFW')
         anames = set()
         for adata in adata.get('items', []):
             baseaname = adata['adapterName']
@@ -527,6 +530,24 @@ class OEMHandler(generic.OEMHandler):
                         except ValueError:
                             pass
                     yield '{0} {1}'.format(aname, fname), bdata
+            for fwi in fdata.get('items', []):
+                if fwi.get('key', -1) == adata.get('key', -2):
+                    skipkeys.add(fwi['key'])
+                    if fwi.get('fw_status', 0) == 2:
+                        bdata = {}
+                        if 'fw_version_pend' in fwi:
+                            bdata['version'] = fwi['fw_version_pend']
+                        yield '{0} Pending Update'.format(aname), bdata
+        for fwi in fdata.get('items', []):
+            if fwi.get('key', -1) > 0 and fwi['key'] not in skipkeys:
+                bdata = {}
+                bdata['version'] = fwi['fw_version']
+                yield fwi['adapterName'], bdata
+                if fwi.get('fw_status', 0) == 2:
+                    bdata = {}
+                    if 'fw_version_pend' in fwi:
+                        bdata['version'] = fwi['fw_version_pend']
+                    yield '{0} Pending Update'.format(fwi['adapterName']), bdata
 
     def _get_disk_firmware_single(self, diskent, prefix=''):
         bdata = {}
