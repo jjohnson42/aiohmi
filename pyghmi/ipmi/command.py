@@ -870,7 +870,7 @@ class Command(object):
         self._oem.clear_system_configuration()
 
     def set_net6_configuration(self, static_addresses=None, static_gateway=None, channel=None):
-        if static_addrs is None and static_gateway is None:
+        if static_addresses is None and static_gateway is None:
             return
         if channel is None:
             channel = self.get_network_channel()
