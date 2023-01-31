@@ -164,6 +164,7 @@ class Command(object):
         self._oem = None
         self._gpool = pool
         self._bmcv4ip = None
+        self._bmcv6ip = None
         for addrinf in socket.getaddrinfo(bmc, 0, 0, socket.SOCK_STREAM):
             if addrinf[0] == socket.AF_INET:
                 self._bmcv4ip = socket.inet_pton(addrinf[0], addrinf[-1][0])
