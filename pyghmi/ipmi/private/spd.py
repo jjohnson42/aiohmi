@@ -633,6 +633,7 @@ memory_types = {
     10: "DDR2 SDRAM FB-DIMM PROBE",
     11: "DDR3 SDRAM",
     12: "DDR4 SDRAM",
+    0x12: "DDR5 SDRAM",
 }
 
 module_types = {
@@ -712,6 +713,8 @@ class SPD(object):
             self._decode_ddr3()
         elif spd[2] == 12:
             self._decode_ddr4()
+        elif spd[2] == 0x12: # ddr5
+            self._decode_ddr5()
 
     def _decode_ddr3(self):
         spd = self.rawdata
@@ -738,6 +741,73 @@ class SPD(object):
             '>I', struct.pack('4B', *spd[122:126]))[0])[2:].rjust(8, '0')
         self.info['model'] = struct.pack('20B', *spd[128:148]).strip(
             b'\x00\xff ')
+
+    def _decode_ddr5(self):
+        spd = self.rawdata
+        modtypes = {
+            1: 'RDIMM',
+            2: 'UDIMM',
+            3: 'SODIMM',
+        }
+        sdramdensities = {
+            1: 4,
+            2: 8,
+            3: 12,
+            4: 16,
+            5: 24,
+            6: 32,
+            7: 48,
+            8: 64,
+        }
+        ddp = {
+            0: 1,
+            1: 2,
+            2: 2,
+            3: 4,
+            4: 8,
+            6: 16,
+        }
+        self.info['module_type'] = modtypes.get(
+            spd[3], 'Unknown')
+        self.info['manufacturer'] = decode_manufacturer(spd[512], spd[513])
+        self.info['model'] = struct.pack('30B', *spd[521:551]).strip(
+            b'\x00\xff ')
+        self.info['serial'] = hex(struct.unpack(
+            '>I', struct.pack('4B', *spd[517:521]))[0])[2:].rjust(8, '0')
+        self.info['manufacture_date'] = decode_spd_date(spd[515], spd[516])
+        self.info['manufacture_location'] = spd[514]
+        self.info['ecc'] = (spd[235] & 0b11000) != 0
+        if spd[19] == 0:
+            tckmin = struct.unpack('<H', spd[20:22])[0]
+            self.info['speed'] = math.floor(160000.0 / tckmin) * 100
+        else:
+            self.info['speed'] = 'Unknown'
+        asymmetric = bool(spd[234] & 64)
+        numrankspersubchannel = ((spd[234] & 56) >> 3) + 1
+        subchannels = ((spd[235] & 0b01100000) >> 5) + 1
+        buswidthpersubchannel = 2 ** ((spd[235] & 0b111) + 3)
+        # these bits are either all, or for half the ranks in asymettric
+        densityperdie = spd[4]
+        sdramiowidth = 2**((spd[6] >> 5) + 2)
+        densityperdie = sdramdensities.get(spd[4] & 0b11111, 0)
+        diesperpackage = ddp.get(spd[4] >> 5, 1)
+        capacity = (subchannels
+                    * (buswidthpersubchannel / sdramiowidth)
+                    * diesperpackage * densityperdie / 8
+                    * numrankspersubchannel)
+        if asymmetric:
+            capacity = capacity // 2 # the calculation is halved to make room for the odd ranks
+            densityperdie = spd[8]
+            sdramiowidth = 2**((spd[10] >> 5) + 2)
+            densityperdie = sdramdensities.get(spd[8] & 0b11111, 0)
+            diesperpackage = ddp.get(spd[8] >> 5, 1)
+            oddcapacity = (subchannels
+                           * (buswidthpersubchannel / sdramiowidth)
+                           * diesperpackage * densityperdie / 8
+                           * numrankspersubchannel)
+            oddcapacity = oddcapacity // 2  # this is halved, since this is only half the ranks
+            capacity += oddcapacity
+        self.info['capacity_mb'] = capacity * 1024
 
     def _decode_ddr4(self):
         spd = self.rawdata
