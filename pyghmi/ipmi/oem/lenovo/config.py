@@ -23,6 +23,7 @@ import random
 import struct
 
 import six
+import time
 
 import pyghmi.exceptions as pygexc
 
@@ -285,9 +286,19 @@ class LenovoFirmwareConfig(object):
             else:
                 rsp = (None, 500)
         if rsp[1] == 200:
-            data = rsp[0]['Content']
-            data = base64.b64decode(data)
-            data = EfiCompressor.FrameworkDecompress(data, len(data))
+            for _ in range(0, 30):
+                data = rsp[0]['Content']
+                data = base64.b64decode(data)
+                data = EfiCompressor.FrameworkDecompress(data, len(data))
+                if len(data) != 0:
+                    break
+                if self.connection:
+                    self.connection.ipmi_session.pause(2)
+                else:
+                    time.sleep(2)
+                rsp = self.xc.grab_redfish_response_with_status(
+                    '/redfish/v1/Systems/1/Actions/Oem/LenovoComputerSystem.DSReadFile',
+                    {'Action': 'DSReadFile', 'FileName': cfgfilename})
         else:
             if self.connection is None:
                 raise Unsupported('Not Supported')
