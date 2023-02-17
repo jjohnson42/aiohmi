@@ -38,6 +38,7 @@ import pyghmi.ipmi.private.util as util
 from pyghmi.ipmi import sdr
 import pyghmi.media as media
 import pyghmi.storage as storage
+from pyghmi.util.parse import parse_time
 import pyghmi.util.webclient as webclient
 
 try:
@@ -1833,6 +1834,17 @@ class XCCClient(IMMClient):
             })
             if bdata:
                 yield 'LXPM Linux Driver Bundle', bdata
+        if not components or set(('lxum', 'core')):
+            sysinf = self.wc.grab_json_response('/api/dataset/sys_info')
+            for item in sysinf.get('items', {}):
+                for firm in item.get('firmware', []):
+                    firminfo = {
+                        'version': firm['version'],
+                        'build': firm['build'],
+                        'date': parse_time(firm['release_date']),
+                    }
+                    if firm['type'] == 10:
+                        yield ('LXUM', firminfo)
         if not components or set(('core', 'fpga')) in components:
             try:
                 fpga = self.ipmicmd.xraw_command(netfn=0x3a, command=0x6b,

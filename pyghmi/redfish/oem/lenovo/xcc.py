@@ -589,6 +589,8 @@ class OEMHandler(generic.OEMHandler):
                     yield ('LXPM Windows Driver Bundle', firminfo)
                 elif firm['type'] == 9:
                     yield ('LXPM Linux Driver Bundle', firminfo)
+                elif firm['type'] == 10:
+                    yield ('LXUM', firminfo)
         for adpinfo in self._get_agentless_firmware(components):
             yield adpinfo
         for adpinfo in self._get_disk_firmware(components):
