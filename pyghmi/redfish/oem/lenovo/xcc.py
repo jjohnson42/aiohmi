@@ -725,6 +725,19 @@ class OEMHandler(generic.OEMHandler):
             themap[raidname] = mapdata
         return themap
 
+    def check_storage_configuration(self, cfgspec=None):
+        rsp = self.wc.grab_json_response(
+            '/api/function/raid_conf?params=raidlink_GetStatus')
+        if rsp['items'][0]['status'] not in (2, 3):
+            raise pygexc.TemporaryError('Storage configuration unavailable in '
+                                        'current state (try boot to setup or '
+                                        'an OS)')
+        if not cfgspec:
+            return True
+        for pool in cfgspec.arrays:
+            self._parse_storage_cfgspec(pool)
+        return True
+
     def _wait_storage_async(self):
         rsp = {'items': [{'status': 0}]}
         while rsp['items'][0]['status'] == 0:

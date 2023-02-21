@@ -672,6 +672,10 @@ class OEMHandler(object):
         raise exc.UnsupportedFunctionality(
             'Remote storage configuration not supported on this platform')
 
+    def check_storage_configuration(self, cfgspec):
+        raise exc.UnsupportedFunctionality(
+            'Remote storage configuration not supported on this platform')
+
     def upload_media(self, filename, progress=None, data=None):
         raise exc.UnsupportedFunctionality(
             'Remote media upload not supported on this platform')

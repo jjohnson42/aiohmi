@@ -1268,6 +1268,16 @@ class Command(object):
         """
         return self.oem.apply_storage_configuration(cfgspec)
 
+    def check_storage_configuration(self, cfgspec=None):
+        """Evaluate a configuration for validity
+
+        This will check if configuration is currently available and, if given,
+        whether the specified cfgspec can be applied.
+        :param cfgspec: A pyghmi.storage.ConfigSpec describing desired oonfig
+        :return:
+        """
+        return self._oem.check_storage_configuration(cfgspec)
+
     def attach_remote_media(self, url, username=None, password=None):
         """Attach remote media by url
 
