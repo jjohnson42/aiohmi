@@ -185,9 +185,9 @@ class OEMHandler(object):
                     return {'bootdev': reqbootdev}
                 except Exception:
                     del payload['BootSourceOverrideMode']
-        thetag = fishclient.sysinfo.get('@odata.etag', None)
+        #thetag = fishclient.sysinfo.get('@odata.etag', None)
         fishclient._do_web_request(fishclient.sysurl, payload, method='PATCH',
-                                   etag=thetag)
+                                   etag='*') # thetag)
         return {'bootdev': reqbootdev}
 
     def _get_cache(self, url):
