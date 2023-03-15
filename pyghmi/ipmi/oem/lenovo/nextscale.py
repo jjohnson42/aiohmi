@@ -415,7 +415,7 @@ class SMMClient(object):
         5: 'Boosted',
     }
 
-    def get_bmc_configuration(self):
+    def get_bmc_configuration(self, variant):
         settings = {}
         wc = self.wc
         wc.request(
@@ -453,7 +453,10 @@ class SMMClient(object):
         powercfg = self.ipmicmd.xraw_command(0x32, 0xa2)
         powercfg = bytearray(powercfg['data'])
         if len(powercfg) == 5:
-            powercfg = powercfg[1:]
+            if variant and variant >> 5:
+                powercfg = powercfg[-2:]
+            else:
+                powercfg = powercfg[1:]
         val = powercfg[0]
         if val == 2:
             val = 'N+N'
@@ -700,6 +703,8 @@ class SMMClient(object):
                 if None in powercfg:
                     currcfg = self.ipmicmd.xraw_command(0x32, 0xa2)
                     currcfg = bytearray(currcfg['data'])
+                    if variant and variant >> 5 and len(currcfg) == 5:
+                        currcfg = currcfg[-2:]
                     if powercfg[0] is None:
                         powercfg[0] = currcfg[0]
                     if powercfg[1] is None:

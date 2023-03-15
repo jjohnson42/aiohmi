@@ -1202,7 +1202,7 @@ class OEMHandler(generic.OEMHandler):
         if self.has_xcc:
             return self.immhandler.get_bmc_configuration()
         if self.is_fpc:
-            return self.smmhandler.get_bmc_configuration()
+            return self.smmhandler.get_bmc_configuration(self._fpc_variant)
         if self.has_tsma:
             return self.tsmahandler.get_bmc_configuration()
         return super(OEMHandler, self).get_bmc_configuration()
