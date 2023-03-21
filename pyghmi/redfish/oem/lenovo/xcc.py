@@ -811,12 +811,21 @@ class OEMHandler(generic.OEMHandler):
     def _create_array(self, pool):
         params = self._parse_array_spec(pool)
         cid = params['controller'].split(',')[0]
+        cslotno = params['controller'].split(',')[1]
         url = '/api/function/raid_conf?params=raidlink_GetDefaultVolProp'
         args = (url, cid, 0, params['drives'])
         props = self.wc.grab_json_response(','.join([str(x) for x in args]))
-        if not props:  # newer firmwarerequires raidlevel too
+        if not props:  # newer firmware requires raidlevel too
             args = (url, cid, params['raidlevel'], 0, params['drives'])
             props = self.wc.grab_json_response(','.join([str(x) for x in args]))
+        elif 'return' in props and props['return'] == 22:
+            # Jan 2023 XCC FW - without controller slot number
+            args = (url, cid, params['raidlevel'], 0, params['drives'])
+            props = self.wc.grab_json_response(','.join([str(x) for x in args]))
+            if 'return' in props and props['return'] == 22:
+                # Jan 2023 XCC FW - with controller slot number
+                args = (url, cid, params['raidlevel'], 0, params['drives'], cslotno)
+                props = self.wc.grab_json_response(','.join([str(x) for x in args]))
         props = props['items'][0]
         volumes = pool.volumes
         remainingcap = params['capacity']
@@ -888,14 +897,23 @@ class OEMHandler(generic.OEMHandler):
         parms = {'raidlink_AddNewVolWithNaAsync': arglist}
         rsp = self.wc.grab_json_response(url, parms)
         if rsp['return'] == 14:  # newer firmware
-            if 'supported_cpwb' in props: # Whitley
+            if 'supported_cpwb' in props: # June 2022 XCC FW
                 arglist = '{0},{1},{2},{3},{4},{5},{6},'.format(
                     cnum, params['raidlevel'], params['spans'],
                     params['perspan'], 0, params['drives'], params['hotspares'])
                 arglist += ''.join(vols)
                 parms = {'raidlink_AddNewVolWithNaAsync': arglist}
                 rsp = self.wc.grab_json_response(url, parms)
-            else: # Purley
+                if not rsp: # Jan 2023 XCC FW
+                    if cid[2] == 2:
+                        cnum = cid[1]
+                    arglist = '{0},{1},{2},{3},{4},{5},'.format(
+                        cnum, params['raidlevel'], params['spans'],
+                        params['perspan'], params['drives'], params['hotspares'])
+                    arglist += ''.join(vols) + ',{0}'.format(cid[2])
+                    parms = {'raidlink_AddNewVolWithNaAsync': arglist}
+                    rsp = self.wc.grab_json_response(url, parms)
+            else: # June 2022 XCC FW
                 if cid[2] == 2:
                     cnum = cid[1]
                 arglist = '{0},{1},{2},{3},{4},{5},'.format(
