@@ -1493,6 +1493,7 @@ class XCCClient(IMMClient):
         url = '/api/function/raid_conf?params=raidlink_GetDefaultVolProp'
         args = (url, cid, 0, params['drives'])
         props = self.wc.grab_json_response(','.join([str(x) for x in args]))
+        usesctrlslot = False
         if not props:  # newer firmware requires raidlevel too
             args = (url, cid, params['raidlevel'], 0, params['drives'])
             props = self.wc.grab_json_response(','.join([str(x) for x in args]))
@@ -1501,6 +1502,7 @@ class XCCClient(IMMClient):
             args = (url, cid, params['raidlevel'], 0, params['drives'])
             props = self.wc.grab_json_response(','.join([str(x) for x in args]))
             if 'return' in props and props['return'] == 22:
+                usesctrlslot = True
                 # Jan 2023 XCC FW - with controller slot number
                 args = (url, cid, params['raidlevel'], 0, params['drives'], cslotno)
                 props = self.wc.grab_json_response(','.join([str(x) for x in args]))
@@ -1574,23 +1576,14 @@ class XCCClient(IMMClient):
         parms = {'raidlink_AddNewVolWithNaAsync': arglist}
         rsp = self.wc.grab_json_response(url, parms)
         if rsp['return'] == 14:  # newer firmware
-            if 'supported_cpwb' in props: # June 2022 XCC FW
+            if 'supported_cpwb' in props and not usesctrlslot: # no ctrl_type
                 arglist = '{0},{1},{2},{3},{4},{5},{6},'.format(
                     cnum, params['raidlevel'], params['spans'],
                     params['perspan'], 0, params['drives'], params['hotspares'])
                 arglist += ''.join(vols)
                 parms = {'raidlink_AddNewVolWithNaAsync': arglist}
                 rsp = self.wc.grab_json_response(url, parms)
-                if not rsp: # Jan 2023 XCC FW
-                    if cid[2] == 2:
-                        cnum = cid[1]
-                    arglist = '{0},{1},{2},{3},{4},{5},'.format(
-                        cnum, params['raidlevel'], params['spans'],
-                        params['perspan'], params['drives'], params['hotspares'])
-                    arglist += ''.join(vols) + ',{0}'.format(cid[2])
-                    parms = {'raidlink_AddNewVolWithNaAsync': arglist}
-                    rsp = self.wc.grab_json_response(url, parms)
-            else: # June 2022 XCC FW
+            else: # with ctrl_type
                 if cid[2] == 2:
                     cnum = cid[1]
                 arglist = '{0},{1},{2},{3},{4},{5},'.format(
