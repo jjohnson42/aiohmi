@@ -684,8 +684,13 @@ class IMMClient(object):
             return ()
 
     def get_oem_sensor_descriptions(self, ipmicmd):
-        return [{'name': x, 'type': 'Energy'
-                 } for x in self.get_oem_sensor_names(ipmicmd)]
+        desc = []
+        for x in self.get_oem_sensor_names(ipmicmd):
+            desc.append({
+                'name': x,
+                'type': 'Power' if 'Power' in x else 'Energy'
+            })
+        return desc
 
     def get_oem_sensor_reading(self, name, ipmicmd):
         if self._energymanager is None:
@@ -694,8 +699,15 @@ class IMMClient(object):
             kwh = self._energymanager.get_ac_energy(ipmicmd)
         elif name == 'DC Energy':
             kwh = self._energymanager.get_dc_energy(ipmicmd)
+        elif self._energymanager.supports(name):
+            value, units = self._energymanager.get_sensor(name, ipmicmd)
+            return sdr.SensorReading({
+                'name': name, 'imprecision': None,
+                'value': value,
+                'states': [], 'state_ids': [], 'health': pygconst.Health.Ok,
+                'type': 'Power'}, units)
         else:
-            raise pygexc.UnsupportedFunctionality('No sunch sensor ' + name)
+            raise pygexc.UnsupportedFunctionality('No such sensor ' + name)
         return sdr.SensorReading({'name': name, 'imprecision': None,
                                   'value': kwh, 'states': [],
                                   'state_ids': [],
@@ -1625,32 +1637,6 @@ class XCCClient(IMMClient):
         #         if 'DIMM' in name and 'Temp' in name:
         #             oemsensornames = oemsensornames + (name,)
         # return oemsensornames
-
-    def get_oem_sensor_descriptions(self, ipmicmd):
-        oemdesc = [{'name': x, 'type': 'Energy'} for x in super(
-            XCCClient, self).get_oem_sensor_names(ipmicmd)]
-        return oemdesc
-        # therminfo = self.grab_cacheable_json(
-        #     '/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
-        # if therminfo:
-        #     for name in sorted(therminfo['items'][0]):
-        #         if 'DIMM' in name and 'Temp' in name:
-        #             oemdesc.append({'name': name, 'type': 'Temperature'})
-        # return oemdesc
-
-    def get_oem_sensor_reading(self, name, ipmicmd):
-        if 'Energy' in name:
-            return super(XCCClient, self).get_oem_sensor_reading(name, ipmicmd)
-        therminfo = self.grab_cacheable_json(
-            '/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
-        temp = therminfo.get('items', [{}])[0].get(name, None)
-        if temp is None:
-            raise pygexc.UnsupportedFunctionality('No sunch sensor ' + name)
-        return sdr.SensorReading({'name': name, 'imprecision': None,
-                                  'value': temp, 'states': [],
-                                  'state_ids': [],
-                                  'health': pygconst.Health.Ok,
-                                  'type': 'Temperature'}, '°C')
 
     def get_storage_configuration(self, logout=True):
         rsp = self.wc.grab_json_response(
