@@ -718,27 +718,28 @@ class OEMHandler(generic.OEMHandler):
                 fru['FRU Number'] = bextra[0]
                 fru['Revision'] = bextra[4]
                 macs = bextra[6]
-                macprefix = None
-                idx = 0
-                endidx = len(macs) - 5
-                macprefix = None
-                while idx < endidx:
-                    currmac = macs[idx:idx + 6]
-                    if not isinstance(currmac, bytearray):
-                        # invalid vpd format, abort attempts to extract
-                        # mac in this way
-                        break
-                    if currmac == b'\x00\x00\x00\x00\x00\x00':
-                        break
-                    # VPD may veer off, detect and break off
-                    if macprefix is None:
-                        macprefix = currmac[:3]
-                    elif currmac[:3] != macprefix:
-                        break
-                    ms = mac_format.format(*currmac)
-                    ifidx = idx / 6 + 1
-                    fru['MAC Address {0}'.format(ifidx)] = ms
-                    idx = idx + 6
+                if macs:
+                    macprefix = None
+                    idx = 0
+                    endidx = len(macs) - 5
+                    macprefix = None
+                    while idx < endidx:
+                        currmac = macs[idx:idx + 6]
+                        if not isinstance(currmac, bytearray):
+                            # invalid vpd format, abort attempts to extract
+                            # mac in this way
+                            break
+                        if currmac == b'\x00\x00\x00\x00\x00\x00':
+                            break
+                        # VPD may veer off, detect and break off
+                        if macprefix is None:
+                            macprefix = currmac[:3]
+                        elif currmac[:3] != macprefix:
+                            break
+                        ms = mac_format.format(*currmac)
+                        ifidx = idx / 6 + 1
+                        fru['MAC Address {0}'.format(ifidx)] = ms
+                        idx = idx + 6
             except (AttributeError, KeyError, IndexError):
                 pass
             if self.has_xcc and name and name.startswith('PSU '):
