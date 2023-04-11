@@ -2018,8 +2018,10 @@ class XCCClient(IMMClient):
                     raise Exception(uploadthread.rsp)
                 raise Exception(errmsg)
             rsp = json.loads(uploadthread.rsp)
-            monitorurl = rsp['TaskMonitor']
+            monitorurl = rsp['@odata.id']
             complete = False
+            phase = "apply"
+            statetype = 'TaskState'
             while not complete:
                 pgress, status = self.grab_redfish_response_with_status(
                     monitorurl)
@@ -2030,14 +2032,21 @@ class XCCClient(IMMClient):
                 for msg in pgress.get('Messages', []):
                     if 'Verify failed' in msg.get('Message', ''):
                         raise Exception(msg['Message'])
-                state = pgress['TaskState']
+                state = pgress[statetype]
                 if state in ('Cancelled', 'Exception',
                              'Interrupted', 'Suspended'):
                     raise Exception(json.dumps(pgress['Messages']))
                 pct = float(pgress['PercentComplete'])
                 complete = state == 'Completed'
-                progress({'phase': 'apply', 'progress': pct})
-                if not complete:
+                progress({'phase': phase, 'progress': pct})
+                if complete:
+                    if 'OperationTransitionedToJob' in pgress['Messages'][0]['MessageId']:
+                        monitorurl = pgress['Messages'][0]['MessageArgs'][0]
+                        phase = 'validating'
+                        statetype = 'JobState'
+                        complete = False
+                        ipmisession.Session.pause(3)
+                else:
                     ipmisession.Session.pause(3)
             if bank == 'backup':
                 return 'complete'
