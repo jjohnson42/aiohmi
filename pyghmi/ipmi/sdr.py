@@ -372,6 +372,7 @@ class SDREntry(object):
         # event only, compact and full are very similar
         # this function handles the common aspects of compact and full
         # offsets from spec, minus 6
+        self.has_thresholds = False
         self.sensor_owner = entry[0]
         self.sensor_lun = entry[1] & 0x03
         self.sensor_number = entry[2]
@@ -383,6 +384,8 @@ class SDREntry(object):
         else:
             self.sensor_type_number = entry[7]
             self.reading_type = entry[8]  # table 42-1
+        if self.rectype == 1 and entry[6] & 0b00001100:
+            self.has_thresholds = True
         try:
             self.sensor_type = self.event_consts.sensor_type_codes[
                 self.sensor_type_number]
@@ -487,7 +490,7 @@ class SDREntry(object):
             numeric = twos_complement(reading[0], 8)
         elif self.numeric_format == 1:
             numeric = ones_complement(reading[0], 8)
-        elif self.numeric_format == 0:
+        elif self.numeric_format == 0 and (self.has_thresholds or self.reading_type == 1):
             numeric = reading[0]
         discrete = True
         if numeric is not None:
