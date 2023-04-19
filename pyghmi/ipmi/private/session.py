@@ -583,6 +583,12 @@ class Session(object):
             self.broken = True
             if self.socket:
                 self.socketpool[self.socket] -= 1
+        while self.logonwaiters:
+            waiter = self.logonwaiters.pop()
+            try:
+                waiter({'error': 'Session failed to initalize'})
+            except Exception:
+                pass
 
     def onlogon(self, parameter):
         if 'error' in parameter:
