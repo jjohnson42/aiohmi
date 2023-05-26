@@ -907,7 +907,7 @@ class Command(object):
         ip6gd = bytearray(ip6g['data'])
         if ip6gd[0] != 0x11:
             raise Exception('Unsupported reply')
-        gwa = socket.inet_ntop(socket.AF_INET6, ip6gd[1:17])
+        gwa = socket.inet_ntop(socket.AF_INET6, bytes(ip6gd[1:17]))
         retdata['static_gateway'] = gwa
         return retdata
 
