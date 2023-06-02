@@ -1,5 +1,5 @@
 # coding=utf8
-# Copyright 2016-2019 Lenovo
+# Copyright 2016-2023 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -2339,6 +2339,7 @@ class XCCClient(IMMClient):
             'W': pygconst.Health.Warning,
         }
         infoevents = False
+        existingevts = set([])
         for item in rsp.get('items', ()):
             # while usually the ipmi interrogation shall explain things,
             # just in case there is a gap, make sure at least the
@@ -2353,14 +2354,14 @@ class XCCClient(IMMClient):
             if item['cmnid'] == 'FQXSPPW0104J':
                 # This event does not get modeled by the sensors
                 # add a made up sensor to explain
-                summary['badreadings'].append(
+                fallbackdata.append(
                     sdr.SensorReading({'name': item['source'],
                                        'states': ['Not Redundant'],
                                        'state_ids': [3],
                                        'health': pygconst.Health.Warning,
                                        'type': 'Power'}, ''))
             elif item['cmnid'] == 'FQXSFMA0041K':
-                summary['badreadings'].append(
+                fallbackdata.append(
                     sdr.SensorReading({
                         'name': 'Optane DCPDIMM',
                         'health': pygconst.Health.Warning,
@@ -2369,6 +2370,10 @@ class XCCClient(IMMClient):
                         '')
                 )
             else:
+                currevt = '{}:{}'.format(item['source'], item['message'])
+                if currevt in existingevts:
+                    continue
+                existingevts.add(currevt)
                 fallbackdata.append(sdr.SensorReading({
                     'name': item['source'],
                     'states': [item['message']],
@@ -2387,6 +2392,9 @@ class XCCClient(IMMClient):
                     'health': pygconst.Health.Warning,
                     'type': 'LED',
                 }, ''))
+        summary['badreadings'] = fallbackdata
+        if fallbackdata:
+            raise pygexc.BypassGenericBehavior()
         return fallbackdata
         # Will use the generic handling for unhealthy systems
 
