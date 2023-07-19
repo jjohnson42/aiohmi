@@ -17,8 +17,16 @@ import json
 import os
 import re
 
+import pyghmi.constants as const
 import pyghmi.exceptions as exc
 import pyghmi.media as media
+
+_healthmap = {
+    'Critical': const.Health.Critical,
+    'Unknown': const.Health.Warning,
+    'Warning': const.Health.Warning,
+    'OK': const.Health.Ok,
+}
 
 boot_devices_write = {
     'net': 'Pxe',
