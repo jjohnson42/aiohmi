@@ -133,6 +133,74 @@ class OEMHandler(object):
         self._urlcache = cache
         self.webclient = webclient
 
+    def get_health(self, fishclient, verbose=True):
+        health = fishclient.sysinfo.get('Status', {})
+        health = health.get('HealthRollup', health.get('Health', 'Unknown'))
+        warnunknown = health == 'Unknown'
+        health = _healthmap[health]
+        summary = {'badreadings': [], 'health': health}
+        if health > 0 and verbose:
+            # now have to manually peruse all psus, fans, processors, ram,
+            # storage
+            procsumstatus = fishclient.sysinfo.get('ProcessorSummary', {}).get(
+                'Status', {})
+            procsumstatus = procsumstatus.get('HealthRollup',
+                                              procsumstatus.get('Health',
+                                                                None))
+            if procsumstatus != 'OK':
+                procfound = False
+                procurl = fishclient.sysinfo.get('Processors', {}).get('@odata.id',
+                                                                 None)
+                if procurl:
+                    for cpu in fishclient._do_web_request(procurl).get(
+                            'Members', []):
+                        cinfo = fishclient._do_web_request(cpu['@odata.id'])
+                        if cinfo.get('Status', {}).get(
+                                'State', None) == 'Absent':
+                            continue
+                        if cinfo.get('Status', {}).get(
+                                'Health', None) not in ('OK', None):
+                            procfound = True
+                            summary['badreadings'].append(SensorReading(cinfo))
+                if not procfound:
+                    procinfo = fishclient.sysinfo['ProcessorSummary']
+                    procinfo['Name'] = 'Processors'
+                    summary['badreadings'].append(SensorReading(procinfo))
+            memsumstatus = fishclient.sysinfo.get(
+                'MemorySummary', {}).get('Status', {})
+            memsumstatus = memsumstatus.get('HealthRollup',
+                                            memsumstatus.get('Health', None))
+            if memsumstatus != 'OK':
+                dimmfound = False
+                for mem in fishclient._do_web_request(
+                        fishclient.sysinfo['Memory']['@odata.id'])['Members']:
+                    dimminfo = fishclient._do_web_request(mem['@odata.id'])
+                    if dimminfo.get('Status', {}).get(
+                            'State', None) == 'Absent':
+                        continue
+                    if dimminfo.get('Status', {}).get(
+                            'Health', None) not in ('OK', None):
+                        summary['badreadings'].append(SensorReading(dimminfo))
+                        dimmfound = True
+                if not dimmfound:
+                    meminfo = fishclient.sysinfo['MemorySummary']
+                    meminfo['Name'] = 'Memory'
+                    summary['badreadings'].append(SensorReading(meminfo))
+            for adapter in fishclient.sysinfo['PCIeDevices']:
+                adpinfo = fishclient._do_web_request(adapter['@odata.id'])
+                if adpinfo['Status']['Health'] not in ('OK', None):
+                    summary['badreadings'].append(SensorReading(adpinfo))
+            for fun in fishclient.sysinfo['PCIeFunctions']:
+                funinfo = fishclient._do_web_request(fun['@odata.id'])
+                if funinfo['Status']['Health'] not in ('OK', None):
+                    summary['badreadings'].append(SensorReading(funinfo))
+        if warnunknown and not summary['badreadings']:
+            unkinf = SensorReading({'Name': 'BMC',
+                                    'Status': {'Health': 'Unknown'}})
+            unkinf.states = ['System does not provide health information']
+            summary['badreadings'].append(unkinf)
+        return summary
+
     def user_delete(self, uid):
         # Redfish doesn't do so well with Deleting users either...
         # Blanking the username seems to be the convention
