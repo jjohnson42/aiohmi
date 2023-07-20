@@ -1028,11 +1028,18 @@ class SMMClient(object):
         rsp = wc.getresponse()
         rsp.read()
         complete = False
+        tries = 0
         while not complete:
             ipmisession.Session.pause(3)
             wc.request('POST', '/data', 'get=fwProgress,fwUpdate')
-            rsp = wc.getresponse()
-            progdata = rsp.read()
+            try:
+                rsp = wc.getresponse()
+                progdata = rsp.read()
+            except Exception:
+                if tries > 2:
+                     break
+                tries += 1
+                continue
             if rsp.status != 200:
                 raise Exception('Error applying firmware')
             progdata = fromstring(progdata)
