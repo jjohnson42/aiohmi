@@ -21,6 +21,25 @@ import pyghmi.constants as const
 import pyghmi.exceptions as exc
 import pyghmi.media as media
 
+class SensorReading(object):
+    def __init__(self, healthinfo, sensor=None, value=None, units=None,
+                 unavailable=False):
+        if sensor:
+            self.name = sensor['name']
+        else:
+            self.name = healthinfo['Name']
+            self.health = _healthmap.get(healthinfo.get(
+                'Status', {}).get('Health', None), const.Health.Warning)
+            self.states = [healthinfo.get('Status', {}).get('Health',
+                                                            'Unknown')]
+            self.health = _healthmap[healthinfo['Status']['Health']]
+            self.states = [healthinfo['Status']['Health']]
+        self.value = value
+        self.state_ids = None
+        self.imprecision = None
+        self.units = units
+        self.unavailable = unavailable
+
 _healthmap = {
     'Critical': const.Health.Critical,
     'Unknown': const.Health.Warning,
