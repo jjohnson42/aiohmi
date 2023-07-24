@@ -25,6 +25,7 @@ import time
 
 import six
 
+import pyghmi.constants as pygconst
 import pyghmi.exceptions as pygexc
 import pyghmi.ipmi.private.util as util
 import pyghmi.ipmi.oem.lenovo.config as config
@@ -33,6 +34,21 @@ import pyghmi.redfish.oem.generic as generic
 import pyghmi.storage as storage
 from pyghmi.util.parse import parse_time
 import pyghmi.util.webclient as webclient
+
+class SensorReading(object):
+    def __init__(self, healthinfo, sensor=None, value=None, units=None,
+                 unavailable=False):
+        if sensor:
+            self.name = sensor['name']
+        else:
+            self.name = healthinfo['name']
+            self.health = healthinfo['health']
+            self.states = healthinfo['states']
+            self.state_ids = healthinfo.get('state_ids', None)
+        self.value = value
+        self.imprecision = None
+        self.units = units
+        self.unavailable = unavailable
 
 numregex = re.compile('([0-9]+)')
 funtypes = {
@@ -476,6 +492,60 @@ class OEMHandler(generic.OEMHandler):
                         newid, mapping.replace(':', ','))
                     self.wc.grab_json_response(
                         '/api/function', {'USB_AddMapping': newmapping})
+
+    def get_health(self, fishclient, verbose=True):
+        rsp = self._do_web_request('/api/providers/imm_active_events')
+        summary = {'badreadings': [], 'health': pygconst.Health.Ok}
+        fallbackdata = []
+        hmap = {
+            'I': pygconst.Health.Ok,
+            'E': pygconst.Health.Critical,
+            'W': pygconst.Health.Warning,
+        }
+        infoevents = False
+        existingevts = set([])
+        for item in rsp.get('items', ()):
+            # while usually the ipmi interrogation shall explain things,
+            # just in case there is a gap, make sure at least the
+            # health field is accurately updated
+            itemseverity = hmap.get(item.get('severity', 'E'),
+                                    pygconst.Health.Critical)
+            if itemseverity == pygconst.Health.Ok:
+                infoevents = True
+                continue
+            if (summary['health'] < itemseverity):
+                summary['health'] = itemseverity
+            if item['cmnid'] == 'FQXSPPW0104J':
+                # This event does not get modeled by the sensors
+                # add a made up sensor to explain
+                fallbackdata.append(
+                    SensorReading({'name': item['source'],
+                                       'states': ['Not Redundant'],
+                                       'state_ids': [3],
+                                       'health': pygconst.Health.Warning,
+                                       'type': 'Power'}, ''))
+            elif item['cmnid'] == 'FQXSFMA0041K':
+                fallbackdata.append(
+                    SensorReading({
+                        'name': 'Optane DCPDIMM',
+                        'health': pygconst.Health.Warning,
+                        'type': 'Memory',
+                        'states': [item['message']]},
+                        '')
+                )
+            else:
+                currevt = '{}:{}'.format(item['source'], item['message'])
+                if currevt in existingevts:
+                    continue
+                existingevts.add(currevt)
+                fallbackdata.append(SensorReading({
+                    'name': item['source'],
+                    'states': [item['message']],
+                    'health': itemseverity,
+                    'type': item['source'],
+                }, ''))
+        summary['badreadings'] = fallbackdata
+        return summary
 
     def get_description(self):
         description = self._do_web_request('/DeviceDescription.json')
