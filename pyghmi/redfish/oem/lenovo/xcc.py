@@ -24,6 +24,7 @@ import socket
 import time
 
 import six
+import zipfile
 
 import pyghmi.constants as pygconst
 import pyghmi.exceptions as pygexc
@@ -1191,6 +1192,20 @@ class OEMHandler(generic.OEMHandler):
         if usd['HttpPushUriTargetsBusy']:
             raise pygexc.TemporaryError('Cannot run multtiple updates to '
                                         'same target concurrently')
+        z = None
+        if data and hasattr(data, 'read'):
+            if zipfile.is_zipfile(data):
+                z = zipfile.ZipFile(data)
+            else:
+                data.seek(0)
+        elif data is None and zipfile.is_zipfile(filename):
+            z = zipfile.ZipFile(filename)
+        if z:
+            for tmpname in z.namelist():
+                if tmpname.endswith('.uxz'):
+                    filename = tmpname
+                    data = z.open(filename)
+                    break
         upurl = usd['HttpPushUri']
         self._do_web_request(
             '/redfish/v1/UpdateService',

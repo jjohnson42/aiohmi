@@ -28,6 +28,7 @@ import struct
 import weakref
 
 import six
+import zipfile
 
 import pyghmi.constants as pygconst
 import pyghmi.exceptions as pygexc
@@ -1985,6 +1986,20 @@ class XCCClient(IMMClient):
         if usd['HttpPushUriTargetsBusy']:
             raise pygexc.TemporaryError('Cannot run multiple updates to same '
                                         'target concurrently')
+        z = None
+        if data and hasattr(data, 'read'):
+            if zipfile.is_zipfile(data):
+                z = zipfile.ZipFile(data)
+            else:
+                data.seek(0)
+        elif data is None and zipfile.is_zipfile(filename):
+            z = zipfile.ZipFile(filename)
+        if z:
+            for tmpname in z.namelist():
+                if tmpname.endswith('.uxz'):
+                    filename = tmpname
+                    data = z.open(filename)
+                    break
         upurl = usd['HttpPushUri']
         self.grab_redfish_response_with_status(
             '/redfish/v1/UpdateService',
