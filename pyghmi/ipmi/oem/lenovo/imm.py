@@ -1987,6 +1987,8 @@ class XCCClient(IMMClient):
             raise pygexc.TemporaryError('Cannot run multiple updates to same '
                                         'target concurrently')
         z = None
+        wrappedfilename = None
+        uxzcount = 0
         if data and hasattr(data, 'read'):
             if zipfile.is_zipfile(data):
                 z = zipfile.ZipFile(data)
@@ -1996,10 +1998,13 @@ class XCCClient(IMMClient):
             z = zipfile.ZipFile(filename)
         if z:
             for tmpname in z.namelist():
-                if tmpname.endswith('.uxz'):
-                    filename = tmpname
-                    data = z.open(filename)
-                    break
+                if tmpname.startswith('payloads/'):
+                    uxzcount += 1
+                    if tmpname.endswith('.uxz'):
+                        wrappedfilename = tmpname
+        if uxzcount == 1 and wrappedfilename:
+            filename = os.path.basename(wrappedfilename)
+            data = z.open(wrappedfilename)
         upurl = usd['HttpPushUri']
         self.grab_redfish_response_with_status(
             '/redfish/v1/UpdateService',
