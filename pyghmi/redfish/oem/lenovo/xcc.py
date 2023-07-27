@@ -268,8 +268,11 @@ class OEMHandler(generic.OEMHandler):
         if bay != -1:
             raise pygexc.UnsupportedFunctionality(
                 'This is not an enclosure manager')
-        rsp = self.wc.grab_json_response_with_status(
+        wc = self.wc.dupe(timeout=5)
+        rsp = wc.grab_json_response_with_status(
             '/api/providers/virt_reseat', '{}')
+        if rsp[1] == 500 and rsp[0] == 'Target Unavailable':
+            return
         if rsp[1] != 200 or rsp[0].get('return', 1) != 0:
             raise pygexc.UnsupportedFunctionality(
                 'This platform does not support AC reseat.')

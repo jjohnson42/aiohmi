@@ -160,9 +160,11 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
             self.sock.close()
             self.sock = None
 
-    def dupe(self):
+    def dupe(self, timeout=None):
+        if timeout is None:
+            timeout = self.mytimeout
         return SecureHTTPConnection(self.thehost, self.theport, clone=self,
-                                    timeout=self.mytimeout)
+                                    timeout=timeout)
 
     def set_header(self, key, value):
         self.stdheaders[key] = value
