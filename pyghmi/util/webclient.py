@@ -317,11 +317,19 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
             ulhdrs['Content-Length'] = len(uploadforms[filename])
             self.ulsize = len(uploadforms[filename])
         else:
-            curroff = data.tell()
-            data.seek(0, 2)
-            self.ulsize = data.tell()
-            data.seek(curroff, 0)
-            self._upbuffer = data
+            canseek = True
+            try:
+                curroff = data.tell()
+            except io.UnsupportedOperation:
+                canseek = False
+                databytes = data.read()
+                self.ulsize = len(databytes)
+                self._upbuffer = io.BytesIO(databytes)
+            if canseek:
+                data.seek(0, 2)
+                self.ulsize = data.tell()
+                data.seek(curroff, 0)
+                self._upbuffer = data
             ulhdrs['Content-Type'] = b'application/octet-stream'
             ulhdrs['Content-Length'] = self.ulsize
         webclient = self.dupe()
