@@ -1619,7 +1619,7 @@ class OEMHandler(generic.OEMHandler):
                 'UUID': self._varsysinfo.get('UUID', ''),
                 'Serial Number': self._varsysinfo.get('SerialNumber', ''),
                 'Manufacturer': self._varsysinfo.get('Manufacturer', ''),
-                'Product Name': self._varsysinfo.get('Model', ''),
+                'Product name': self._varsysinfo.get('Model', ''),
                 'Model': self._varsysinfo.get(
                     'SKU', self._varsysinfo.get('PartNumber', '')),
             }
@@ -1636,7 +1636,7 @@ class OEMHandler(generic.OEMHandler):
             'UUID': self._varsysinfo.get('UUID', ''),
             'Serial Number': self._varsysinfo.get('SerialNumber', ''),
             'Manufacturer': self._varsysinfo.get('Manufacturer', ''),
-            'Product Name': self._varsysinfo.get('Model', ''),
+            'Product name': self._varsysinfo.get('Model', ''),
             'Model': self._varsysinfo.get(
                 'SKU', self._varsysinfo.get('PartNumber', '')),
         }
