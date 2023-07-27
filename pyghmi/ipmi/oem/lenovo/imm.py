@@ -1994,8 +1994,10 @@ class XCCClient(IMMClient):
         z = None
         wrappedfilename = None
         uxzcount = 0
+        needseek = False
         if data and hasattr(data, 'read'):
             if zipfile.is_zipfile(data):
+                needseek = True
                 z = zipfile.ZipFile(data)
             else:
                 data.seek(0)
@@ -2010,6 +2012,8 @@ class XCCClient(IMMClient):
         if uxzcount == 1 and wrappedfilename:
             filename = os.path.basename(wrappedfilename)
             data = z.open(wrappedfilename)
+        elif needseek:
+            data.seek(0)
         upurl = usd['HttpPushUri']
         self.grab_redfish_response_with_status(
             '/redfish/v1/UpdateService',
