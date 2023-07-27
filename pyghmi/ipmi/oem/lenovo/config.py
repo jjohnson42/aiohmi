@@ -353,6 +353,7 @@ class LenovoFirmwareConfig(object):
                     reset = False
                     name = setting.find("mriName").text
                     help = setting.find("desc").text
+                    validexpression = None
                     onedata = setting.find('text_data')
                     if onedata is not None:
                         if onedata.get('password') == 'true':
@@ -366,6 +367,7 @@ class LenovoFirmwareConfig(object):
                     if onedata is not None:
                         if onedata.get('maxinstance') is not None:
                             forceinstance = True
+                        validexpression = onedata.get('pattern', None)
                         instances = list(onedata.iter('instance'))
                         if not instances:
                             protect = True  # not supported yet
@@ -451,6 +453,7 @@ class LenovoFirmwareConfig(object):
                                     readonly_expression=readonly,
                                     hide_expression=hide,
                                     sortid=sortid,
+                                    validexpression=validexpression,
                                     alias=alias)
                                 sortid += 1
                                 instidx += 1
@@ -479,6 +482,7 @@ class LenovoFirmwareConfig(object):
                                 readonly_expression=readonly,
                                 hide_expression=hide,
                                 sortid=sortid,
+                                validexpression=validexpression,
                                 alias=alias)
                             sortid += 1
                         continue
@@ -503,6 +507,7 @@ class LenovoFirmwareConfig(object):
                                                readonly_expression=readonly,
                                                hide_expression=hide,
                                                sortid=sortid,
+                                               validexpression=validexpression,
                                                alias=alias)
                     sortid = sortid + 1
         for opt in options:

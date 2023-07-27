@@ -315,6 +315,11 @@ class IMMClient(object):
                                 '({2})'.format(
                                     newvalue, key,
                                     ','.join(self.fwo[key]['possible'])))
+                elif self.fwo[key]['validexpression']:
+                    if not re.match(self.fwo[key]['validexpression'], newvalue):
+                        raise pygexc.InvalidParameterValue(
+                            '"{0}" does not match expression "{1}"'.format(
+                                newvalue, self.fwo[key]['validexpression']))
                 newnewvalues.append(newvalue)
             if len(newnewvalues) == 1:
                 self.fwo[key]['new_value'] = newnewvalues[0]
