@@ -796,7 +796,7 @@ class IMMClient(object):
                     if venid is not None:
                         bdata['PCI Vendor ID'] = '{0:04x}'.format(venid)
                     devid = fundata.get(self.ADP_DEVID, None)
-                    if devid is not None:
+                    if devid is not None and 'PCI Device ID' not in bdata:
                         bdata['PCI Device ID'] = '{0:04x}'.format(devid)
                     venid = fundata.get(self.ADP_SUBVENID, None)
                     if venid is not None:
