@@ -346,7 +346,7 @@ class OEMHandler(generic.OEMHandler):
             return self.smmhandler.get_ntp_servers()
         if self.has_tsma:
             return self.tsmahandler.get_ntp_servers()
-        return None
+        return ()
 
     def set_ntp_enabled(self, enabled):
         if self.has_tsm or self.has_ami or self.has_asrock:
