@@ -16,10 +16,13 @@ from fnmatch import fnmatch
 import json
 import os
 import re
+import time
 
 import pyghmi.constants as const
 import pyghmi.exceptions as exc
 import pyghmi.media as media
+import pyghmi.util.webclient as webclient
+
 
 class SensorReading(object):
     def __init__(self, healthinfo, sensor=None, value=None, units=None,
@@ -776,8 +779,78 @@ class OEMHandler(object):
             'Remote media upload not supported on this platform')
 
     def update_firmware(self, filename, data=None, progress=None, bank=None):
-        raise exc.UnsupportedFunctionality(
-            'Firmware update not supported on this platform')
+        usd = self._do_web_request('/redfish/v1/UpdateService')
+        if usd.get('HttpPushUriTargetsBusy', False):
+            raise pygexc.TemporaryError('Cannot run multtiple updates to '
+                                        'same target concurrently')
+        try:
+            upurl = usd['HttpPushUri']
+        except KeyError:
+            raise pygexc.UnsupportedFunctionality('Redfish firmware update only supported for implementations with push update support')
+        if 'HttpPushUriTargetsBusy' in usd:
+            self._do_web_request(
+                '/redfish/v1/UpdateService',
+                {'HttpPushUriTargetsBusy': True}, method='PATCH')
+        try:
+            uploadthread = webclient.FileUploader(
+                self.webclient, upurl, filename, data, formwrap=False,
+                excepterror=False)
+            uploadthread.start()
+            wc = self.webclient
+            while uploadthread.isAlive():
+                uploadthread.join(3)
+                if progress:
+                    progress(
+                        {'phase': 'upload',
+                         'progress': 100 * wc.get_upload_progress()})
+            if (uploadthread.rspstatus >= 300
+                    or uploadthread.rspstatus < 200):
+                rsp = uploadthread.rsp
+                errmsg = ''
+                try:
+                    rsp = json.loads(rsp)
+                    errmsg = (
+                        rsp['error'][
+                            '@Message.ExtendedInfo'][0]['Message'])
+                except Exception:
+                    raise Exception(uploadthread.rsp)
+                raise Exception(errmsg)
+            rsp = json.loads(uploadthread.rsp)
+            monitorurl = rsp['@odata.id']
+            complete = False
+            phase = "apply"
+            statetype = 'TaskState'
+            while not complete:
+                pgress = self._do_web_request(monitorurl, cache=False)
+                if not pgress:
+                    break
+                for msg in pgress.get('Messages', []):
+                    if 'Verify failed' in msg.get('Message', ''):
+                        raise Exception(msg['Message'])
+                state = pgress[statetype]
+                if state in ('Cancelled', 'Exception', 'Interrupted',
+                             'Suspended'):
+                    raise Exception(
+                        json.dumps(json.dumps(pgress['Messages'])))
+                pct = float(pgress['PercentComplete'])
+                complete = state == 'Completed'
+                progress({'phase': phase, 'progress': pct})
+                if complete:
+                    if 'OperationTransitionedToJob' in pgress['Messages'][0]['MessageId']:
+                        monitorurl = pgress['Messages'][0]['MessageArgs'][0]
+                        phase = 'validating'
+                        statetype = 'JobState'
+                        complete = False
+                        time.sleep(3)
+                else:
+                    time.sleep(3)
+            return 'pending'
+        finally:
+            if 'HttpPushUriTargetsBusy' in usd:
+                self._do_web_request(
+                    '/redfish/v1/UpdateService',
+                    {'HttpPushUriTargetsBusy': False}, method='PATCH')
+
 
     def _do_bulk_requests(self, urls, cache=True):
         if self._gpool:
