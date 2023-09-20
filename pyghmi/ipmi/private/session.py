@@ -592,6 +592,9 @@ class Session(object):
 
     def onlogon(self, parameter):
         if 'error' in parameter:
+            while self.logonwaiters:
+                waiter = self.logonwaiters.pop()
+                waiter(parameter)
             self._mark_broken(parameter['error'])
         elif self.onlogpayload:
             self._cmdwait()
