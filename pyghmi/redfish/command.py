@@ -194,13 +194,15 @@ class Command(object):
         systems = members['Members']
         if sysurl:
             for system in systems:
-                if system['@odata.id'] == sysurl:
-                    self.sysurl = sysurl
+                if system['@odata.id'] == sysurl or system['@odata.id'].split('/')[-1] == sysurl:
+                    self.sysurl = system['@odata.id']
                     break
             else:
                 raise exc.PyghmiException(
                     'Specified sysurl not found: {0}'.format(sysurl))
         else:
+            if len(systems) != 1:
+                systems = [x for x in systems if 'DPU' not in x['@odata.id']]
             if len(systems) != 1:
                 raise exc.PyghmiException(
                     'Multi system manager, sysurl is required parameter')
