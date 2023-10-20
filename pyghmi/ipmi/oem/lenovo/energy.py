@@ -28,6 +28,7 @@ class EnergyManager(object):
         # get the handle (which has always been the same, but just in case
         self.iana = bytearray(b'\x66\x4a\x00')
         self._usefapm = False
+        self._mypowermeters = ()
         try:
             rsp = ipmicmd.xraw_command(netfn=0x3a, command=0x32, data=[4, 2, 0, 0, 0])
             if len(rsp['data']) >= 8:

@@ -14,7 +14,7 @@
 
 import pyghmi.exceptions as exc
 import pyghmi.ipmi.private.constants as event_const
-
+import struct
 
 class OEMHandler(object):
     """Handler class for OEM capabilities.
@@ -40,6 +40,79 @@ class OEMHandler(object):
         :return: dictionary with 'height' and 'slot' members
         """
         return {}
+
+    def get_system_power_watts(self, ipmicmd):
+        # Use DCMI getpower reading command
+        rsp = ipmicmd.xraw_command(netfn=0x2c, command=2, data=(0xdc, 1, 0, 0))
+        wattage = struct.unpack('<H', rsp['data'][1:3])[0]
+        return wattage
+    
+    def get_average_processor_temperature(self, ipmicmd):
+        # DCMI suggests preferrence for 0x37 ('Air inlet')
+        # If not that, then 0x40 ('Air inlet')
+        # in practice, some implementations use 0x27 ('External environment')
+        if not hasattr(self, '_processor_names'):
+            self._processor_names = []
+        readings = []
+        if not self._processor_names:
+            sdr = ipmicmd.init_sdr()
+            for sensename in sdr.sensors:
+                sensor = sdr.sensors[sensename]
+                if sensor.reading_type != 1:
+                    continue
+                if not sensor.baseunit:
+                    continue
+                if sensor.sensor_type != 'Temperature':
+                    continue
+                if sensor.entity == 'Processor':
+                    self._processor_names.append(sensor.sensor_name)
+        readingvalues = []
+        tmplreading = None
+        for procsensor in self._processor_names:
+            try:
+                reading = ipmicmd.get_sensor_reading(procsensor)
+            except exc.IpmiException:
+                continue
+            tmplreading = reading
+            readingvalues.append(reading.value)
+        avgval = sum(readingvalues) / len(readingvalues)
+        tmplreading.name = 'Average Processor Temperature'
+        tmplreading.value = avgval
+        return tmplreading
+
+
+    def get_inlet_temperature(self, ipmicmd):
+        # DCMI suggests preferrence for 0x37 ('Air inlet')
+        # If not that, then 0x40 ('Air inlet')
+        # in practice, some implementations use 0x27 ('External environment')
+        if not hasattr(self, '_inlet_name'):
+            self._inlet_name = None
+        if self._inlet_name:
+            return ipmicmd.get_sensor_reading(self._inlet_name)
+        sdr = ipmicmd.init_sdr()
+        extenv = []
+        airinlets = []
+        for sensename in sdr.sensors:
+            sensor = sdr.sensors[sensename]
+            if sensor.reading_type != 1:
+                continue
+            if not sensor.baseunit:
+                continue
+            if sensor.sensor_type != 'Temperature':
+                continue
+            if sensor.entity == 'External environment':
+                extenv.append(sensor.sensor_name)
+            if sensor.entity == 'Air inlet':
+                airinlets.append(sensor.sensor_name)
+        if airinlets:
+            if len(airinlets) > 1:
+                raise Exception('TODO: how to deal with multiple inlets')
+            self._inlet_name = airinlets[0]
+        elif extenv:
+            if len(extenv) > 1:
+                raise Exception('TODO: how to deal with multiple external environments')
+            self._inlet_name = extenv[0]
+        return ipmicmd.get_sensor_reading(self._inlet_name)
 
     def process_event(self, event, ipmicmd, seldata):
         """Modify an event according with OEM understanding.

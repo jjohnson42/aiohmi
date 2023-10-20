@@ -778,6 +778,18 @@ class Command(object):
             summary['badreadings'] = fallbackreadings
         return summary
 
+    def get_system_power_watts(self):
+        self.oem_init()
+        return self._oem.get_system_power_watts(self)
+    
+    def get_inlet_temperature(self):
+        self.oem_init()
+        return self._oem.get_inlet_temperature(self)
+
+    def get_average_processor_temperature(self):
+        self.oem_init()
+        return self._oem.get_average_processor_temperature(self)
+
     def get_sensor_reading(self, sensorname):
         """Get a sensor reading by name
 
