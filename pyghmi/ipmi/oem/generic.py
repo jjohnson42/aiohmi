@@ -76,10 +76,12 @@ class OEMHandler(object):
             tmplreading = reading
             if reading.value is not None:
                 readingvalues.append(float(reading.value))
-        avgval = sum(readingvalues) / len(readingvalues)
         tmplreading.name = 'Average Processor Temperature'
-        tmplreading.value = avgval
-        tmplreading.unavailable = 0
+        if readingvalues:
+            tmplreading.value = sum(readingvalues) / len(readingvalues)
+        else:
+            tmplreading.value = None
+            tmplreading.unavailable = 1
         return tmplreading
 
 

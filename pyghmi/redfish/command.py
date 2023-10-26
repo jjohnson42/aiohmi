@@ -1170,6 +1170,10 @@ class Command(object):
                 if temp.get('ReadingCelsius', None) is None:
                     continue
                 cputemps.append(temp['ReadingCelsius'])
+        if not cputemps:
+            return  SensorReading(
+            None, {'name': 'Average Processor Temperature'}, value=None, units='°C',
+                   unavailable=True)
         avgtemp = sum(cputemps) / len(cputemps)
         return SensorReading(
             None, {'name': 'Average Processor Temperature'}, value=avgtemp, units='°C')
@@ -1186,9 +1190,15 @@ class Command(object):
         for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
             envinfo = self._get_chassis_env(chassis)
             inlets.append(envinfo['inlet'])
-        val = sum(inlets) / len(inlets)
+        if inlets:
+            val = sum(inlets) / len(inlets)
+            unavail = False
+        else:
+            val = None
+            unavail = True
         return SensorReading(
-                        None, {'name': 'Inlet Temperature'}, value=val, units='°C')
+                        None, {'name': 'Inlet Temperature'}, value=val, units='°C',
+                        unavailable=unavail)
     def get_sensor_descriptions(self):
         for sensor in natural_sort(self._sensormap):
             yield self._sensormap[sensor]
