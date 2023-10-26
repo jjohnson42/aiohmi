@@ -74,10 +74,12 @@ class OEMHandler(object):
             except exc.IpmiException:
                 continue
             tmplreading = reading
-            readingvalues.append(reading.value)
+            if reading.value is not None:
+                readingvalues.append(float(reading.value))
         avgval = sum(readingvalues) / len(readingvalues)
         tmplreading.name = 'Average Processor Temperature'
         tmplreading.value = avgval
+        tmplreading.unavailable = 0
         return tmplreading
 
 

@@ -142,6 +142,16 @@ class SensorReading(object):
         self.imprecision = None
         self.units = units
         self.unavailable = unavailable
+    
+    def __repr__(self):
+        return repr({
+            'value': self.value,
+            'state_ids': self.state_ids,
+            'units': self.units,
+            'imprecision': self.imprecision,
+            'name': self.name,
+            'unavailable': self.unavailable,
+        })
 
 
 class Command(object):
@@ -509,6 +519,8 @@ class Command(object):
     def _do_web_request(self, url, payload=None, method=None, cache=True,
                         etag=None):
         res = None
+        if cache is True:
+            cache = 30
         if cache and payload is None and method is None:
             res = self._get_cache(url, cache)
         if res:
@@ -651,6 +663,14 @@ class Command(object):
                         'url': thermurl}
         for subchassis in chassisinfo.get('Links', {}).get('Contains', []):
             self._mapchassissensors(subchassis)
+
+    def _get_thermals(self, chassis):
+        chassisurl = chassis['@odata.id']
+        chassisinfo = self._do_web_request(chassisurl)
+        thermurl = chassisinfo.get('Thermal', {}).get('@odata.id', '')
+        if thermurl:
+            therminf = self._do_web_request(thermurl, cache=1)
+            return therminf.get('Temperatures', [])
 
     @property
     def _bmcurl(self):
@@ -1129,6 +1149,46 @@ class Command(object):
                     log.get('Severity', 'Warning'), const.Health.Ok)
                 yield record
 
+    def _get_chassis_env(self, chassis):
+        chassisurl = chassis['@odata.id']
+        chassisinfo = self._do_web_request(chassisurl)
+        envurl = chassisinfo.get('EnvironmentMetrics', {}).get('@odata.id', '')
+        envmetric = self._do_web_request(envurl, cache=1)
+        retval = {
+            'watts': envmetric.get('PowerWatts', {}).get('Reading', None),
+            'inlet': envmetric.get('TemperatureCelsius', {}).get('Reading', None)
+        }
+        return retval
+
+    def get_average_processor_temperature(self):
+        cputemps = []
+        for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
+            thermals = self._get_thermals(chassis)
+            for temp in thermals:
+                if temp.get('PhysicalContext', '') != 'CPU':
+                    continue
+                if temp.get('ReadingCelsius', None) is None:
+                    continue
+                cputemps.append(temp['ReadingCelsius'])
+        avgtemp = sum(cputemps) / len(cputemps)
+        return SensorReading(
+            None, {'name': 'Average Processor Temperature'}, value=avgtemp, units='°C')
+
+    def get_system_power_watts(self):
+        totalwatts = 0
+        for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
+            envinfo = self._get_chassis_env(chassis)
+            totalwatts += envinfo['watts']
+        return totalwatts
+
+    def get_inlet_temperature(self):
+        inlets = []
+        for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
+            envinfo = self._get_chassis_env(chassis)
+            inlets.append(envinfo['inlet'])
+        val = sum(inlets) / len(inlets)
+        return SensorReading(
+                        None, {'name': 'Inlet Temperature'}, value=val, units='°C')
     def get_sensor_descriptions(self):
         for sensor in natural_sort(self._sensormap):
             yield self._sensormap[sensor]
