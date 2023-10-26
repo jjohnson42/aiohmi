@@ -14,6 +14,7 @@
 
 import pyghmi.exceptions as exc
 import pyghmi.ipmi.private.constants as event_const
+import pyghmi.ipmi.sdr as ipmisdr
 import struct
 
 class OEMHandler(object):
@@ -67,16 +68,14 @@ class OEMHandler(object):
                 if sensor.entity == 'Processor':
                     self._processor_names.append(sensor.sensor_name)
         readingvalues = []
-        tmplreading = None
         for procsensor in self._processor_names:
             try:
                 reading = ipmicmd.get_sensor_reading(procsensor)
             except exc.IpmiException:
                 continue
-            tmplreading = reading
             if reading.value is not None:
                 readingvalues.append(float(reading.value))
-        tmplreading.name = 'Average Processor Temperature'
+        tmplreading = ipmisdr.SensorReading({'name': 'Average Processor Temperature', 'type': 'Temperature'}, '°C')
         if readingvalues:
             tmplreading.value = sum(readingvalues) / len(readingvalues)
         else:
