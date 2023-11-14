@@ -2072,7 +2072,8 @@ class XCCClient(IMMClient):
                 complete = state == 'Completed'
                 progress({'phase': phase, 'progress': pct})
                 if complete:
-                    if 'OperationTransitionedToJob' in pgress['Messages'][0]['MessageId']:
+                    msgs = pgress.get('Messages', [])
+                    if msgs and 'OperationTransitionedToJob' in msgs[0].get('MessageId', ''):
                         monitorurl = pgress['Messages'][0]['MessageArgs'][0]
                         phase = 'validating'
                         statetype = 'JobState'
