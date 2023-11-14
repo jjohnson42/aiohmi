@@ -102,6 +102,22 @@ def natural_sort(iterable):
         return sorted(iterable)
 
 
+def str_to_size(sizestr):
+    if 'GB' in sizestr:
+        sizestr = sizestr.replace('GB', '')
+        sizestr = int(float(sizestr) * 1000)
+    elif 'GiB' in sizestr:
+        sizestr = sizestr.replace('GiB', '')
+        sizestr = int(float(sizestr) * 1024)
+    elif 'TB' in sizestr:
+        sizestr = sizestr.replace('TB', '')
+        sizestr = int(float(sizestr) * 1000 * 1000)
+    elif 'TiB' in sizestr:
+        sizestr = sizestr.replace('TiB', '')
+        sizestr = int(float(sizestr) * 1024 * 1024)
+    return sizestr
+
+
 class OEMHandler(generic.OEMHandler):
     logouturl = '/api/providers/logout'
     bmcname = 'XCC'
@@ -708,12 +724,8 @@ class OEMHandler(generic.OEMHandler):
                             spares.append(diskinfo)
                         else:
                             disks.append(diskinfo)
-                    totalsize = pool['totalCapacityStr'].replace(
-                        'GB', '').replace('GiB', '')
-                    totalsize = int(float(totalsize) * 1024)
-                    freesize = pool['freeCapacityStr'].replace(
-                        'GB', '').replace('GiB', '')
-                    freesize = int(float(freesize) * 1024)
+                    totalsize = str_to_size(pool['totalCapacityStr'])
+                    freesize = str_to_size(pool['freeCapacityStr'])
                     pools.append(storage.Array(
                         disks=disks, raid=pool['rdlvlstr'], volumes=volumes,
                         id=(cid, pool['id']), hotspares=spares,
