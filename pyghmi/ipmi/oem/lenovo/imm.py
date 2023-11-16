@@ -1336,8 +1336,12 @@ class XCCClient(IMMClient):
 
     def get_disk_hardware(self, diskent, prefix=''):
         bdata = {}
-        if not prefix and diskent.get('location', '').startswith('M.2'):
-            prefix = 'M.2-'
+        if not prefix:
+            location = diskent.get('location', '')
+            if location.startswith('M.2'):
+                prefix = 'M.2-'
+            elif location.startswith('7MM'):
+                prefix = '7MM-'
         diskname = 'Disk {1}{0}'.format(diskent['slotNo'], prefix)
         bdata['Model'] = diskent['productName'].rstrip()
         bdata['Serial Number'] = diskent['serialNo'].rstrip()
@@ -1347,8 +1351,12 @@ class XCCClient(IMMClient):
 
     def get_disk_firmware(self, diskent, prefix=''):
         bdata = {}
-        if not prefix and diskent.get('location', '').startswith('M.2'):
-            prefix = 'M.2-'
+        if not prefix:
+            location = diskent.get('location', '')
+            if location.startswith('M.2'):
+                prefix = 'M.2-'
+            elif location.startswith('7MM'):
+                prefix = '7MM-'
         diskname = 'Disk {1}{0}'.format(diskent['slotNo'], prefix)
         bdata['model'] = diskent[
             'productName'].rstrip()
