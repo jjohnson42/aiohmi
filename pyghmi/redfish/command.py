@@ -1153,6 +1153,8 @@ class Command(object):
         chassisurl = chassis['@odata.id']
         chassisinfo = self._do_web_request(chassisurl)
         envurl = chassisinfo.get('EnvironmentMetrics', {}).get('@odata.id', '')
+        if not envurl:
+            return {}
         envmetric = self._do_web_request(envurl, cache=1)
         retval = {
             'watts': envmetric.get('PowerWatts', {}).get('Reading', None),
@@ -1180,16 +1182,24 @@ class Command(object):
 
     def get_system_power_watts(self):
         totalwatts = 0
+        gotpower = False
         for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
             envinfo = self._get_chassis_env(chassis)
-            totalwatts += envinfo['watts']
+            currwatts = envinfo.get('watts', None)
+            if currwatts is not None:
+                gotpower = True
+                totalwatts += envinfo['watts']
+        if not gotpower:
+            raise exc.UnsupportedFunctionality("System does not provide Power under redfish EnvironmentMetrics")
         return totalwatts
 
     def get_inlet_temperature(self):
         inlets = []
         for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
             envinfo = self._get_chassis_env(chassis)
-            inlets.append(envinfo['inlet'])
+            currinlet = envinfo.get('inlet', None)
+            if currinlet:
+                inlets.append(currinlet)
         if inlets:
             val = sum(inlets) / len(inlets)
             unavail = False

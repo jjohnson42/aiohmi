@@ -115,6 +115,9 @@ class OEMHandler(object):
             if len(extenv) > 1:
                 raise Exception('TODO: how to deal with multiple external environments')
             self._inlet_name = extenv[0]
+        if not self._inlet_name:
+            raise exc.UnsupportedFunctionality(
+                'Unable to detect inlet sensor name for this platform')
         return ipmicmd.get_sensor_reading(self._inlet_name)
 
     def process_event(self, event, ipmicmd, seldata):
