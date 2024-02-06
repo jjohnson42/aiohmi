@@ -1,11 +1,6 @@
 Summary: Python General Hardware Management Initiative (IPMI and others)
-%if "%{rhel}" == "8"
-%global sname python2-aiohmi
-Requires: python2-cryptography
-%else
-%global sname python-aiohmi
-Requires: python-cryptography
-%endif
+%global sname python3-aiohmi
+Requires: python3-cryptography
 Name: %sname
 version: #VERSION#
 Release: %{?release:%{release}}%{!?release:1}
@@ -31,14 +26,19 @@ this library into python code
 %setup -n aiohmi-%{version}
 
 %build
-python setup.py build
+python3 setup.py build
 
 %install
-python setup.py install --single-version-externally-managed -O1 --root=$RPM_BUILD_ROOT --record=INSTALLED_FILES --prefix=/usr
+python3 setup.py install --single-version-externally-managed -O1 --root=$RPM_BUILD_ROOT --record=INSTALLED_FILES --prefix=/usr
+mkdir -p  $RPM_BUILD_ROOT/usr/share/licenses/aiohmi/
+cp LICENSE  $RPM_BUILD_ROOT/usr/share/licenses/aiohmi/
+
+
 
 %clean
 rm -rf $RPM_BUILD_ROOT
 
 %files -f INSTALLED_FILES
+%license /usr/share/licenses/aiohmi/LICENSE
 %defattr(-,root,root)
 

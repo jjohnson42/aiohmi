@@ -11,7 +11,7 @@ incorporate the aiohmi library into a Python application.
 
 Summary: %{common_summary}
 Name: python-%{sname}
-Version: %{?version:%{version}}%{!?version:%(python setup.py --version)}
+Version: %{?version:%{version}}%{!?version:%(python3 setup.py --version)}
 Release: %{?release:%{release}}%{!?release:1}
 Source0: http://tarballs.openstack.org/%{sname}/%{sname}-%{version}.tar.gz
 License: ASL 2.0
@@ -24,26 +24,6 @@ Url: https://git.openstack.org/cgit/openstack/aiohmi
 
 %description
 %{common_desc}
-
-%package -n python2-%{sname}
-Summary: %{common_summary}
-%{?python_provide:%python_provide python2-%{sname}}
-
-BuildRequires: python2-devel
-BuildRequires: python2-pbr
-BuildRequires: python2-setuptools
-
-Requires: python2-cryptography >= 2.1, python2-cryptography, python2-dateutil
-
-%description -n python2-%{sname}
-%{common_desc}
-
-%package -n python2-%{sname}-tests
-Summary: %{common_desc_tests}
-Requires: python2-%{sname} = %{version}-%{release}
-
-%description -n python2-%{sname}-tests
-%{common_desc_tests}
 
 %if 0%{?with_python3}
 
@@ -72,7 +52,7 @@ Requires: python3-%{sname} = %{version}-%{release}
 %package -n python-%{sname}-doc
 Summary: The aiohmi library documentation
 
-BuildRequires: python2-sphinx
+BuildRequires: python3-sphinx
 
 %description -n python-%{sname}-doc
 Documentation for the aiohmi library
@@ -88,7 +68,7 @@ Documentation for the aiohmi library
 %py2_build
 
 # generate html docs
-%{__python2} setup.py build_sphinx -b html
+%{__python3} setup.py build_sphinx -b html
 # remove the sphinx-build leftovers
 rm -rf doc/build/html/.{doctrees,buildinfo}
 
@@ -131,20 +111,6 @@ popd
 %license LICENSE
 %{python3_sitelib}/%{sname}/tests
 %endif # with_python3
-
-%files -n python2-%{sname}
-%license LICENSE
-%{_bindir}/aiohmicons
-%{_bindir}/aiohmiutil
-%{_bindir}/virshbmc
-%{_bindir}/fakebmc
-%{python2_sitelib}/%{sname}
-%{python2_sitelib}/%{sname}-*.egg-info
-%exclude %{python2_sitelib}/%{sname}/tests
-
-%files -n python2-%{sname}-tests
-%license LICENSE
-%{python2_sitelib}/%{sname}/tests
 
 %files -n python-%{sname}-doc
 %license LICENSE
