@@ -6,4 +6,4 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
-.. autoclass:: pyghmi.ipmi.command.Command
+.. autoclass:: aiohmi.ipmi.command.Command

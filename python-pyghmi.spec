@@ -1,13 +1,13 @@
 %global with_python3 1
-%global sname pyghmi
+%global sname aiohmi
 %global common_summary Python General Hardware Management Initiative (IPMI and others)
 
 %global common_desc This is a pure Python implementation of IPMI protocol. \
 \
-The included pyghmicons and pyghmiutil scripts demonstrate how one may \
-incorporate the pyghmi library into a Python application.
+The included aiohmicons and aiohmiutil scripts demonstrate how one may \
+incorporate the aiohmi library into a Python application.
 
-%global common_desc_tests Tests for the pyghmi library
+%global common_desc_tests Tests for the aiohmi library
 
 Summary: %{common_summary}
 Name: python-%{sname}
@@ -20,7 +20,7 @@ BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-buildroot
 Prefix: %{_prefix}
 BuildArch: noarch
 Vendor: Jarrod Johnson <jjohnson2@lenovo.com>
-Url: https://git.openstack.org/cgit/openstack/pyghmi
+Url: https://git.openstack.org/cgit/openstack/aiohmi
 
 %description
 %{common_desc}
@@ -70,12 +70,12 @@ Requires: python3-%{sname} = %{version}-%{release}
 %endif # with_python3
 
 %package -n python-%{sname}-doc
-Summary: The pyghmi library documentation
+Summary: The aiohmi library documentation
 
 BuildRequires: python2-sphinx
 
 %description -n python-%{sname}-doc
-Documentation for the pyghmi library
+Documentation for the aiohmi library
 
 %prep
 %setup -qn %{sname}-%{version}
@@ -98,10 +98,10 @@ rm -rf doc/build/html/.{doctrees,buildinfo}
 
 # rename python3 binary
 pushd %{buildroot}/%{_bindir}
-mv pyghmicons pyghmicons-%{python3_version}
-ln -s pyghmicons-%{python3_version} pyghmicons-3
-mv pyghmiutil pyghmiutil-%{python3_version}
-ln -s pyghmiutil-%{python3_version} pyghmiutil-3
+mv aiohmicons aiohmicons-%{python3_version}
+ln -s aiohmicons-%{python3_version} aiohmicons-3
+mv aiohmiutil aiohmiutil-%{python3_version}
+ln -s aiohmiutil-%{python3_version} aiohmiutil-3
 mv virshbmc virshbmc-%{python3_version}
 ln -s virshbmc-%{python3_version} virshbmc-3
 mv fakebmc fakebmc-%{python3_version}
@@ -115,10 +115,10 @@ popd
 %if 0%{?with_python3}
 %files -n python3-%{sname}
 %license LICENSE
-%{_bindir}/pyghmicons-%{python3_version}
-%{_bindir}/pyghmicons-3
-%{_bindir}/pyghmiutil-%{python3_version}
-%{_bindir}/pyghmiutil-3
+%{_bindir}/aiohmicons-%{python3_version}
+%{_bindir}/aiohmicons-3
+%{_bindir}/aiohmiutil-%{python3_version}
+%{_bindir}/aiohmiutil-3
 %{_bindir}/virshbmc-%{python3_version}
 %{_bindir}/virshbmc-3
 %{_bindir}/fakebmc-%{python3_version}
@@ -134,8 +134,8 @@ popd
 
 %files -n python2-%{sname}
 %license LICENSE
-%{_bindir}/pyghmicons
-%{_bindir}/pyghmiutil
+%{_bindir}/aiohmicons
+%{_bindir}/aiohmiutil
 %{_bindir}/virshbmc
 %{_bindir}/fakebmc
 %{python2_sitelib}/%{sname}

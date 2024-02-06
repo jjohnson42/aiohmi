@@ -1,8 +1,8 @@
 #!/bin/bash
 cd `dirname $0`
-mkdir -p /tmp/pyghmi
-cp -a * .git /tmp/pyghmi
-cd /tmp/pyghmi
+mkdir -p /tmp/aiohmi
+cp -a * .git /tmp/aiohmi
+cd /tmp/aiohmi
 export PYEXEC=python3
 export DSCARGS="--with-python2=True --with-python3=True"
 if grep wheezy /etc/os-release; then
@@ -14,11 +14,11 @@ fi
 $PYEXEC -c 'import pbr' || ./makesetup
 VERSION=`$PYEXEC setup.py --version`
 $PYEXEC setup.py sdist
-py2dsc $DSCARGS dist/pyghmi-$VERSION.tar.gz
+py2dsc $DSCARGS dist/aiohmi-$VERSION.tar.gz
 shopt -s extglob
 cd deb_dist/!(*.orig)/
 dpkg-buildpackage -rfakeroot -uc -us -i
 cd -
 rm -rf $(find deb_dist -mindepth 1 -maxdepth 1 -type d)
-rm $1/*pyghmi*
+rm $1/*aiohmi*
 cp deb_dist/* $1/

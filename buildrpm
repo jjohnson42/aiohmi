@@ -3,8 +3,8 @@ cd `dirname $0`
 python -c 'import pbr' || ./makesetup
 VERSION=`python setup.py --version`
 python setup.py sdist
-cp dist/pyghmi-$VERSION.tar.gz ~/rpmbuild/SOURCES
-grep -v python.-pbr python-pyghmi.spec > currentbuild.spec
+cp dist/aiohmi-$VERSION.tar.gz ~/rpmbuild/SOURCES
+grep -v python.-pbr python-aiohmi.spec > currentbuild.spec
 rpmbuild -bs currentbuild.spec
-rm $1/python-pyghmi-*rpm
-cp ~/rpmbuild/SRPMS/python-pyghmi-$VERSION-1.src.rpm $1/
+rm $1/python-aiohmi-*rpm
+cp ~/rpmbuild/SRPMS/python-aiohmi-$VERSION-1.src.rpm $1/

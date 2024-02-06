@@ -1,7 +1,7 @@
 [run]
 branch = True
-source = pyghmi
-omit = pyghmi/tests/*
+source = aiohmi
+omit = aiohmi/tests/*
 
 [report]
 ignore_errors = True

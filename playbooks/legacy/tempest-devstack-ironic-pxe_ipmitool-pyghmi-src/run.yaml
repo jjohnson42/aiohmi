@@ -1,6 +1,6 @@
 - hosts: all
-  name: Autoconverted job legacy-tempest-dsvm-ironic-pxe_ipmitool-pyghmi-src from
-    old job gate-tempest-dsvm-ironic-pxe_ipmitool-pyghmi-src-ubuntu-xenial
+  name: Autoconverted job legacy-tempest-dsvm-ironic-pxe_ipmitool-aiohmi-src from
+    old job gate-tempest-dsvm-ironic-pxe_ipmitool-aiohmi-src-ubuntu-xenial
   tasks:
 
     - name: Ensure legacy workspace directory
@@ -62,7 +62,7 @@
     - shell:
         cmd: |
           cat << 'EOF' >> ironic-extra-vars
-            export DEVSTACK_PROJECT_FROM_GIT="pyghmi,$DEVSTACK_PROJECT_FROM_GIT"
+            export DEVSTACK_PROJECT_FROM_GIT="aiohmi,$DEVSTACK_PROJECT_FROM_GIT"
 
           EOF
         chdir: '{{ ansible_user_dir }}/workspace'
@@ -88,7 +88,7 @@
           export PROJECTS="openstack/ironic-python-agent $PROJECTS"
           export PROJECTS="openstack/python-ironicclient $PROJECTS"
           export PROJECTS="openstack/ironic-tempest-plugin $PROJECTS"
-          export PROJECTS="openstack/pyghmi $PROJECTS"
+          export PROJECTS="openstack/aiohmi $PROJECTS"
           export PROJECTS="openstack/virtualbmc $PROJECTS"
           export PYTHONUNBUFFERED=true
           export DEVSTACK_GATE_TEMPEST=1
