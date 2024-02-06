@@ -168,7 +168,7 @@ def define_worker():
 sessionqueue = collections.deque([])
 
 
-def _io_wait(timeout, myaddr=None, evq=None):
+async def _io_wait(timeout, myaddr=None, evq=None):
     evt = asyncio.Event()
     if evq is not None:
         evq.append(evt)
@@ -250,10 +250,10 @@ except AttributeError:
     # targetting.
 
 
-def _poller(timeout=0):
+async def _poller(timeout=0):
     if sessionqueue:
         return True
-    _io_wait(timeout)
+    await _io_wait(timeout)
     return sessionqueue
 
 
@@ -331,7 +331,7 @@ class Session(object):
                 session.logout(False)
 
     @classmethod
-    def _assignsocket(cls, server=None, forbiddensockets=()):
+    async def _assignsocket(cls, server=None, forbiddensockets=()):
         global iothread
         global iothreadready
         global iosockets
@@ -425,13 +425,12 @@ class Session(object):
                     return False
         return not session.broken
 
-    def __new__(cls,
+    async def __new__(cls,
                 bmc,
                 userid,
                 password,
                 port=623,
                 kg=None,
-                onlogon=None,
                 privlevel=None,
                 keepalive=True):
         trueself = None
@@ -471,31 +470,25 @@ class Session(object):
                 i.initialized = True
                 i.logging = True
                 return i
-            self = object.__new__(cls)
+            self = super().__new__(cls)
+            await self.__init__(
+                bmc, userid, password, port, kg, privlevel, keepalive)
             self.forbidsock = forbidsock
-            cls.initting_sessions[(bmc, userid, password, port, kg)] = self
+            cls.initting_sessions[(bmc, userid, password, port, kg)] = selfs
             return self
 
-    def __init__(self,
+    async def __init__(self,
                  bmc,
                  userid,
                  password,
                  port=623,
                  kg=None,
-                 onlogon=None,
                  privlevel=None,
                  keepalive=True):
         if hasattr(self, 'initialized'):
             # new found an existing session, do not corrupt it
-            if onlogon is None:
-                while self.logging and not self.broken:
-                    Session.wait_for_rsp()
-            else:
-                if self.logging:
-                    self.logonwaiters.append(onlogon)
-                else:
-                    self.iterwaiters.append(onlogon)
-            return
+            while self.logging and not self.broken:
+                await Session.wait_for_rsp()
         self.awaitingresponse = False
         self.lastresponse = None
         self.atomicop = asyncio.Lock()
@@ -546,20 +539,16 @@ class Session(object):
         else:
             self.kg = self.password
         self.port = port
-        if onlogon is None:
-            self.async_ = False
-            self.logonwaiters = [self._sync_login]
-        else:
-            self.async_ = True
-            self.logonwaiters = [onlogon]
+        self.async_ = False
+        self.logonwaiters = [self._sync_login]
         if self.__class__.socketchecking is None:
             self.__class__.socketchecking = asyncio.Lock()
         with self.socketchecking:
-            self.socket = self._assignsocket(forbiddensockets=self.forbidsock)
+            self.socket = await self._assignsocket(forbiddensockets=self.forbidsock)
         self.login()
         if not self.async_:
             while self.logging:
-                Session.wait_for_rsp()
+                await Session.wait_for_rsp()
         if self.broken:
             raise exc.IpmiException(self.errormsg)
 
@@ -579,7 +568,7 @@ class Session(object):
         except KeyError:
             pass
         self.logout(False)
-        self.logging = False
+        # self.logging = False
         self.errormsg = error
         if not self.broken:
             self.broken = True
@@ -592,14 +581,14 @@ class Session(object):
             except Exception:
                 pass
 
-    def onlogon(self, parameter):
+    async def onlogon(self, parameter):
         if 'error' in parameter:
             while self.logonwaiters:
                 waiter = self.logonwaiters.pop()
                 waiter(parameter)
             self._mark_broken(parameter['error'])
         elif self.onlogpayload:
-            self._cmdwait()
+            await self._cmdwait()
             payload = self.onlogpayload
             payload_type = self.onlogpayloadtype
             self.incommand = _monotonic_time() + self._getmaxtimeout()
@@ -769,22 +758,22 @@ class Session(object):
             incrementtime += 1
         return (cumulativetime + 1) * (self.logontries + 1)
 
-    def _cmdwait(self):
+    async def _cmdwait(self):
         while self._isincommand():
-            _io_wait(self._isincommand(), self.sockaddr, self.evq)
+            await _io_wait(self._isincommand(), self.sockaddr, self.evq)
 
-    def awaitresponse(self, retry, netfn, command):
+    async def awaitresponse(self, retry, netfn, command):
         self.awaitingresponse = True
         try:
             alltimeout = _monotonic_time() + (self._getmaxtimeout() * 2)
             while (retry and unmatched(self.lastresponse, netfn, command)
                     and (self.logging or self.logged or self.onlogpayload)):
                 timeout = self.expiration - _monotonic_time()
-                _io_wait(timeout, self.sockaddr)
+                await _io_wait(timeout, self.sockaddr)
                 while self.iterwaiters:
                     waiter = self.iterwaiters.pop()
                     waiter({'success': True})
-                self.process_pktqueue()
+                await self.process_pktqueue()
                 if _monotonic_time() > alltimeout:
                     self._mark_broken()
                     raise exc.IpmiException('Session no longer connected')
@@ -798,7 +787,7 @@ class Session(object):
         finally:
             self.awaitingresponse = False
 
-    def raw_command(self,
+    async def raw_command(self,
                     netfn,
                     command,
                     bridge_request=None,
@@ -817,7 +806,7 @@ class Session(object):
                 self._mark_broken()
             raise exc.IpmiException('Session no longer connected')
         with util.protect(self.atomicop):
-            self._cmdwait()
+            await self._cmdwait()
             if not self.logged:
                 raise exc.IpmiException('Session no longer connected')
             self.incommand = _monotonic_time() + self._getmaxtimeout()
@@ -844,7 +833,7 @@ class Session(object):
         # behavior of only the constructor needing a callback.  From then on,
         # synchronous usage of the class acts in a greenthread style governed
         # by order of data on the network
-        self.awaitresponse(retry, netfn + 1, command)
+        await self.awaitresponse(retry, netfn + 1, command)
         lastresponse = self.lastresponse
         self.lastresponse = None
         self.incommand = False
@@ -1063,14 +1052,14 @@ class Session(object):
         data = response['data']
         self.sessionid = struct.unpack("<I", bytes(data[1:5]))[0]
         self.sequencenumber = struct.unpack("<I", bytes(data[5:9]))[0]
-        self._req_priv_level()
+        await self._req_priv_level()
 
-    def _req_priv_level(self):
+    async def _req_priv_level(self):
         self.logged = 1
         self.logoutexpiry = None
         self.maxtimeout = 4  # Switch quickly to the relogin recovery
         self.logontries = 1  # have one relogin waiting to heal
-        response = self.raw_command(netfn=0x6, command=0x3b,
+        response = await self.raw_command(netfn=0x6, command=0x3b,
                                     data=[self.privlevel])
         if response['code']:
             if response['code'] in (0x80, 0x81) and self.privlevel == 4:
@@ -1172,7 +1161,7 @@ class Session(object):
             print(repr(e))
 
     @classmethod
-    def wait_for_rsp(cls, timeout=None, callout=True):
+    async def wait_for_rsp(cls, timeout=None, callout=True):
         """IPMI Session Event loop iteration
 
         This watches for any activity on IPMI handles and handles registered
@@ -1233,10 +1222,10 @@ class Session(object):
                 timeout = 0
         if timeout is None:
             return 0
-        if _poller(timeout=timeout):
+        if await _poller(timeout=timeout):
             while sessionqueue:
                 relsession = sessionqueue.popleft()
-                relsession.process_pktqueue()
+                await relsession.process_pktqueue()
         sessionstodel = []
         sessionstokeepalive = []
         with util.protect(KEEPALIVE_SESSIONS):
@@ -1346,7 +1335,7 @@ class Session(object):
         except exc.IpmiException:
             self._mark_broken()
 
-    def process_pktqueue(self):
+    async def process_pktqueue(self):
         while self.pktqueue:
             pkt = list(self.pktqueue.popleft())
             pkt[0] = bytearray(pkt[0])
@@ -1356,11 +1345,11 @@ class Session(object):
             # since recvfrom result was already routed to this object
             # specifically
             if pkt[1] in self.bmc_handlers:
-                self._handle_ipmi_packet(pkt[0], sockaddr=pkt[1], qent=pkt)
+                await self._handle_ipmi_packet(pkt[0], sockaddr=pkt[1], qent=pkt)
             elif pkt[2] in self.bmc_handlers:
                 self.sessionless_data(pkt[0], pkt[1])
 
-    def _handle_ipmi_packet(self, data, sockaddr=None, qent=None):
+    async def _handle_ipmi_packet(self, data, sockaddr=None, qent=None):
         if self.sockaddr is None and sockaddr is not None:
             self.sockaddr = sockaddr
         elif (self.sockaddr is not None
@@ -1380,7 +1369,7 @@ class Session(object):
                 del Session.bmc_handlers[sockaddr]
                 iserver = Session.bmc_handlers[qent[2]][0]
                 iserver.pktqueue.append(qent)
-                iserver.process_pktqueue()
+                await iserver.process_pktqueue()
                 return
             if (hasattr(self, 'remseqnumber') and self.remseqnumber is not None
                     and remseqnumber < self.remseqnumber):
@@ -1407,7 +1396,7 @@ class Session(object):
                     return
             self._parse_ipmi_payload(payload)
         elif data[4] == 6:
-            self._handle_ipmi2_packet(data)
+            await self._handle_ipmi2_packet(data)
         else:
             return  # unrecognized data, assume evil
 
@@ -1422,7 +1411,7 @@ class Session(object):
     def _got_rmcp_openrequest(self, data):
         pass
 
-    def _handle_ipmi2_packet(self, data):
+    async def _handle_ipmi2_packet(self, data):
         ptype = data[5] & 0b00111111
         # the first 16 bytes are header information as can be seen in 13-8 that
         # we will toss out
@@ -1437,7 +1426,7 @@ class Session(object):
         elif ptype == 0x14:
             return self._got_rakp3(data[16:])
         elif ptype == 0x15:
-            return self._got_rakp4(data[16:])
+            return await self._got_rakp4(data[16:])
         elif ptype == 0 or ptype == 1:  # good old ipmi payload or sol
             # If endorsing a shared secret scheme, then at the very least it
             # needs to do mutual assurance
@@ -1631,7 +1620,7 @@ class Session(object):
         self.logontries -= 1
         return self._get_channel_auth_cap()
 
-    def _got_rakp4(self, data):
+    async def _got_rakp4(self, data):
         if self.sessioncontext != "EXPECTINGRAKP4" or data[0] != self.rmcptag:
             return -9
         if data[1] != 0:
@@ -1670,7 +1659,7 @@ class Session(object):
         self.sequencenumber = 1
         self.sessioncontext = 'ESTABLISHED'
         self.lastpayload = None
-        self._req_priv_level()
+        await self._req_priv_level()
 
     # Internal function to parse IPMI nugget once extracted from its framing
     def _parse_ipmi_payload(self, payload):
