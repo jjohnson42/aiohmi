@@ -1024,7 +1024,7 @@ class Session(object):
 
     async def _got_channel_auth_cap(self, response):
         if 'error' in response:
-            self.onlogon(response)
+            await self.onlogon(response)
             return
         if response['code'] == 0xcc and self.ipmi15only is not None:
             # tried ipmi 2.0 against a 1.5 which should work, but some bmcs
@@ -1290,11 +1290,12 @@ class Session(object):
                 cls.waiting_sessions.pop(session, None)
             # one loop iteration to make sure recursion doesn't induce
             # redundant timeouts
-            for session in sessionstodel:
-                await session._timedout()
-            return len(cls.waiting_sessions)
         finally:
             WAITING_SESSIONS.release()
+        for session in sessionstodel:
+            await session._timedout()
+        return len(cls.waiting_sessions)
+
 
     def register_keepalive(self, cmd, callback):
         """Register  custom keepalive IPMI command
@@ -1818,7 +1819,7 @@ class Session(object):
                     self.onlogpayload = self.lastpayload
                     self.onlogpayloadtype = self.last_payload_type
                     self.maxtimeout = 6
-                self._relog()
+                await self._relog()
                 return
         elif self.sessioncontext == 'FAILED':
             self.lastpayload = None
