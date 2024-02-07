@@ -90,79 +90,89 @@ def unmatched(response, netfn, cmd):
         return True
     return response['command'] != cmd or response['netfn'] != netfn
 
+sockwatching = True
 
-def define_worker():
-    class _IOWorker(threading.Thread):
-        def join(self):
-            Session._cleanup()
-            self.running = False
-            iosockets[0].sendto(
+async def terminate():
+    global sockwatching
+    await Session._cleanup()
+    sockwatching = False
+    iosockets[0].sendto(
                 b'\x01', (myself, iosockets[0].getsockname()[1]))
-            super(_IOWorker, self).join()
 
-        def run(self):
-            self.running = True
-            global iothreadready
-            global selectdeadline
-            iowaiters = []
-            directediowaiters = {}
-            timeout = 300
-            iothreadready = True
-            while iothreadwaiters:
-                waiter = iothreadwaiters.pop()
-                waiter.set()
-            while self.running:
-                if timeout < 0:
-                    timeout = 0
-                selectdeadline = _monotonic_time() + timeout
-                select.select(iosockets, (), (), timeout)
-                # pessimistically move out the deadline
-                # doing it this early (before ioqueue is evaluated)
-                # this avoids other threads making a bad assumption
-                # about not having to break into the select
-                selectdeadline = _monotonic_time() + 300
-                timeout = 300
-                sockaddrs = _io_graball(iosockets, directediowaiters)
-                for w in iowaiters:
-                    w[1].set()
-                iowaiters = []
-                for d in list(directediowaiters):
-                    # these are the existing waiters that didn't get
-                    # satisfied last graball, allow them to set a new
-                    # deadline if they still have time waiting, or
-                    # if they have expired, wake them now to let them
-                    # process their timeout
-                    rightnow = _monotonic_time()
-                    for idx, w in reversed(list(
-                            enumerate(directediowaiters[d]))):
-                        ltimeout = w[0] - rightnow
-                        if ltimeout < 0:
-                            w[1].set()  # time is up, wake the caller
-                            del directediowaiters[d][idx]
-                        elif ltimeout < timeout:
-                            timeout = ltimeout
-                    if not directediowaiters[d]:
-                        del directediowaiters[d]
-                while ioqueue:
-                    workitem = ioqueue.popleft()
-                    # order: function, args, list to append to , event to set
-                    if workitem[2] is None and sockaddrs:
-                        workitem[1].set()
-                    elif workitem[2] in sockaddrs:
-                        workitem[1].set()
+
+async def watchsockets():
+    global sockwatching
+    sockwatching = True
+    global iothreadready
+    global selectdeadline
+    iowaiters = []
+    directediowaiters = {}
+    timeout = 300
+    iothreadready = True
+    while iothreadwaiters:
+        waiter = iothreadwaiters.pop()
+        waiter.set()
+    while sockwatching:
+        if timeout < 0:
+            timeout = 0
+        selectdeadline = _monotonic_time() + timeout
+        currfutures = []
+        for currsock in iosockets:
+            currfut = asyncio.Future()
+            asyncio.get_event_loop().add_reader(currsock, currfut.set_result, None)
+            currfut.add_done_callback(lambda x: asyncio.get_event_loop().remove_reader(currsock))
+            currfutures.append(currfut)
+        #select.select(iosockets, (), (), timeout)
+        done, futures = await asyncio.wait(currfutures, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+        for currfut in done:
+            await currfut
+        # pessimistically move out the deadline
+        # doing it this early (before ioqueue is evaluated)
+        # this avoids other threads making a bad assumption
+        # about not having to break into the select
+        selectdeadline = _monotonic_time() + 300
+        timeout = 300
+        sockaddrs = _io_graball(iosockets, directediowaiters)
+        for w in iowaiters:
+            w[1].set()
+        iowaiters = []
+        for d in list(directediowaiters):
+            # these are the existing waiters that didn't get
+            # satisfied last graball, allow them to set a new
+            # deadline if they still have time waiting, or
+            # if they have expired, wake them now to let them
+            # process their timeout
+            rightnow = _monotonic_time()
+            for idx, w in reversed(list(
+                    enumerate(directediowaiters[d]))):
+                ltimeout = w[0] - rightnow
+                if ltimeout < 0:
+                    w[1].set()  # time is up, wake the caller
+                    del directediowaiters[d][idx]
+                elif ltimeout < timeout:
+                    timeout = ltimeout
+            if not directediowaiters[d]:
+                del directediowaiters[d]
+        while ioqueue:
+            workitem = ioqueue.popleft()
+            # order: function, args, list to append to , event to set
+            if workitem[2] is None and sockaddrs:
+                workitem[1].set()
+            elif workitem[2] in sockaddrs:
+                workitem[1].set()
+            else:
+                ltimeout = workitem[0] - _monotonic_time()
+                if ltimeout < timeout:
+                    timeout = ltimeout
+                if workitem[2] is None:
+                    iowaiters.append(workitem)
+                else:
+                    if workitem[2] in directediowaiters:
+                        directediowaiters[workitem[2]].append(workitem)
                     else:
-                        ltimeout = workitem[0] - _monotonic_time()
-                        if ltimeout < timeout:
-                            timeout = ltimeout
-                        if workitem[2] is None:
-                            iowaiters.append(workitem)
-                        else:
-                            if workitem[2] in directediowaiters:
-                                directediowaiters[workitem[2]].append(workitem)
-                            else:
-                                directediowaiters[workitem[2]] = [workitem]
+                        directediowaiters[workitem[2]] = [workitem]
 
-    return _IOWorker
+
 
 
 sessionqueue = collections.deque([])
@@ -323,12 +333,12 @@ class Session(object):
     _crypto_backend = default_backend()
 
     @classmethod
-    def _cleanup(cls):
+    async def _cleanup(cls):
         for sesskey in list(cls.bmc_handlers):
             for portent in list(cls.bmc_handlers[sesskey]):
                 session = cls.bmc_handlers[sesskey][portent]
                 session.cleaningup = True
-                session.logout(False)
+                await session.logout(False)
 
     @classmethod
     async def _assignsocket(cls, server=None, forbiddensockets=()):
@@ -397,11 +407,7 @@ class Session(object):
         if iothread is None:
             initevt = asyncio.Event()
             iothreadwaiters.append(initevt)
-            _IOWorker = define_worker()
-            iothread = _IOWorker()
-
-            iothread.daemon = True
-            iothread.start()
+            iothread = asyncio.get_event_loop().create_task(watchsockets())
             await initevt.wait()
         elif not iothreadready:
             initevt = asyncio.Event()
@@ -416,13 +422,16 @@ class Session(object):
         return
 
     @classmethod
-    def _is_session_valid(cls, session):
-        with util.protect(KEEPALIVE_SESSIONS):
+    async def _is_session_valid(cls, session):
+        await KEEPALIVE_SESSIONS.acquire()
+        try:
             sess = cls.keepalive_sessions.get(session, None)
             if sess is not None and 'timeout' in sess:
                 if sess['timeout'] < _monotonic_time() - 15:
                     # session would have timed out by now, don't use it
                     return False
+        finally:
+            KEEPALIVE_SESSIONS.release()
         return not session.broken
 
     async def __new__(cls,
@@ -445,7 +454,7 @@ class Session(object):
                 for portself in list(dictitems(cls.bmc_handlers[sockaddr])):
                     self = portself[1]
                     if not ((self.logged or self.logging)
-                            and cls._is_session_valid(self)):
+                            and await cls._is_session_valid(self)):
                         # we have encountered a leftover broken session
                         del cls.bmc_handlers[sockaddr][portself[0]]
                         continue
@@ -471,10 +480,10 @@ class Session(object):
                 i.logging = True
                 return i
             self = super().__new__(cls)
+            self.forbidsock = forbidsock
             await self.__init__(
                 bmc, userid, password, port, kg, privlevel, keepalive)
-            self.forbidsock = forbidsock
-            cls.initting_sessions[(bmc, userid, password, port, kg)] = selfs
+            cls.initting_sessions[(bmc, userid, password, port, kg)] = self
             return self
 
     async def __init__(self,
@@ -543,31 +552,40 @@ class Session(object):
         self.logonwaiters = [self._sync_login]
         if self.__class__.socketchecking is None:
             self.__class__.socketchecking = asyncio.Lock()
-        with self.socketchecking:
+        await self.socketchecking.acquire()
+        try:
             self.socket = await self._assignsocket(forbiddensockets=self.forbidsock)
-        self.login()
+        finally:
+            self.socketchecking.release()
+        await self.login()
         if not self.async_:
             while self.logging:
                 await Session.wait_for_rsp()
         if self.broken:
             raise exc.IpmiException(self.errormsg)
 
-    def _mark_broken(self, error=None):
+    async def _mark_broken(self, error=None):
         # since our connection has failed retries
         # deregister our keepalive facility
         self.lastpayload = None
         self.onlogpayload = None
-        with util.protect(KEEPALIVE_SESSIONS):
+        await KEEPALIVE_SESSIONS.acquire()
+        try:
             Session.keepalive_sessions.pop(self, None)
-        with util.protect(WAITING_SESSIONS):
+        finally:
+            KEEPALIVE_SESSIONS.release()
+        await WAITING_SESSIONS.acquire()
+        try:
             Session.waiting_sessions.pop(self, None)
+        finally:
+            WAITING_SESSIONS.release()
         try:
             del Session.initting_sessions[(self.bmc, self.userid,
                                            self.password, self.port,
                                            self.kgo)]
         except KeyError:
             pass
-        self.logout(False)
+        await self.logout(False)
         # self.logging = False
         self.errormsg = error
         if not self.broken:
@@ -586,14 +604,14 @@ class Session(object):
             while self.logonwaiters:
                 waiter = self.logonwaiters.pop()
                 waiter(parameter)
-            self._mark_broken(parameter['error'])
+            await self._mark_broken(parameter['error'])
         elif self.onlogpayload:
             await self._cmdwait()
             payload = self.onlogpayload
             payload_type = self.onlogpayloadtype
             self.incommand = _monotonic_time() + self._getmaxtimeout()
             self.onlogpayload = None
-            self.send_payload(payload, payload_type)
+            await self.send_payload(payload, payload_type)
         while self.logonwaiters:
             waiter = self.logonwaiters.pop()
             waiter(parameter)
@@ -735,7 +753,7 @@ class Session(object):
             self._add_request_entry((self.expectednetfn, self.seqlun, command))
         return payload
 
-    def _generic_callback(self, response):
+    async def _generic_callback(self, response):
         errorstr = get_ipmi_error(response)
         if errorstr:
             response['error'] = errorstr
@@ -775,15 +793,18 @@ class Session(object):
                     waiter({'success': True})
                 await self.process_pktqueue()
                 if _monotonic_time() > alltimeout:
-                    self._mark_broken()
+                    await self._mark_broken()
                     raise exc.IpmiException('Session no longer connected')
-                with util.protect(WAITING_SESSIONS):
+                await WAITING_SESSIONS.acquire()
+                try:
                     if (self in self.waiting_sessions
                             and self.expiration < _monotonic_time()):
                         self.waiting_sessions.pop(self, None)
                         if not self.lastpayload and not self.logging:
                             return
-                        self._timedout()
+                        await self._timedout()
+                finally:
+                    WAITING_SESSIONS.release()
         finally:
             self.awaitingresponse = False
 
@@ -803,19 +824,22 @@ class Session(object):
         if not self.logged:
             if (self.logoutexpiry is not None
                     and _monotonic_time() > self.logoutexpiry):
-                self._mark_broken()
+                await self._mark_broken()
             raise exc.IpmiException('Session no longer connected')
-        with util.protect(self.atomicop):
+        await self.atomicop.acquire()
+        try:
             await self._cmdwait()
             if not self.logged:
                 raise exc.IpmiException('Session no longer connected')
             self.incommand = _monotonic_time() + self._getmaxtimeout()
+        finally:
+            self.atomicop.release()
         self.lastresponse = None
         if callback is None:
             self.ipmicallback = self._generic_callback
         else:
             self.ipmicallback = callback
-        self._send_ipmi_net_payload(netfn, command, data,
+        await self._send_ipmi_net_payload(netfn, command, data,
                                     bridge_request=bridge_request,
                                     retry=retry, delay_xmit=delay_xmit,
                                     timeout=timeout, rslun=rslun)
@@ -843,7 +867,7 @@ class Session(object):
             raise exc.IpmiException('Session no longer connected')
         return lastresponse
 
-    def _send_ipmi_net_payload(self, netfn=None, command=None, data=(), code=0,
+    async def _send_ipmi_net_payload(self, netfn=None, command=None, data=(), code=0,
                                bridge_request=None,
                                retry=None, delay_xmit=None, timeout=None,
                                rslun=0):
@@ -860,10 +884,10 @@ class Session(object):
         ipmipayload = self._make_ipmi_payload(netfn, command, bridge_request,
                                               data, rslun)
         payload_type = constants.payload_types['ipmi']
-        self.send_payload(payload=ipmipayload, payload_type=payload_type,
-                          retry=retry, delay_xmit=delay_xmit, timeout=timeout)
+        await self.send_payload(payload=ipmipayload, payload_type=payload_type,
+                                retry=retry, delay_xmit=delay_xmit, timeout=timeout)
 
-    def send_payload(self, payload=(), payload_type=None, retry=True,
+    async def send_payload(self, payload=(), payload_type=None, retry=True,
                      delay_xmit=None, needskeepalive=False, timeout=None):
         """Send payload over the IPMI Session
 
@@ -967,12 +991,15 @@ class Session(object):
         self.netpacket = message
         # advance idle timer since we don't need keepalive while sending
         # packets out naturally
-        with util.protect(KEEPALIVE_SESSIONS):
+        await KEEPALIVE_SESSIONS.acquire()
+        try:
             if (self in Session.keepalive_sessions and not needskeepalive
                     and not self._customkeepalives):
                 Session.keepalive_sessions[self]['timeout'] = \
                     _monotonic_time() + MAX_IDLE - (random.random() * 4.9)
-            self._xmit_packet(retry, delay_xmit=delay_xmit, timeout=timeout)
+            await self._xmit_packet(retry, delay_xmit=delay_xmit, timeout=timeout)
+        finally:
+            KEEPALIVE_SESSIONS.release()
 
     def _ipmi15authcode(self, payload, checkremotecode=False):
         # checkremotecode is used to verify remote code,
@@ -995,7 +1022,7 @@ class Session(object):
         dgst = hashlib.md5(bodydata).digest()
         return dgst
 
-    def _got_channel_auth_cap(self, response):
+    async def _got_channel_auth_cap(self, response):
         if 'error' in response:
             self.onlogon(response)
             return
@@ -1019,9 +1046,9 @@ class Session(object):
                     {'error':
                      "MD5 required but not enabled/available on target BMC"})
                 return
-            self._get_session_challenge()
+            await self._get_session_challenge()
         elif self.ipmiversion == 2.0:
-            self._open_rmcpplus_request()
+            await self._open_rmcpplus_request()
 
     def _got_session_challenge(self, response):
         errstr = get_ipmi_error(response,
@@ -1038,13 +1065,13 @@ class Session(object):
     # This sends the activate session payload.  We pick '1' as the requested
     # sequence number without perturbing our real sequence number
 
-    def _activate_session(self, data):
+    async def _activate_session(self, data):
         rqdata = [2, 4] + list(data) + [1, 0, 0, 0]
         # TODO(jbjohnso): this always requests admin level (1.5)
         self.ipmicallback = self._activated_session
-        self._send_ipmi_net_payload(netfn=0x6, command=0x3a, data=rqdata)
+        await self._send_ipmi_net_payload(netfn=0x6, command=0x3a, data=rqdata)
 
-    def _activated_session(self, response):
+    async def _activated_session(self, response):
         errstr = get_ipmi_error(response)
         if errstr:
             self.onlogon({'error': errstr})
@@ -1079,14 +1106,17 @@ class Session(object):
                     self.onlogon({'error': errstr})
                     return
         self.logging = False
-        with util.protect(KEEPALIVE_SESSIONS):
+        await KEEPALIVE_SESSIONS.acquire()
+        try:
             Session.keepalive_sessions[self] = {}
             Session.keepalive_sessions[self]['ipmisession'] = self
             Session.keepalive_sessions[self]['timeout'] = _monotonic_time() + \
                 MAX_IDLE - (random.random() * 4.9)
-        self.onlogon({'success': True})
+        finally:
+            KEEPALIVE_SESSIONS.release()
+        await self.onlogon({'success': True})
 
-    def _get_session_challenge(self):
+    async def _get_session_challenge(self):
         reqdata = bytearray([2])
         if len(self.userid) > 16:
             raise exc.IpmiException(
@@ -1095,9 +1125,9 @@ class Session(object):
         userid = self.userid + ('\x00' * padneeded)
         reqdata += userid
         self.ipmicallback = self._got_session_challenge
-        self._send_ipmi_net_payload(netfn=0x6, command=0x39, data=reqdata)
+        await self._send_ipmi_net_payload(netfn=0x6, command=0x39, data=reqdata)
 
-    def _open_rmcpplus_request(self):
+    async def _open_rmcpplus_request(self):
         self.authtype = 6
         # have unique local session ids to ignore aborted
         # login attempts from the past
@@ -1131,25 +1161,25 @@ class Session(object):
             self.currhashlen = 16
         self.sessioncontext = 'OPENSESSION'
         self.lastpayload = None
-        self.send_payload(
+        await self.send_payload(
             payload=data,
             payload_type=constants.payload_types['rmcpplusopenreq'])
 
-    def _get_channel_auth_cap(self):
+    async def _get_channel_auth_cap(self):
         self.ipmicallback = self._got_channel_auth_cap
         if self.ipmi15only:
-            self._send_ipmi_net_payload(netfn=0x6,
+            await self._send_ipmi_net_payload(netfn=0x6,
                                         command=0x38,
                                         data=[0x0e, self.privlevel])
         else:
-            self._send_ipmi_net_payload(netfn=0x6,
+            await self._send_ipmi_net_payload(netfn=0x6,
                                         command=0x38,
                                         data=[0x8e, self.privlevel])
 
-    def login(self):
+    async def login(self):
         self.logontries = 1
         self._initsession()
-        self._get_channel_auth_cap()
+        await self._get_channel_auth_cap()
 
     @classmethod
     def pause(cls, timeout):
@@ -1189,7 +1219,8 @@ class Session(object):
         # no more time than that, so that whatever part(ies) need to service in
         # a deadline, will be honored
         if timeout != 0:
-            with util.protect(WAITING_SESSIONS):
+            await WAITING_SESSIONS.acquire()
+            try:
                 for session, parms in dictitems(cls.waiting_sessions):
                     if parms['timeout'] <= curtime:
                         timeout = 0  # exit after one guaranteed pass
@@ -1200,7 +1231,10 @@ class Session(object):
                         # needs
                     timeout = parms['timeout'] - curtime  # set new timeout
                     # value
-            with util.protect(KEEPALIVE_SESSIONS):
+            finally:
+                WAITING_SESSIONS.release()
+            await KEEPALIVE_SESSIONS.acquire()
+            try:
                 for session, parms in dictitems(cls.keepalive_sessions):
                     if parms['timeout'] <= curtime:
                         timeout = 0
@@ -1209,6 +1243,8 @@ class Session(object):
                             and timeout < parms['timeout'] - curtime):
                         continue
                     timeout = parms['timeout'] - curtime
+            finally:
+                KEEPALIVE_SESSIONS.release()
         # If the loop above found no sessions wanting *and* the caller had no
         # timeout, exit function. In this case there is no way a session
         # could be waiting so we can always return 0
@@ -1228,7 +1264,8 @@ class Session(object):
                 await relsession.process_pktqueue()
         sessionstodel = []
         sessionstokeepalive = []
-        with util.protect(KEEPALIVE_SESSIONS):
+        await KEEPALIVE_SESSIONS.acquire()
+        try:
             for session, parms in dictitems(cls.keepalive_sessions):
                 # if the session is busy inside a command, defer invoking
                 # keepalive until incommand is no longer the case
@@ -1236,9 +1273,12 @@ class Session(object):
                     cls.keepalive_sessions[session]['timeout'] = \
                         _monotonic_time() + MAX_IDLE - (random.random() * 4.9)
                     sessionstokeepalive.append(session)
+        finally:
+            KEEPALIVE_SESSIONS.release()
         for session in sessionstokeepalive:
-            session._keepalive()
-        with util.protect(WAITING_SESSIONS):
+            await session._keepalive()
+        await WAITING_SESSIONS.acquire()
+        try:
             for session, parms in dictitems(cls.waiting_sessions):
                 if parms['timeout'] < curtime:  # timeout has expired, time to
                     # give up on it and trigger timeout
@@ -1251,8 +1291,10 @@ class Session(object):
             # one loop iteration to make sure recursion doesn't induce
             # redundant timeouts
             for session in sessionstodel:
-                session._timedout()
+                await session._timedout()
             return len(cls.waiting_sessions)
+        finally:
+            WAITING_SESSIONS.release()
 
     def register_keepalive(self, cmd, callback):
         """Register  custom keepalive IPMI command
@@ -1299,7 +1341,7 @@ class Session(object):
 
         return _keptalive
 
-    def _keepalive(self):
+    async def _keepalive(self):
         """Performs a keepalive to avoid idle disconnect"""
         if self.awaitingresponse:
             return
@@ -1333,7 +1375,7 @@ class Session(object):
                 else:
                     self.logout()
         except exc.IpmiException:
-            self._mark_broken()
+            await self._mark_broken()
 
     async def process_pktqueue(self):
         while self.pktqueue:
@@ -1394,21 +1436,21 @@ class Session(object):
                                                         checkremotecode=True)
                 if expectedauthcode != authcode:
                     return
-            self._parse_ipmi_payload(payload)
+            await self._parse_ipmi_payload(payload)
         elif data[4] == 6:
             await self._handle_ipmi2_packet(data)
         else:
             return  # unrecognized data, assume evil
 
-    def _got_rakp1(self, data):
+    async def _got_rakp1(self, data):
         # stub, client sessions ignore rakp2
         pass
 
-    def _got_rakp3(self, data):
+    async def _got_rakp3(self, data):
         # stub, client sessions ignore rakp3
         pass
 
-    def _got_rmcp_openrequest(self, data):
+    async def _got_rmcp_openrequest(self, data):
         pass
 
     async def _handle_ipmi2_packet(self, data):
@@ -1416,15 +1458,15 @@ class Session(object):
         # the first 16 bytes are header information as can be seen in 13-8 that
         # we will toss out
         if ptype == 0x10:
-            return self._got_rmcp_openrequest(data[16:])
+            return await self._got_rmcp_openrequest(data[16:])
         elif ptype == 0x11:  # rmcp+ response
-            return self._got_rmcp_response(data[16:])
+            return await self._got_rmcp_response(data[16:])
         elif ptype == 0x12:
-            return self._got_rakp1(data[16:])
+            return await self._got_rakp1(data[16:])
         elif ptype == 0x13:
-            return self._got_rakp2(data[16:])
+            return await self._got_rakp2(data[16:])
         elif ptype == 0x14:
-            return self._got_rakp3(data[16:])
+            return await self._got_rakp3(data[16:])
         elif ptype == 0x15:
             return await self._got_rakp4(data[16:])
         elif ptype == 0 or ptype == 1:  # good old ipmi payload or sol
@@ -1469,7 +1511,7 @@ class Session(object):
                 padsize = payload[-1] + 1
                 payload = payload[:-padsize]
             if ptype == 0:
-                self._parse_ipmi_payload(payload)
+                await self._parse_ipmi_payload(payload)
             elif ptype == 1:  # There should be no other option
                 if (payload[1] & 0b1111) and self.last_payload_type == 1:
                     # for ptype 1, the 4 least significant bits of 2nd byte
@@ -1480,18 +1522,21 @@ class Session(object):
                     # stop the generic retry behavior here
                     self.lastpayload = None
                     self.last_payload_type = None
-                    with util.protect(WAITING_SESSIONS):
+                    await WAITING_SESSIONS.acquire()
+                    try:
                         Session.waiting_sessions.pop(self, None)
+                    finally:
+                        WAITING_SESSIONS.release()
                     if len(self.pendingpayloads) > 0:
                         (nextpayload, nextpayloadtype, retry) = \
                             self.pendingpayloads.popleft()
-                        self.send_payload(payload=nextpayload,
+                        await self.send_payload(payload=nextpayload,
                                           payload_type=nextpayloadtype,
                                           retry=retry)
                 if self.sol_handler:
                     self.sol_handler(payload)
 
-    def _got_rmcp_response(self, data):
+    async def _got_rmcp_response(self, data):
         # see RMCP+ open session response table
         if not (self.sessioncontext and self.sessioncontext != "ESTABLISHED"):
             return -9
@@ -1501,7 +1546,7 @@ class Session(object):
         if data[1] != 0:  # response code...
             if self.attemptedhash == 256:
                 self.attemptedhash = 1
-                self._open_rmcpplus_request()
+                await self._open_rmcpplus_request()
                 return
             if data[1] in constants.rmcp_codes:
                 errstr = constants.rmcp_codes[data[1]]
@@ -1521,9 +1566,9 @@ class Session(object):
         # TODO(jbjohnso): currently, we take it for granted that the responder
         # accepted our integrity/auth/confidentiality proposal
         self.lastpayload = None
-        self._send_rakp1()
+        await self._send_rakp1()
 
-    def _send_rakp1(self):
+    async def _send_rakp1(self):
         self.rmcptag += 1
         self.randombytes = os.urandom(16)
         userlen = len(self.userid)
@@ -1533,10 +1578,10 @@ class Session(object):
             bytearray([self.nameonly | self.privlevel, 0, 0, userlen]) + \
             self.userid
         self.sessioncontext = "EXPECTINGRAKP2"
-        self.send_payload(
+        await self.send_payload(
             payload=payload, payload_type=constants.payload_types['rakp1'])
 
-    def _got_rakp2(self, data):
+    async def _got_rakp2(self, data):
         if not (self.sessioncontext in ('EXPECTINGRAKP2', 'EXPECTINGRAKP4')):
             # if we are not expecting rakp2, ignore. In a retry
             # scenario, replying from stale RAKP2 after sending
@@ -1596,9 +1641,9 @@ class Session(object):
         self.aeskey = self.k2[0:16]
         self.sessioncontext = "EXPECTINGRAKP4"
         self.lastpayload = None
-        self._send_rakp3()
+        await self._send_rakp3()
 
-    def _send_rakp3(self):  # rakp message 3
+    async def _send_rakp3(self):  # rakp message 3
         self.rmcptag += 1
         # rmcptag, then status 0, then two reserved 0s
         payload = [self.rmcptag, 0, 0, 0] +\
@@ -1611,14 +1656,14 @@ class Session(object):
 
         authcode = hmac.new(self.password, hmacdata, self.currhashlib).digest()
         payload += list(struct.unpack("%dB" % len(authcode), authcode))
-        self.send_payload(
+        await self.send_payload(
             payload=payload, payload_type=constants.payload_types['rakp3'])
 
-    def _relog(self):
+    async def _relog(self):
         self.logging = True
         self._initsession()
         self.logontries -= 1
-        return self._get_channel_auth_cap()
+        return await self._get_channel_auth_cap()
 
     async def _got_rakp4(self, data):
         if self.sessioncontext != "EXPECTINGRAKP4" or data[0] != self.rmcptag:
@@ -1638,7 +1683,7 @@ class Session(object):
                 errstr = constants.rmcp_codes[data[1]]
             else:
                 errstr = "Unrecognized RMCP code %d" % data[1]
-            self.onlogon({'error': errstr + " reported in RAKP4"})
+            await self.onlogon({'error': errstr + " reported in RAKP4"})
             return -9
         localsid = struct.unpack("<I", bytes(data[4:8]))[0]
         if localsid != self.localsid:  # ignore if wrong session id indicated
@@ -1662,7 +1707,7 @@ class Session(object):
         await self._req_priv_level()
 
     # Internal function to parse IPMI nugget once extracted from its framing
-    def _parse_ipmi_payload(self, payload):
+    async def _parse_ipmi_payload(self, payload):
         # For now, skip the checksums since we are in LAN only,
         # TODO(jbjohnso): if implementing other channels, add checksum checks
         # here
@@ -1681,7 +1726,7 @@ class Session(object):
             self.clientnetfn = (payload[1] >> 2) + 1
             self.rqlun = payload[4] & 0b11
             self.clientcommand = payload[5]
-            self._parse_payload(payload)
+            await self._parse_payload(payload)
             return
         # payload[4] is rqSeq + rsLUN, we only need the rqSeq
         entry = (payload[1] >> 2, payload[4] >> 2, payload[5])
@@ -1697,7 +1742,7 @@ class Session(object):
                     and (payload[-2] == 0x0)):
                 return -1
             else:
-                self._parse_payload(payload)
+                await self._parse_payload(payload)
                 # NOTE(fengqian): recheck if the certain entry is removed in
                 # case that bridge request failed.
                 if self.request_entry:
@@ -1708,7 +1753,7 @@ class Session(object):
             # it is also not a bridge request.
             return -1
 
-    def _parse_payload(self, payload):
+    async def _parse_payload(self, payload):
         if hasattr(self, 'hasretried') and self.hasretried:
             self.hasretried = 0
             # try to skip it for at most 16 cycles of overflow
@@ -1722,8 +1767,11 @@ class Session(object):
         if not self.servermode:
             self.seqlun += 1  # prepare seqlun for next transmit
             self.seqlun &= 0x3f  # when overflowing, wrap around
-        with util.protect(WAITING_SESSIONS):
+        await WAITING_SESSIONS.acquire()
+        try:
             Session.waiting_sessions.pop(self, None)
+        finally:
+            WAITING_SESSIONS.release()
         # render retry mechanism utterly incapable of
         # doing anything, though it shouldn't matter
         self.lastpayload = None
@@ -1745,12 +1793,13 @@ class Session(object):
         if not self.servermode and len(self.pendingpayloads) > 0:
             (nextpayload, nextpayloadtype, retry) = \
                 self.pendingpayloads.popleft()
-            self.send_payload(payload=nextpayload,
+            await self.send_payload(payload=nextpayload,
                               payload_type=nextpayloadtype,
                               retry=retry)
-        self.ipmicallback(response)
+        if self.ipmicallback:
+            await self.ipmicallback(response)
 
-    def _timedout(self):
+    async def _timedout(self):
         if not self.lastpayload:
             return
         self.nowait = True
@@ -1758,9 +1807,10 @@ class Session(object):
         if self.timeout > self.maxtimeout:
             if not self.logontries:
                 response = {'error': 'timeout', 'code': 0xffff}
-                self.ipmicallback(response)
+                if self.ipmicallback:
+                    await self.ipmicallback(response)
                 self.nowait = False
-                self._mark_broken()
+                await self._mark_broken()
                 return
             else:
                 self.maxtimeout = 2
@@ -1780,13 +1830,13 @@ class Session(object):
             # unambiguous session id regardless of how packet was dropped or
             # delayed in this case, it's safe to just redo the request
             self.lastpayload = None
-            self._open_rmcpplus_request()
+            await self._open_rmcpplus_request()
         elif (self.sessioncontext == 'EXPECTINGRAKP2'
               or self.sessioncontext == 'EXPECTINGRAKP4'):
             # If we can't be sure which RAKP was dropped or if RAKP3/4 was just
             # delayed, the most reliable thing to do is rewind and start over
             # bmcs do not take kindly to receiving RAKP1 or RAKP3 twice
-            self._relog()
+            await self._relog()
         else:  # in IPMI case, the only recourse is to act as if the packet is
             # idempotent.  SOL has more sophisticated retry handling
             # the biggest risks are reset sp which is often fruitless to retry
@@ -1797,19 +1847,22 @@ class Session(object):
             # combinations
             # of sequence number, netfn, and lun due to
             # ambiguity on the wire
-            self.send_payload()
+            await self.send_payload()
         self.nowait = False
 
-    def _xmit_packet(self, retry=True, delay_xmit=None, timeout=None):
+    async def _xmit_packet(self, retry=True, delay_xmit=None, timeout=None):
         if self.sequencenumber:  # seq number of zero will be left alone, it is
             # special, otherwise increment
             self.sequencenumber += 1
         if delay_xmit is not None:
-            with util.protect(WAITING_SESSIONS):
+            await WAITING_SESSIONS.acquire()
+            try:
                 Session.waiting_sessions[self] = {}
                 Session.waiting_sessions[self]['ipmisession'] = self
                 self.expiration = delay_xmit + _monotonic_time()
                 Session.waiting_sessions[self]['timeout'] = self.expiration
+            finally:
+                WAITING_SESSIONS.release()
             return  # skip transmit, let retry timer do it's thing
         if self.sockaddr:
             _io_sendto(self.socket, self.netpacket, self.sockaddr)
@@ -1843,7 +1896,8 @@ class Session(object):
                 raise exc.IpmiException(
                     "Unable to transmit to specified address")
         if retry:
-            with util.protect(WAITING_SESSIONS):
+            await WAITING_SESSIONS.acquire()
+            try:
                 Session.waiting_sessions[self] = {}
                 Session.waiting_sessions[self]['ipmisession'] = self
                 if timeout is not None:
@@ -1851,25 +1905,30 @@ class Session(object):
                 else:
                     self.expiration = self.timeout + _monotonic_time()
                 Session.waiting_sessions[self]['timeout'] = self.expiration
+            finally:
+                WAITING_SESSIONS.release()
 
-    def logout(self, sessionok=True):
+    async def logout(self, sessionok=True):
 
         if self.cleaningup:
             self.nowait = True
         if self.logged:
             if self.sol_handler:
-                self.raw_command(
+                await self.raw_command(
                     netfn=6, command=0x49, data=(1, 1, 0, 0, 0, 0),
                     retry=sessionok)
-            self.raw_command(
+            await self.raw_command(
                 command=0x3c, netfn=6,
                 data=struct.unpack(
                     "4B", struct.pack("I", self.sessionid)),
                 retry=False)
         # stop trying for a keepalive,
         self.lastpayload = None
-        with util.protect(KEEPALIVE_SESSIONS):
+        await KEEPALIVE_SESSIONS.acquire()
+        try:
             Session.keepalive_sessions.pop(self, None)
+        finally:
+            KEEPALIVE_SESSIONS.release()
         self.logged = 0
         self.onlogpayload = None
         self.logging = False

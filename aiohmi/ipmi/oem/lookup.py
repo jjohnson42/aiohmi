@@ -32,7 +32,7 @@ oemmap = {
 }
 
 
-def get_oem_handler(oemid, ipmicmd, *args):
+async def get_oem_handler(oemid, ipmicmd, *args):
     # first try to find with composite key manufacturer_id.product_id,
     # if found return directly
     # then try to find with manufacturer_id
@@ -41,9 +41,9 @@ def get_oem_handler(oemid, ipmicmd, *args):
         oemid['manufacturer_id'],
     ):
         if item in oemmap:
-            return (oemmap[item].OEMHandler(oemid, ipmicmd, *args), True)
+            return (await oemmap[item].OEMHandler.create(oemid, ipmicmd, *args), True)
     else:
-        return generic.OEMHandler(oemid, ipmicmd, *args), False
+        return await generic.OEMHandler.create(oemid, ipmicmd, *args), False
 
 
 def load_plugins():

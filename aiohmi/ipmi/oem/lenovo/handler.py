@@ -176,7 +176,9 @@ def _megarac_abbrev_image(name):
 
 class OEMHandler(generic.OEMHandler):
     # noinspection PyUnusedLocal
-    def __init__(self, oemid, ipmicmd):
+    @classmethod
+    async def create(cls, oemid, ipmicmd):
+        self = cls()
         # will need to retain data to differentiate
         # variations.  For example System X versus Thinkserver
         self.oemid = oemid
@@ -187,7 +189,7 @@ class OEMHandler(generic.OEMHandler):
         self._mrethidx = None
         self._hasimm = None
         self._hasxcc = None
-        if self.has_xcc:
+        if await self.has_xcc:
             self.immhandler = imm.XCCClient(ipmicmd)
         elif self.has_imm:
             self.immhandler = imm.IMMClient(ipmicmd)
@@ -202,6 +204,7 @@ class OEMHandler(generic.OEMHandler):
             self.tsmahandler.set_credentials(
                 ipmicmd.ipmi_session.userid.decode('utf-8'),
                 ipmicmd.ipmi_session.password.decode('utf-8'))
+        return self
 
     @property
     def _megarac_eth_index(self):
@@ -767,11 +770,11 @@ class OEMHandler(generic.OEMHandler):
             return fru
 
     @property
-    def has_xcc(self):
+    async def has_xcc(self):
         if self._hasxcc is not None:
             return self._hasxcc
         try:
-            bdata = self.ipmicmd.xraw_command(netfn=0x3a, command=0xc1)
+            bdata = await self.ipmicmd.xraw_command(netfn=0x3a, command=0xc1)
         except pygexc.IpmiException:
             self._hasxcc = False
             self._hasimm = False

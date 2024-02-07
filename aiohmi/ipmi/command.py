@@ -147,12 +147,13 @@ class Command(object):
                       activity.
     """
 
-    def __init__(self, bmc=None, userid=None, password=None, port=623,
-                 onlogon=None, kg=None, privlevel=None, verifycallback=None,
+    @classmethod
+    async def create(cls, bmc=None, userid=None, password=None, port=623,
+                 kg=None, privlevel=None, verifycallback=None,
                  keepalive=True, **kwargs):
+        self = cls()
         # TODO(jbjohnso): accept tuples and lists of each parameter for mass
         # operations without pushing the async complexities up the stack
-        self.onlogon = onlogon
         self.bmc = bmc
         self._sdrcachedir = None
         self._sdr = None
@@ -164,25 +165,18 @@ class Command(object):
         self.kwargs = kwargs
         if bmc is None:
             self.ipmi_session = localsession.Session()
-        elif onlogon is not None:
-            self.ipmi_session = session.Session(bmc=bmc,
+        else:
+            self.ipmi_session = await session.Session(bmc=self.bmc,
                                                 userid=userid,
                                                 password=password,
-                                                onlogon=self.logged,
                                                 port=port,
                                                 kg=kg,
                                                 privlevel=privlevel,
                                                 keepalive=keepalive)
             # induce one iteration of the loop, now that we would be
             # prepared for it in theory
-            session.Session.wait_for_rsp(0)
-        else:
-            self.ipmi_session = session.Session(bmc=bmc,
-                                                userid=userid,
-                                                password=password,
-                                                port=port,
-                                                kg=kg,
-                                                privlevel=privlevel)
+            await session.Session.wait_for_rsp(0)
+        return self
 
     def set_sdr_cachedir(self, path):
         """Register use of a directory for SDR cache.
@@ -211,14 +205,10 @@ class Command(object):
         if type == 'tls':
             self.certverify = callback
 
-    def logged(self, response):
-        self.onlogon(response, self)
-        self.onlogon = None
-
     @classmethod
-    def eventloop(cls):
+    async def eventloop(cls):
         while True:
-            session.Session.wait_for_rsp()
+            await session.Session.wait_for_rsp()
 
     @classmethod
     def wait_for_rsp(cls, timeout):
@@ -230,8 +220,8 @@ class Command(object):
         """
         return session.Session.wait_for_rsp(timeout=timeout)
 
-    def _get_device_id(self):
-        response = self.raw_command(netfn=0x06, command=0x01)
+    async def _get_device_id(self):
+        response = await self.raw_command(netfn=0x06, command=0x01)
         if 'error' in response:
             raise exc.IpmiException(response['error'], code=response['code'])
         return {
@@ -247,7 +237,7 @@ class Command(object):
                 response['data'][3] & 0b1111)
         }
 
-    def oem_init(self):
+    async def oem_init(self):
         """Initialize the command object for OEM capabilities
 
         A number of capabilities are either totally OEM defined or
@@ -258,10 +248,10 @@ class Command(object):
         if self._oemknown:
             return
         if self.bmc is None:
-            self._oem = genericoem.OEMHandler(None, None)
+            self._oem = await genericoem.OEMHandler.create(None, None)
             self._oemknown = True
             return
-        self._oem, self._oemknown = get_oem_handler(self._get_device_id(),
+        self._oem, self._oemknown = await get_oem_handler(await self._get_device_id(),
                                                     self)
 
     def get_bootdev(self):
@@ -385,8 +375,8 @@ class Command(object):
         else:
             return lastresponse
 
-    def _get_power_state(self, delay_xmit=None, bridge_request=None):
-        response = self.raw_command(netfn=0, command=1, delay_xmit=delay_xmit,
+    async def _get_power_state(self, delay_xmit=None, bridge_request=None):
+        response = await self.raw_command(netfn=0, command=1, delay_xmit=delay_xmit,
                                     bridge_request=bridge_request)
         if 'error' in response:
             raise exc.IpmiException(response['error'])
@@ -411,7 +401,7 @@ class Command(object):
         if response and 'error' in response:
             raise exc.IpmiException(response['error'])
 
-    def set_bootdev(self,
+    async def set_bootdev(self,
                     bootdev,
                     persist=False,
                     uefiboot=False):
@@ -453,12 +443,12 @@ class Command(object):
         if bootdevnum == 0:
             bootflags = 0
         data = (5, bootflags, bootdevnum, 0, 0, 0)
-        response = self.raw_command(netfn=0, command=8, data=data)
+        response = await self.raw_command(netfn=0, command=8, data=data)
         if 'error' in response:
             raise exc.IpmiException(response['error'])
         return {'bootdev': bootdev}
 
-    def xraw_command(self, netfn, command, bridge_request=(), data=(),
+    async def xraw_command(self, netfn, command, bridge_request=(), data=(),
                      delay_xmit=None, retry=True, timeout=None, rslun=0):
         """Send raw ipmi command to BMC, raising exception on error
 
@@ -479,7 +469,7 @@ class Command(object):
                         a slow command.  This may interfere with retry logic.
         :returns: dict -- The response from IPMI device
         """
-        rsp = self.ipmi_session.raw_command(netfn=netfn, command=command,
+        rsp = await self.ipmi_session.raw_command(netfn=netfn, command=command,
                                             bridge_request=bridge_request,
                                             data=data, delay_xmit=delay_xmit,
                                             retry=retry, timeout=timeout,
@@ -507,7 +497,7 @@ class Command(object):
         self.oem_init()
         return self._oem.get_description()
 
-    def raw_command(self, netfn, command, bridge_request=(), data=(),
+    async def raw_command(self, netfn, command, bridge_request=(), data=(),
                     delay_xmit=None, retry=True, timeout=None, rslun=0):
         """Send raw ipmi command to BMC
 
@@ -526,14 +516,14 @@ class Command(object):
         :param timeout: A custom amount of time to wait for initial reply
         :returns: dict -- The response from IPMI device
         """
-        rsp = self.ipmi_session.raw_command(netfn=netfn, command=command,
+        rsp = await self.ipmi_session.raw_command(netfn=netfn, command=command,
                                             bridge_request=bridge_request,
                                             data=data, delay_xmit=delay_xmit,
                                             retry=retry, timeout=timeout,
                                             rslun=rslun)
         return rsp
 
-    def get_power(self, bridge_request=None):
+    async def get_power(self, bridge_request=None):
         """Get current power state of the managed system
 
         The response, if successful, should contain 'powerstate' key and
@@ -543,12 +533,12 @@ class Command(object):
                                the bridge request.
         :returns: dict -- {'powerstate': value}
         """
-        self.oem_init()
+        await self.oem_init()
         if hasattr(self._oem, 'get_power'):
             return {'powerstate': self._oem.get_power(
                 bridge_request=bridge_request)}
 
-        return {'powerstate': self._get_power_state(
+        return {'powerstate': await self._get_power_state(
             bridge_request=bridge_request)}
 
     def set_identify(self, on=True, duration=None):
@@ -865,8 +855,8 @@ class Command(object):
         self.oem_init()
         return self._oem.clear_bmc_configuration()
 
-    def get_system_configuration(self, hideadvanced=True):
-        self.oem_init()
+    async def get_system_configuration(self, hideadvanced=True):
+        await self.oem_init()
         return self._oem.get_system_configuration(hideadvanced)
 
     def set_system_configuration(self, changeset):
