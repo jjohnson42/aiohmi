@@ -203,7 +203,7 @@ class IMMClient(object):
             return None
         return cls._parse_builddate(propstr)
 
-    def get_system_configuration(self, hideadvanced=True, fetchimm=False):
+    async def get_system_configuration(self, hideadvanced=True, fetchimm=False):
         if not self.fwc:
             self.fwc = config.LenovoFirmwareConfig(self)
         try:

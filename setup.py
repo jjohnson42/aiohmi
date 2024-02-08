@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-# Copyright (c) 2013 Hewlett-Packard Development Company, L.P.
-# Copyright (c) 2024 Lenovo
+# Copyright (c) 2019 Lenovo
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +19,7 @@ import setuptools
 
 setuptools.setup(
     name='aiohmi',
-    version='0.0.1',
+    version='',
     description='Python General Hardware Management Initiative (IPMI, redfish, etc)',
     author='Jarrod Johnson',
     author_email='jjohnson2@lenovo.com',
@@ -29,4 +28,4 @@ setuptools.setup(
               'aiohmi.ipmi.oem.lenovo', 'aiohmi.redfish.oem',
               'aiohmi.redfish.oem.dell', 'aiohmi.redfish.oem.lenovo'],
     license='Apache License, Version 2.0')
-    )
+

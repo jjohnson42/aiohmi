@@ -1222,7 +1222,7 @@ class OEMHandler(generic.OEMHandler):
                 changeset)
         return super(OEMHandler, self).set_bmc_configuration(changeset)
 
-    def get_system_configuration(self, hideadvanced):
+    async def get_system_configuration(self, hideadvanced):
         if self.has_imm or self.has_xcc:
             return self.immhandler.get_system_configuration(hideadvanced)
         if self.has_tsma:

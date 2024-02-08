@@ -1182,11 +1182,11 @@ class Session(object):
         await self._get_channel_auth_cap()
 
     @classmethod
-    def pause(cls, timeout):
+    async def pause(cls, timeout):
         try:
             starttime = _monotonic_time()
             while _monotonic_time() - starttime < timeout:
-                cls.wait_for_rsp(timeout - (_monotonic_time() - starttime))
+                await cls.wait_for_rsp(timeout - (_monotonic_time() - starttime))
         except Exception as e:
             print(repr(e))
 

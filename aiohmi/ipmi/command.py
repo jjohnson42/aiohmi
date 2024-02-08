@@ -857,7 +857,7 @@ class Command(object):
 
     async def get_system_configuration(self, hideadvanced=True):
         await self.oem_init()
-        return self._oem.get_system_configuration(hideadvanced)
+        return await self._oem.get_system_configuration(hideadvanced)
 
     def set_system_configuration(self, changeset):
         self.oem_init()

@@ -3,6 +3,7 @@ cd `dirname $0`
 VERSION=`python3 setup.py --version`
 python3 setup.py sdist
 cp dist/aiohmi-$VERSION.tar.gz ~/rpmbuild/SOURCES
+cat python-aiohmi.spec.tmpl | sed -e 's/#VERSION#/'$VERSION/ > currentbuild.spec
 rpmbuild -bs currentbuild.spec
-rm $1/python-aiohmi-*rpm
-cp ~/rpmbuild/SRPMS/python-aiohmi-$VERSION-1.src.rpm $1/
+rm $1/python3-aiohmi-*rpm
+cp ~/rpmbuild/SRPMS/python3-aiohmi-$VERSION-1.src.rpm $1/

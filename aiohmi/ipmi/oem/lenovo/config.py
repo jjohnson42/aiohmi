@@ -59,7 +59,7 @@ def run_command_with_retry(connection, data):
     while tries:
         tries -= 1
         try:
-            return connection.xraw_command(
+            return await connection.xraw_command(
                 netfn=IMM_NETFN, command=IMM_COMMAND, data=data)
         except pygexc.IpmiException as e:
             if e.ipmicode != 0xa or not tries:
@@ -146,7 +146,7 @@ class LenovoFirmwareConfig(object):
             self.connection = None
         self.xc = xc
 
-    def imm_size(self, filename):
+    async def imm_size(self, filename):
         data = bytearray()
         data.extend(LENOVO_ENTERPRISE)
         data.extend(SIZE_COMMAND)
@@ -154,14 +154,14 @@ class LenovoFirmwareConfig(object):
             filename = filename.encode('utf-8')
         data.extend(filename)
 
-        response = run_command_with_retry(self.connection, data=data)
+        response = await run_command_with_retry(self.connection, data=data)
 
         size = response['data'][3:7]
 
         size = struct.unpack("i", size)
         return size[0]
 
-    def imm_open(self, filename, write=False, size=None):
+    async def imm_open(self, filename, write=False, size=None):
         response = None
         retries = 12
         data = bytearray()
@@ -182,7 +182,7 @@ class LenovoFirmwareConfig(object):
 
         while retries:
             retries = retries - 1
-            response = run_command_with_retry(self.connection, data=data)
+            response = await run_command_with_retry(self.connection, data=data)
             try:
                 if response['code'] == 0 or retries == 0:
                     break
@@ -193,7 +193,7 @@ class LenovoFirmwareConfig(object):
         filehandle = struct.unpack("<I", filehandle)[0]
         return filehandle
 
-    def imm_close(self, filehandle):
+    async def imm_close(self, filehandle):
         data = []
         data += LENOVO_ENTERPRISE
         data += CLOSE_COMMAND
@@ -201,12 +201,12 @@ class LenovoFirmwareConfig(object):
         hex_filehandle = struct.pack("<I", filehandle)
         data.extend(bytearray(hex_filehandle[:4]))
         try:
-            run_command_with_retry(self.connection, data=data)
+            await run_command_with_retry(self.connection, data=data)
         except pygexc.IpmiException as e:
             if e.ipmicode != 203:
                 raise
 
-    def imm_write(self, filehandle, size, inputdata):
+    async def imm_write(self, filehandle, size, inputdata):
         blocksize = 0xc8
         offset = 0
         remaining = size
@@ -227,10 +227,10 @@ class LenovoFirmwareConfig(object):
             data.extend(inputdata[offset:offset + amount])
             remaining -= blocksize
             offset += blocksize
-            run_command_with_retry(self.connection, data=data)
-            self.connection.ipmi_session.pause(0)
+            await run_command_with_retry(self.connection, data=data)
+            await self.connection.ipmi_session.pause(0)
 
-    def imm_read(self, filehandle, size):
+    async def imm_read(self, filehandle, size):
         blocksize = 0xc8
         offset = 0
         output = b''
@@ -251,9 +251,9 @@ class LenovoFirmwareConfig(object):
             data.extend(hex_blocksize[:2])
             remaining -= blocksize
             offset += blocksize
-            response = run_command_with_retry(self.connection, data=data)
+            response = await run_command_with_retry(self.connection, data=data)
             output += response['data'][5:]
-            self.connection.ipmi_session.pause(0)
+            await self.connection.ipmi_session.pause(0)
         return output
 
     def factory_reset(self):
@@ -303,14 +303,14 @@ class LenovoFirmwareConfig(object):
             if self.connection is None:
                 raise Unsupported('Not Supported')
             for _ in range(0, 30):
-                filehandle = self.imm_open(cfgfilename)
-                size = self.imm_size(cfgfilename)
-                data = self.imm_read(filehandle, size)
-                self.imm_close(filehandle)
+                filehandle = await self.imm_open(cfgfilename)
+                size = await self.imm_size(cfgfilename)
+                data = await self.imm_read(filehandle, size)
+                await self.imm_close(filehandle)
                 data = EfiCompressor.FrameworkDecompress(data, len(data))
                 if len(data) != 0:
                     break
-                self.connection.ipmi_session.pause(2)
+                await self.connection.ipmi_session.pause(2)
         if not data:
             raise Exception("BMC failed to return configuration information")
         xml = fromstring(data)

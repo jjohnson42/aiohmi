@@ -15,7 +15,6 @@
 import ctypes
 import fcntl
 from select import select
-import time
 
 import aiohmi.ipmi.private.util as iutil
 
@@ -91,8 +90,8 @@ class Session(object):
         while not rd:
             rd, _, _ = select((self.ipmidev,), (), (), 1)
 
-    def pause(self, seconds):
-        time.sleep(seconds)
+    async def pause(self, seconds):
+        await asyncio.sleep(seconds)
 
     @property
     def parsed_rsp(self):
