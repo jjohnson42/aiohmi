@@ -54,7 +54,7 @@ def fromstring(inputdata):
     return etree.fromstring(inputdata)
 
 
-def run_command_with_retry(connection, data):
+async def run_command_with_retry(connection, data):
     tries = 240
     while tries:
         tries -= 1
@@ -256,16 +256,16 @@ class LenovoFirmwareConfig(object):
             await self.connection.ipmi_session.pause(0)
         return output
 
-    def factory_reset(self):
-        options = self.get_fw_options()
+    async def factory_reset(self):
+        options = await self.get_fw_options()
         for option in options:
             if options[option]['is_list']:
                 options[option]['new_value'] = [options[option]['default']]
             else:
                 options[option]['new_value'] = options[option]['default']
-        self.set_fw_options(options)
+        await self.set_fw_options(options)
 
-    def get_fw_options(self, fetchimm=True):
+    async def get_fw_options(self, fetchimm=True):
         if fetchimm:
             cfgfilename = "config.efi"
         else:
@@ -280,7 +280,7 @@ class LenovoFirmwareConfig(object):
         if rsp[1] == 200:
             if 'purley' not in rsp[0].get('Oem', {}).get('Lenovo', {}).get(
                                     'release_name', 'unknown'):
-                rsp = self.xc.grab_redfish_response_with_status(
+                rsp = await self.xc.grab_redfish_response_with_status(
                     '/redfish/v1/Systems/1/Actions/Oem/LenovoComputerSystem.DSReadFile',
                     {'Action': 'DSReadFile', 'FileName': cfgfilename})
             else:
@@ -519,7 +519,7 @@ class LenovoFirmwareConfig(object):
 
         return options
 
-    def set_fw_options(self, options, checkonly=False):
+    async def set_fw_options(self, options, checkonly=False):
         changes = False
         random.seed()
         ident = 'ASU-%x-%x-%x-0' % (random.getrandbits(48),
@@ -607,12 +607,12 @@ class LenovoFirmwareConfig(object):
                     return True
         if self.connection is None:
             raise Unsupported('Not Supported')
-        filehandle = self.imm_open("asu_update.efi", write=True,
+        filehandle = await self.imm_open("asu_update.efi", write=True,
                                 size=len(data))
-        self.imm_write(filehandle, len(data), data)
+        await self.imm_write(filehandle, len(data), data)
         stubread = len(data)
         if stubread > 8:
             stubread = 8
-        self.imm_read(filehandle, stubread)
-        self.imm_close(filehandle)
+        await self.imm_read(filehandle, stubread)
+        await self.imm_close(filehandle)
         return True

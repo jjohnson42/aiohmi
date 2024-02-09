@@ -449,7 +449,7 @@ class OEMHandler(object):
         raise exc.UnsupportedFunctionality(
             'Platform does not support setting bmc attributes')
 
-    def get_system_configuration(self, hideadvanced):
+    async def get_system_configuration(self, hideadvanced):
         """Retrieve system configuration
 
         This returns a dictionary of settings names to dictionaries including

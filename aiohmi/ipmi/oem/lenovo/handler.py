@@ -1224,10 +1224,10 @@ class OEMHandler(generic.OEMHandler):
 
     async def get_system_configuration(self, hideadvanced):
         if self.has_imm or self.has_xcc:
-            return self.immhandler.get_system_configuration(hideadvanced)
+            return await self.immhandler.get_system_configuration(hideadvanced)
         if self.has_tsma:
-            return self.tsmahandler.get_uefi_configuration(hideadvanced)
-        return super(OEMHandler, self).get_system_configuration(hideadvanced)
+            return await self.tsmahandler.get_uefi_configuration(hideadvanced)
+        return await super(OEMHandler, self).get_system_configuration(hideadvanced)
 
     def set_system_configuration(self, changeset):
         if self.has_imm or self.has_xcc:

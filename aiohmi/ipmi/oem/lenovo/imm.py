@@ -207,7 +207,7 @@ class IMMClient(object):
         if not self.fwc:
             self.fwc = config.LenovoFirmwareConfig(self)
         try:
-            self.fwo = self.fwc.get_fw_options(fetchimm=fetchimm)
+            self.fwo = await self.fwc.get_fw_options(fetchimm=fetchimm)
         except Exception:
             raise Exception('%s failed to retrieve UEFI configuration'
                             % self.bmcname)
@@ -230,12 +230,12 @@ class IMMClient(object):
             retcfg[opt]['sortid'] = self.fwo[opt]['sortid']
         return retcfg
 
-    def set_system_configuration(self, changeset):
+    async def set_system_configuration(self, changeset):
         if not self.fwc:
             self.fwc = config.LenovoFirmwareConfig(self)
         fetchimm = False
         if not self.fwo or util._monotonic_time() - self.fwovintage > 30:
-            self.fwo = self.fwc.get_fw_options(fetchimm=fetchimm)
+            self.fwo = await self.fwc.get_fw_options(fetchimm=fetchimm)
             self.fwovintage = util._monotonic_time()
         for key in list(changeset):
             if key not in self.fwo:
@@ -251,7 +251,7 @@ class IMMClient(object):
                             found = True
                 if not found and not fetchimm:
                     fetchimm = True
-                    self.fwo = self.fwc.get_fw_options(fetchimm=fetchimm)
+                    self.fwo = await self.fwc.get_fw_options(fetchimm=fetchimm)
                     if key in self.fwo:
                         continue
                     else:
@@ -274,7 +274,7 @@ class IMMClient(object):
         self.merge_changeset(changeset)
         if changeset:
             try:
-                self.fwc.set_fw_options(self.fwo)
+                await self.fwc.set_fw_options(self.fwo)
             finally:
                 self.fwo = None
                 self.fwovintage = 0
@@ -365,16 +365,10 @@ class IMMClient(object):
         else:
             raise Exception('Unknown format for property: ' + repr(propdata))
 
-    def get_webclient(self):
+    async def get_webclient(self):
         cv = self.ipmicmd.certverify
-        wc = webclient.SecureHTTPConnection(self.imm, 443, verifycallback=cv)
+        wc = webclient.WebConnection(self.imm, 443, verifycallback=cv)
         wc.vintage = None
-        try:
-            wc.connect()
-        except socket.error as se:
-            if se.errno != errno.ECONNREFUSED:
-                raise
-            return None
         adata = urlencode({'user': self.username,
                            'password': self.password,
                            'SessionTimeout': 60})
@@ -401,10 +395,9 @@ class IMMClient(object):
                 wc.set_header('Origin', 'https://imm/')
                 return wc
 
-    @property
-    def wc(self):
+    async def wc(self):
         while self.weblogging:
-            ipmisession.Session.pause(0.25)
+            await ipmisession.Session.pause(0.25)
         self.weblogging = True
         try:
             if (not self._wc or (self._wc.vintage
@@ -414,7 +407,7 @@ class IMMClient(object):
                     # in case the existing session is still valid
                     # dispose of the session
                     self.weblogout()
-                self._wc = self.get_webclient()
+                self._wc = await self.get_webclient()
         finally:
             self.weblogging = False
         return self._wc
@@ -434,13 +427,14 @@ class IMMClient(object):
         if returnit:
             return retdata
 
-    def grab_cacheable_json(self, url, age=30):
+    async def grab_cacheable_json(self, url, age=30):
         data = self.get_cached_data(url, age)
+        wc = await self.wc()
         if not data:
-            data, status = self.wc.grab_json_response_with_status(url)
+            data, status = wc.grab_json_response_with_status(url)
             if status == 401:
                 self._wc = None
-                data, status = self.wc.grab_json_response_with_status(url)
+                data, status = wc.grab_json_response_with_status(url)
             if status != 200:
                 data = {}
             self.datacache[url] = (data, util._monotonic_time())
@@ -1199,34 +1193,28 @@ class XCCClient(IMMClient):
                 'Unexpected response to clear configuration: {0}'.format(
                     res[0]))
 
-    def get_webclient(self, login=True):
+    async def get_webclient(self, login=True):
         cv = self.ipmicmd.certverify
-        wc = webclient.SecureHTTPConnection(self.imm, 443, verifycallback=cv)
+        wc = webclient.WebConnection(self.imm, 443, verifycallback=cv)
         wc.vintage = util._monotonic_time()
-        try:
-            wc.connect()
-        except socket.error as se:
-            if se.errno != errno.ECONNREFUSED:
-                raise
-            return None
         if not login:
             return wc
-        adata = json.dumps({'username': self.username,
-                            'password': self.password
-                            })
+        adata = {'username': self.username,
+                 'password': self.password
+                }
         headers = {'Connection': 'keep-alive',
                    'Referer': 'https://xcc/',
                    'Host': 'xcc',
                    'Content-Type': 'application/json'}
-        rsp, status = wc.grab_json_response_with_status(
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/providers/get_nonce', {})
+        print(repr(status))
+        print(repr(rsp))
         if status == 200:
             nonce = rsp.get('nonce', None)
             headers['Content-Security-Policy'] = 'nonce={0}'.format(nonce)
-        wc.request('POST', '/api/login', adata, headers)
-        rsp = wc.getresponse()
-        if rsp.status == 200:
-            rspdata = json.loads(rsp.read())
+        rspdata = await wc.grab_json_response('/api/login', data=adata, headers=headers)
+        if rspdata:
             wc.set_header('Content-Type', 'application/json')
             wc.set_header('Referer', 'https://xcc/')
             wc.set_header('Host', 'xcc')
@@ -1991,8 +1979,9 @@ class XCCClient(IMMClient):
             return rsp
         return {}
 
-    def grab_redfish_response_with_status(self, url, body=None, method=None):
-        return self.wc.grab_json_response_with_status(url, body, headers={
+    async def grab_redfish_response_with_status(self, url, body=None, method=None):
+        wc = await self.wc()
+        return await wc.grab_json_response_with_status(url, body, headers={
             'Authorization': 'Basic %s' % base64.b64encode(
                 (self.username + ':' + self.password).encode('utf8')
             ).decode('utf8'),

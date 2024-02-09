@@ -29,13 +29,12 @@ import six
 
 import aiohmi.exceptions as pygexc
 
-try:
-    import Cookie
-    import httplib
-except ImportError:
-    import http.client as httplib
-    import http.cookies as Cookie
 
+import aiohttp
+from aiohttp.cookiejar import CookieJar
+
+import http.client as httplib
+import http.cookies as Cookie
 
 # Used as the separator for form data
 BND = b'TbqbLUSn0QFjx9gxiQLtgBK4Zu6ehLqtLs4JOBS50EgxXJ2yoRMhTrmRXxO1lkoAQdZx16'
@@ -44,6 +43,17 @@ BND = b'TbqbLUSn0QFjx9gxiQLtgBK4Zu6ehLqtLs4JOBS50EgxXJ2yoRMhTrmRXxO1lkoAQdZx16'
 # consolidate forms to single memory location to get benefits..
 uploadforms = {}
 
+class CustomVerifier(aiohttp.Fingerprint):
+    def __init__(self, verifycallback):
+        self._certverify = verifycallback
+
+    def check(self, transport):
+        sslobj = transport.get_extra_info("ssl_object")
+        cert = sslobj.getpeercert(binary_form=True)
+        if not self._certverify(cert):
+            transport.close()
+            raise pygexc.UnrecognizedCertificate('Unknown certificate',
+                                                 cert)
 
 class FileUploader(threading.Thread):
 
@@ -119,6 +129,119 @@ def get_upload_form(filename, data, formname, otherfields):
         form += b'\r\n--' + BND + b'--\r\n'
         uploadforms[filename] = form
         return form
+
+class WebConnection:
+    def __init__(self, host, port, verifycallback=None):
+        self.host = host
+        self.port = port
+        if verifycallback:
+            self.ssl = CustomVerifier(verifycallback)
+        else:
+            self.ssl = None
+        self.verifycallback = verifycallback
+        self.stdheaders = {}
+        self.cookies = CookieJar()
+
+    def set_header(self, key, value):
+        self.stdheaders[key] = value
+
+    async def request(self, method, url, body=None, headers=None, referer=None):
+        if headers is None:
+            headers = self.stdheaders.copy()
+        else:
+            headers = headers.copy()
+        if method == 'GET' and 'Content-Type' in headers:
+            del headers['Content-Type']
+        if method == 'POST' and body and 'Content-Type' not in headers:
+            headers['Content-Type'] = 'application/x-www-form-urlencoded'
+        if body and 'Content-Length' not in headers:
+            headers['Content-Length'] = len(body)
+        if referer:
+            headers['referer'] = referer
+        method = method.lower()
+        async with aiohttp.ClientSession(f'https://{self.host}', cookie_jar=self.cookies) as session:
+            thefunc = gettatr(session, method)
+            kwargs = {}
+            if isinstance(data, dict):
+                kwargs['json'] = data
+            elif data:
+                kwargs['data'] = data
+            async with thefunc(url, headers=headers, ssl=self.ssl, **kwargs) as rsp:
+                pass
+    def set_basic_credentials(self, username, password):
+        if isinstance(username, bytes) and not isinstance(username, str):
+            username = username.decode('utf-8')
+        if isinstance(password, bytes) and not isinstance(password, str):
+            password = password.decode('utf-8')
+        authinfo = ':'.join((username, password))
+        if not isinstance(authinfo, bytes):
+            authinfo = authinfo.encode('utf-8')
+        authinfo = base64.b64encode(authinfo)
+        if not isinstance(authinfo, str):
+            authinfo = authinfo.decode('utf-8')
+        self.stdheaders['Authorization'] = 'Basic {0}'.format(authinfo)
+
+    async def grab_json_response(self, url, data=None, referer=None, headers=None):
+        self.lastjsonerror = None
+        body, status = await self.grab_json_response_with_status(
+            url, data, referer, headers)
+        if status == 200:
+            return body
+        self.lastjsonerror = body
+        return {}
+
+    async def grab_json_response_with_status(self, url, data=None, referer=None,
+                                        headers=None, method=None):
+        if not headers:
+            headers = copy.deepcopy(self.stdheaders)
+        else:
+            headers = copy.deepcopy(headers)
+        if referer:
+            headers['referer'] = referer
+        if not method:
+            method = 'POST' if data is not None else 'GET'
+        method = method.lower()
+        async with aiohttp.ClientSession(f'https://{self.host}', cookie_jar=self.cookies) as session:
+            thefunc = getattr(session, method)
+            kwargs = {}
+            if isinstance(data, dict):
+                kwargs['json'] = data
+            elif data:
+                kwargs['data'] = data
+            async with thefunc(url, headers=headers, ssl=self.ssl, **kwargs) as rsp:
+                if rsp.status >= 200 and rsp.status < 300:
+                    return await rsp.json(), rsp.status
+                else:
+                    return await rsp.read(), rsp.status
+
+    async def download(self, url, file):
+        """Download a file to filename or file object
+
+        """
+        if isinstance(file, str):
+            file = open(file, 'wb')
+        webclient = self.dupe()
+        dlheaders = self.stdheaders.copy()
+        if 'Accept-Encoding' in dlheaders:
+            del dlheaders['Accept-Encoding']
+        webclient.request('GET', url, headers=dlheaders)
+        rsp = webclient.getresponse()
+        async with aiohttp.ClientSession(f'https://{self.host}', cookie_jar=self.cookies) as session:
+            async with session.get(url, headers=self.stdheaders) as rsp:
+                self._currdl = rsp
+                self._dlfile = file
+                async for chunk in rsp.content.iter_chunked(chunk_size):
+                    file.write(chunk)
+        self._currdl = None
+        file.close()
+
+    def get_download_progress(self):
+        if not self._currdl:
+            return None
+        totalen = self._currdl.headers.get('content-length', None)
+        if totalen is None:
+            return -0.5
+        return float(self._dlfile.tell()) / float(totalen)
 
 
 class SecureHTTPConnection(httplib.HTTPConnection, object):
