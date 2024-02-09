@@ -156,9 +156,11 @@ class SensorReading(object):
 
 class Command(object):
 
-    def __init__(self, bmc, userid, password, verifycallback, sysurl=None,
+    @classmethod
+    async def create(cls, bmc, userid, password, verifycallback, sysurl=None,
                  bmcurl=None, chassisurl=None, pool=None, port=443):
-        self.wc = webclient.SecureHTTPConnection(
+        self = cls()
+        self.wc = webclient.WebConnection(
             bmc, port, verifycallback=verifycallback)
         self._hwnamemap = {}
         self._fwnamemap = {}
@@ -186,7 +188,7 @@ class Command(object):
         self.wc.set_header('User-Agent', 'aiohmi')
         self.wc.set_header('Accept-Encoding', 'gzip')
         self.wc.set_header('OData-Version', '4.0')
-        overview = self.wc.grab_json_response('/redfish/v1/')
+        overview = await self.wc.grab_json_response('/redfish/v1/')
         self.wc.set_basic_credentials(userid, password)
         self.username = userid
         self.password = password
@@ -194,7 +196,7 @@ class Command(object):
         if 'Systems' not in overview:
             raise exc.PyghmiException('Redfish not ready')
         systems = overview['Systems']['@odata.id']
-        res = self.wc.grab_json_response_with_status(systems)
+        res = await self.wc.grab_json_response_with_status(systems)
         if res[1] == 401:
             raise exc.PyghmiException('Access Denied')
         elif res[1] < 200 or res[1] >= 300:
@@ -217,8 +219,10 @@ class Command(object):
                 raise exc.PyghmiException(
                     'Multi system manager, sysurl is required parameter')
             self.sysurl = systems[0]['@odata.id']
-        self.powerurl = self.sysinfo.get('Actions', {}).get(
+        sysinfo = await self.sysinfo()
+        self.powerurl = sysinfo.get('Actions', {}).get(
             '#ComputerSystem.Reset', {}).get('target', None)
+        return self
 
     @property
     def _accountserviceurl(self):
@@ -443,16 +447,15 @@ class Command(object):
                     'BMC does not implement extended firmware information')
         return self._varfwinventory
 
-    @property
-    def sysinfo(self):
-        return self._do_web_request(self.sysurl)
+    async def sysinfo(self):
+        return await self._do_web_request(self.sysurl)
 
     @property
     def bmcinfo(self):
         return self._do_web_request(self._bmcurl)
 
-    def get_power(self):
-        currinfo = self._do_web_request(self.sysurl, cache=False)
+    async def get_power(self):
+        currinfo = await self._do_web_request(self.sysurl, cache=False)
         return {'powerstate': str(currinfo['PowerState'].lower())}
 
     def reseat_bay(self, bay):
@@ -512,11 +515,11 @@ class Command(object):
             for url in urls:
                 yield self._do_web_request_withurl(url, cache=cache)
 
-    def _do_web_request_withurl(self, url, payload=None, method=None,
+    async def _do_web_request_withurl(self, url, payload=None, method=None,
                                 cache=True):
-        return self._do_web_request(url, payload, method, cache), url
+        return await self._do_web_request(url, payload, method, cache), url
 
-    def _do_web_request(self, url, payload=None, method=None, cache=True,
+    async def _do_web_request(self, url, payload=None, method=None, cache=True,
                         etag=None):
         res = None
         if cache is True:
@@ -525,11 +528,11 @@ class Command(object):
             res = self._get_cache(url, cache)
         if res:
             return res
-        wc = self.wc.dupe()
+        wc = self.wc
         if etag:
             wc.stdheaders['If-Match'] = etag
         try:
-            res = wc.grab_json_response_with_status(url, payload,
+            res = await wc.grab_json_response_with_status(url, payload,
                                                     method=method)
         finally:
             if 'If-Match' in wc.stdheaders:
@@ -826,8 +829,9 @@ class Command(object):
         raise exc.UnsupportedFunctionality(
             'Clear BMC configuration not supported in redfish yet')
 
-    def get_system_configuration(self, hideadvanced=True):
-        return self.oem.get_system_configuration(hideadvanced, self)
+    async def get_system_configuration(self, hideadvanced=True):
+        oem = await self.oem()
+        return await oem.get_system_configuration(hideadvanced, self)
 
     def clear_system_configuration(self):
         """Clear the BIOS/UEFI configuration
@@ -1072,11 +1076,11 @@ class Command(object):
                 self._do_web_request(chassisurl, {'Location': locationinfo},
                                      method='PATCH')
 
-    @property
-    def oem(self):
+    async def oem(self):
         if not self._oem:
+            sysinfo = await self.sysinfo()
             self._oem = oem.get_oem_handler(
-                self.sysinfo, self.sysurl, self.wc, self._urlcache, self)
+                sysinfo, self.sysurl, self.wc, self._urlcache, self)
             self._oem.set_credentials(self.username, self.password)
         return self._oem
 

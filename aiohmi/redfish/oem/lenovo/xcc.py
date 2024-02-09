@@ -149,12 +149,12 @@ class OEMHandler(generic.OEMHandler):
         self.fwc = None
         self.fwo = None
 
-    def get_system_configuration(self, hideadvanced=True, fishclient=None,
+    async def get_system_configuration(self, hideadvanced=True, fishclient=None,
                                  fetchimm=False):
         if not self.fwc:
             self.fwc = config.LenovoFirmwareConfig(self, useipmi=False)
         try:
-            self.fwo = self.fwc.get_fw_options(fetchimm=fetchimm)
+            self.fwo = await self.fwc.get_fw_options(fetchimm=fetchimm)
         except config.Unsupported:
             return super(OEMHandler, self).get_system_configuration(
                 hideadvanced, fishclient)

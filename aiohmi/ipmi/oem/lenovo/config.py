@@ -275,7 +275,7 @@ class LenovoFirmwareConfig(object):
         if self.connection:
             rsp = ({}, 200)
         else:
-            rsp = self.xc.grab_redfish_response_with_status(
+            rsp = await self.xc.grab_redfish_response_with_status(
                     '/redfish/v1/Managers/1')
         if rsp[1] == 200:
             if 'purley' not in rsp[0].get('Oem', {}).get('Lenovo', {}).get(

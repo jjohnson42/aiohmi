@@ -24,6 +24,7 @@ import json
 import socket
 import ssl
 import threading
+import traceback
 
 import six
 
@@ -250,6 +251,7 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
     def __init__(self, host, port=None, key_file=None, cert_file=None,
                  ca_certs=None, strict=None, verifycallback=None, clone=None,
                  **kwargs):
+        traceback.print_stack()
         if 'timeout' not in kwargs:
             kwargs['timeout'] = 60
         self.mytimeout = kwargs['timeout']
