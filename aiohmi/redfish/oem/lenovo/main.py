@@ -23,7 +23,7 @@ def get_handler(sysinfo, sysurl, webclient, cache, cmd):
         bmcinfo = cmd.bmcinfo
         if 'Ami' in bmcinfo.get('Oem', {}):
             return tsma.TsmHandler(sysinfo, sysurl, webclient, cache)
-    if 'FrontPanelUSB' in leninf or sysinfo.get('SKU', '').startswith('7X58'):
+    if 'FrontPanelUSB' in leninf or 'USBManagementPortAssignment' in leninf or sysinfo.get('SKU', '').startswith('7X58'):
         return xcc.OEMHandler(sysinfo, sysurl, webclient, cache,
                               gpool=cmd._gpool)
     else:
