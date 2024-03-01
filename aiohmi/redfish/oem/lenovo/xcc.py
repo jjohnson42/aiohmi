@@ -1646,6 +1646,11 @@ class OEMHandler(generic.OEMHandler):
         yield "System"
         for key in natural_sort(hwmap):
             yield key
+        for cpuinv in self._get_cpu_inventory():
+            yield cpuinv[0]
+        for meminv in self._get_mem_inventory():
+            yield meminv[0]
+
 
     def get_inventory_of_component(self, compname):
         if compname.lower() == 'system':
@@ -1662,6 +1667,13 @@ class OEMHandler(generic.OEMHandler):
         try:
             return hwmap[compname]
         except KeyError:
+            for cpuinv in self._get_cpu_inventory():
+                if cpuinv[0] == compname:
+                    return cpuinv[1]
+            for meminv in self._get_mem_inventory():
+                if meminv[0] == compname:
+                    return meminv[1]
+
 
             return None
 

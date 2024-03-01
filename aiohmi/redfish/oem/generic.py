@@ -781,12 +781,12 @@ class OEMHandler(object):
     def update_firmware(self, filename, data=None, progress=None, bank=None):
         usd = self._do_web_request('/redfish/v1/UpdateService')
         if usd.get('HttpPushUriTargetsBusy', False):
-            raise pygexc.TemporaryError('Cannot run multtiple updates to '
+            raise exc.TemporaryError('Cannot run multtiple updates to '
                                         'same target concurrently')
         try:
             upurl = usd['HttpPushUri']
         except KeyError:
-            raise pygexc.UnsupportedFunctionality('Redfish firmware update only supported for implementations with push update support')
+            raise exc.UnsupportedFunctionality('Redfish firmware update only supported for implementations with push update support')
         if 'HttpPushUriTargetsBusy' in usd:
             self._do_web_request(
                 '/redfish/v1/UpdateService',
