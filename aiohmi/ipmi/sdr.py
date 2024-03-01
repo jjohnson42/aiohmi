@@ -469,11 +469,11 @@ class SDREntry(object):
                 health = sensedata['severity']
             else:
                 desc = "Unknown state %d" % state
-                health = const.Health.Warning
+                health = const.Health.Ok
         except KeyError:
             desc = "Unknown state %d for reading type %d/sensor type %d" % (
                 state, self.reading_type, self.sensor_type_number)
-            health = const.Health.Warning
+            health = const.Health.Ok
         return desc, health
 
     def decode_sensor_reading(self, ipmicmd, reading):
