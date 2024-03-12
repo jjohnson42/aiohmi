@@ -377,10 +377,9 @@ class IMMClient(object):
                    'Host': 'imm',
                    'Referer': 'https://imm/designs/imm/index.php',
                    'Content-Type': 'application/x-www-form-urlencoded'}
-        wc.request('POST', '/data/login', adata, headers)
-        rsp = wc.getresponse()
-        if rsp.status == 200:
-            rspdata = json.loads(rsp.read())
+        rsp = await wc.grab_json_response_with_status('/data/login', adata, headers)
+        if rsp[0] == 200:
+            rspdata = rsp[0]
             if rspdata['authResult'] == '0' and rspdata['status'] == 'ok':
                 if 'token2_name' in rspdata and 'token2_value' in rspdata:
                     wc.set_header(rspdata['token2_name'],
@@ -714,10 +713,10 @@ class IMMClient(object):
                                   'health': pygconst.Health.Ok,
                                   'type': 'Energy'}, 'kWh')
 
-    def weblogout(self):
+    async def weblogout(self):
         if self._wc:
             try:
-                self._wc.grab_json_response(self.logouturl)
+                await self._wc.grab_json_response(self.logouturl)
             except Exception:
                 pass
             self._wc = None
@@ -1208,8 +1207,6 @@ class XCCClient(IMMClient):
                    'Content-Type': 'application/json'}
         rsp, status = await wc.grab_json_response_with_status(
             '/api/providers/get_nonce', {})
-        print(repr(status))
-        print(repr(rsp))
         if status == 200:
             nonce = rsp.get('nonce', None)
             headers['Content-Security-Policy'] = 'nonce={0}'.format(nonce)
@@ -1219,8 +1216,10 @@ class XCCClient(IMMClient):
             wc.set_header('Referer', 'https://xcc/')
             wc.set_header('Host', 'xcc')
             wc.set_header('Authorization', 'Bearer ' + rspdata['access_token'])
-            if '_csrf_token' in wc.cookies:
-                wc.set_header('X-XSRF-TOKEN', wc.cookies['_csrf_token'])
+            for cky in wc.cookies:
+                if cky.key == '_csrf_token':
+                    wc.set_header('X-XSRF-TOKEN', cky.value)
+                    break
             return wc
 
     def _raid_number_map(self, controller):
@@ -1973,8 +1972,8 @@ class XCCClient(IMMClient):
             progress({'phase': 'complete'})
         self.weblogout()
 
-    def grab_redfish_response_emptyonerror(self, url, body=None, method=None):
-        rsp, status = self.grab_redfish_response_with_status(url, body, method)
+    async def grab_redfish_response_emptyonerror(self, url, body=None, method=None):
+        rsp, status = await self.grab_redfish_response_with_status(url, body, method)
         if status >= 200 and status < 300:
             return rsp
         return {}
@@ -2138,9 +2137,10 @@ class XCCClient(IMMClient):
         self.wc.grab_json_response('/api/dataset', {'IMM_DescName': hostname})
         self.weblogout()
 
-    def get_hostname(self):
-        rsp = self.wc.grab_json_response('/api/dataset/sys_info')
-        self.weblogout()
+    async def get_hostname(self):
+        wc = await self.wc()
+        rsp = await wc.grab_json_response('/api/dataset/sys_info')
+        await self.weblogout()
         return rsp['items'][0]['system_name']
 
     def update_firmware_backend(self, filename, data=None, progress=None,

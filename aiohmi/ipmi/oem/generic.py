@@ -404,7 +404,7 @@ class OEMHandler(object):
         """OEM specific hook to specify name information"""
         raise exc.UnsupportedFunctionality()
 
-    def get_hostname(self):
+    async def get_hostname(self):
         """OEM specific hook to specify name information"""
         raise exc.UnsupportedFunctionality()
 

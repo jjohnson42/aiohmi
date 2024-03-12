@@ -1114,9 +1114,9 @@ class OEMHandler(generic.OEMHandler):
                 wc.set_header('X-XSRF-TOKEN', wc.cookies['_csrf_token'])
             return wc
 
-    def grab_redfish_response_with_status(self, url, body=None, method=None):
-        wc = self.webclient.dupe()
-        res = wc.grab_json_response_with_status(url, body, method=method)
+    async def grab_redfish_response_with_status(self, url, body=None, method=None):
+        wc = self.webclient
+        res = await wc.grab_json_response_with_status(url, body, method=method)
         return res
 
     def list_media(self, fishclient):

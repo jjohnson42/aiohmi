@@ -469,12 +469,12 @@ class Command(object):
         """
         self.oem.reseat_bay(bay)
 
-    def set_power(self, powerstate, wait=False):
+    async def set_power(self, powerstate, wait=False):
         if powerstate == 'boot':
-            oldpowerstate = self.get_power()['powerstate']
+            oldpowerstate = await self.get_power()['powerstate']
             powerstate = 'on' if oldpowerstate == 'off' else 'reset'
         elif powerstate in ('on', 'off'):
-            oldpowerstate = self.get_power()['powerstate']
+            oldpowerstate = await self.get_power()['powerstate']
             if oldpowerstate == powerstate:
                 return {'powerstate': powerstate}
         reqpowerstate = powerstate

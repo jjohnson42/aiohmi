@@ -824,6 +824,7 @@ class SMMClient(object):
     def get_webclient(self):
         cv = self.ipmicmd.certverify
         wc = webclient.SecureHTTPConnection(self.smm, 443, verifycallback=cv)
+        wc = webclient.WebConnection(self.smm, 443, verifycallback=cv)
         wc.vintage = util._monotonic_time()
         wc.connect()
         loginform = urlencode(
@@ -1103,9 +1104,8 @@ class SMMClient(object):
         rsp.read()
         self._wc = None
 
-    @property
-    def wc(self):
+    async def wc(self):
         if (not self._wc or self._wc.broken
                 or self._wc.vintage < util._monotonic_time() + 30):
-            self._wc = self.get_webclient()
+            self._wc = await self.get_webclient()
         return self._wc

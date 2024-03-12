@@ -131,10 +131,14 @@ def get_upload_form(filename, data, formname, otherfields):
         uploadforms[filename] = form
         return form
 
+
 class WebConnection:
     def __init__(self, host, port, verifycallback=None):
-        self.host = host
         self.port = port
+        if ':' in host:
+            self.host = f'[{host}]'
+        else:
+            self.host = host
         if verifycallback:
             self.ssl = CustomVerifier(verifycallback)
         else:
@@ -146,7 +150,8 @@ class WebConnection:
     def set_header(self, key, value):
         self.stdheaders[key] = value
 
-    async def request(self, method, url, body=None, headers=None, referer=None):
+    async def request(
+            self, method, url, body=None, headers=None, referer=None):
         if headers is None:
             headers = self.stdheaders.copy()
         else:
@@ -160,15 +165,17 @@ class WebConnection:
         if referer:
             headers['referer'] = referer
         method = method.lower()
-        async with aiohttp.ClientSession(f'https://{self.host}', cookie_jar=self.cookies) as session:
-            thefunc = gettatr(session, method)
+        async with aiohttp.ClientSession(
+                f'https://{self.host}', cookie_jar=self.cookies) as session:
+            thefunc = getattr(session, method)
             kwargs = {}
-            if isinstance(data, dict):
-                kwargs['json'] = data
-            elif data:
-                kwargs['data'] = data
+            if isinstance(body, dict):
+                kwargs['json'] = body
+            elif body:
+                kwargs['data'] = body
             async with thefunc(url, headers=headers, ssl=self.ssl, **kwargs) as rsp:
                 pass
+
     def set_basic_credentials(self, username, password):
         if isinstance(username, bytes) and not isinstance(username, str):
             username = username.decode('utf-8')
@@ -202,6 +209,8 @@ class WebConnection:
         if not method:
             method = 'POST' if data is not None else 'GET'
         method = method.lower()
+        if 'Content-Type' in headers and method.lower() in ('get', 'delete'):
+            del headers['Content-Type']
         async with aiohttp.ClientSession(f'https://{self.host}', cookie_jar=self.cookies) as session:
             thefunc = getattr(session, method)
             kwargs = {}
@@ -231,7 +240,7 @@ class WebConnection:
             async with session.get(url, headers=self.stdheaders) as rsp:
                 self._currdl = rsp
                 self._dlfile = file
-                async for chunk in rsp.content.iter_chunked(chunk_size):
+                async for chunk in rsp.content.iter_chunked(16384):
                     file.write(chunk)
         self._currdl = None
         file.close()
@@ -251,6 +260,7 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
     def __init__(self, host, port=None, key_file=None, cert_file=None,
                  ca_certs=None, strict=None, verifycallback=None, clone=None,
                  **kwargs):
+        print("Bad usage of broken client, move to webclient")
         traceback.print_stack()
         if 'timeout' not in kwargs:
             kwargs['timeout'] = 60

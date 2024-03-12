@@ -808,13 +808,14 @@ class Session(object):
         finally:
             self.awaitingresponse = False
 
+
+
     async def raw_command(self,
                     netfn,
                     command,
                     bridge_request=None,
                     data=(),
                     retry=True,
-                    delay_xmit=None,
                     timeout=None,
                     callback=None,
                     rslun=0):
@@ -841,7 +842,7 @@ class Session(object):
             self.ipmicallback = callback
         await self._send_ipmi_net_payload(netfn, command, data,
                                     bridge_request=bridge_request,
-                                    retry=retry, delay_xmit=delay_xmit,
+                                    retry=retry,
                                     timeout=timeout, rslun=rslun)
 
         if retry:  # in retry case, let the retry timers indicate wait time
@@ -869,7 +870,7 @@ class Session(object):
 
     async def _send_ipmi_net_payload(self, netfn=None, command=None, data=(), code=0,
                                bridge_request=None,
-                               retry=None, delay_xmit=None, timeout=None,
+                               retry=None, timeout=None,
                                rslun=0):
         if retry is None:
             retry = not self.servermode
@@ -885,10 +886,10 @@ class Session(object):
                                               data, rslun)
         payload_type = constants.payload_types['ipmi']
         await self.send_payload(payload=ipmipayload, payload_type=payload_type,
-                                retry=retry, delay_xmit=delay_xmit, timeout=timeout)
+                                retry=retry, timeout=timeout)
 
     async def send_payload(self, payload=(), payload_type=None, retry=True,
-                     delay_xmit=None, needskeepalive=False, timeout=None):
+                     needskeepalive=False, timeout=None):
         """Send payload over the IPMI Session
 
         :param needskeepalive: If the payload is expected not to count as
@@ -997,7 +998,7 @@ class Session(object):
                     and not self._customkeepalives):
                 Session.keepalive_sessions[self]['timeout'] = \
                     _monotonic_time() + MAX_IDLE - (random.random() * 4.9)
-            await self._xmit_packet(retry, delay_xmit=delay_xmit, timeout=timeout)
+            await self._xmit_packet(retry, timeout=timeout)
         finally:
             KEEPALIVE_SESSIONS.release()
 
@@ -1083,7 +1084,6 @@ class Session(object):
 
     async def _req_priv_level(self):
         self.logged = 1
-        self.logoutexpiry = None
         self.maxtimeout = 4  # Switch quickly to the relogin recovery
         self.logontries = 1  # have one relogin waiting to heal
         response = await self.raw_command(netfn=0x6, command=0x3b,
@@ -1099,6 +1099,8 @@ class Session(object):
                 self.logged = 0
                 self.onlogpayload = None
                 self.logging = False
+                self.logoutexpiry = None
+
                 mysuffix = " while requesting privelege level %d for %s" % (
                     self.privlevel, self.userid)
                 errstr = get_ipmi_error(response, suffix=mysuffix)
@@ -1106,6 +1108,7 @@ class Session(object):
                     self.onlogon({'error': errstr})
                     return
         self.logging = False
+        self.logoutexpiry = None
         await KEEPALIVE_SESSIONS.acquire()
         try:
             Session.keepalive_sessions[self] = {}
@@ -1276,6 +1279,7 @@ class Session(object):
         finally:
             KEEPALIVE_SESSIONS.release()
         for session in sessionstokeepalive:
+            print("time to keep alive")
             await session._keepalive()
         await WAITING_SESSIONS.acquire()
         try:
@@ -1345,7 +1349,9 @@ class Session(object):
     async def _keepalive(self):
         """Performs a keepalive to avoid idle disconnect"""
         if self.awaitingresponse:
+            print("nah")
             return
+        print("ok...")
         try:
             keptalive = False
             if self._customkeepalives:
@@ -1355,26 +1361,33 @@ class Session(object):
                         cmd, callback = self._customkeepalives[keepalive]
                     except TypeError:
                         # raw_command made customkeepalives None
+                        print("huh...")
                         break
                     except KeyError:
                         # raw command ultimately caused a keepalive to
                         # deregister
+                        print("nope...")
                         continue
                     if callable(cmd):
-                        cmd()
+                        print("huh>>>")
+                        print(repr(cmd))
+                        #cmd()
                         continue
+                    print(repr(cmd))
                     keptalive = True
                     cmd['callback'] = self._keepalive_wrapper(callback)
                     self.raw_command(**cmd)
+            print(repr(keptalive))
             if not keptalive:
                 if self.incommand:
                     # if currently in command, no cause to keepalive
                     return
                 if self.autokeepalive:
+                    print("ok here")
                     self.raw_command(netfn=6, command=1,
                                      callback=self._keepalive_wrapper(None))
                 else:
-                    self.logout()
+                    await self.logout()
         except exc.IpmiException:
             await self._mark_broken()
 
@@ -1595,7 +1608,7 @@ class Session(object):
                 # Here the situation is likely that the peer didn't want
                 # us to use admin.  Degrade to operator and try again
                 self.privlevel = 3
-                self.login()
+                await self.login()
                 return
             # invalid sessionid 99% of the time means a retry
             # scenario invalidated an in-flight transaction
@@ -1605,7 +1618,7 @@ class Session(object):
                 errstr = constants.rmcp_codes[data[1]]
             else:
                 errstr = "Unrecognized RMCP code %d" % data[1]
-            self.onlogon({'error': errstr + " in RAKP2"})
+            await self.onlogon({'error': errstr + " in RAKP2"})
             return -9
         localsid = struct.unpack("<I", bytes(data[4:8]))[0]
         if localsid != self.localsid:
@@ -1851,20 +1864,10 @@ class Session(object):
             await self.send_payload()
         self.nowait = False
 
-    async def _xmit_packet(self, retry=True, delay_xmit=None, timeout=None):
+    async def _xmit_packet(self, retry=True, timeout=None):
         if self.sequencenumber:  # seq number of zero will be left alone, it is
             # special, otherwise increment
             self.sequencenumber += 1
-        if delay_xmit is not None:
-            await WAITING_SESSIONS.acquire()
-            try:
-                Session.waiting_sessions[self] = {}
-                Session.waiting_sessions[self]['ipmisession'] = self
-                self.expiration = delay_xmit + _monotonic_time()
-                Session.waiting_sessions[self]['timeout'] = self.expiration
-            finally:
-                WAITING_SESSIONS.release()
-            return  # skip transmit, let retry timer do it's thing
         if self.sockaddr:
             _io_sendto(self.socket, self.netpacket, self.sockaddr)
         else:

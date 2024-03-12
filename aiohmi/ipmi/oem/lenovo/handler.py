@@ -947,12 +947,12 @@ class OEMHandler(generic.OEMHandler):
             return self.smmhandler.set_hostname(hostname)
         return super(OEMHandler, self).set_hostname(hostname)
 
-    def get_hostname(self):
-        if self.has_xcc:
-            return self.immhandler.get_hostname()
+    async def get_hostname(self):
+        if await self.has_xcc:
+            return await self.immhandler.get_hostname()
         elif self.is_fpc:
-            return self.smmhandler.get_hostname()
-        return super(OEMHandler, self).get_hostname()
+            return await self.smmhandler.get_hostname()
+        return await super(OEMHandler, self).get_hostname()
 
     """ Gets a remote console launcher for a Lenovo ThinkServer.
 

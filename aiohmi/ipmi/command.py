@@ -21,6 +21,7 @@ import socket
 import struct
 import threading
 
+import asyncio
 import aiohmi.constants as const
 import aiohmi.exceptions as exc
 import aiohmi.ipmi.events as sel
@@ -222,8 +223,6 @@ class Command(object):
 
     async def _get_device_id(self):
         response = await self.raw_command(netfn=0x06, command=0x01)
-        if 'error' in response:
-            raise exc.IpmiException(response['error'], code=response['code'])
         return {
             'device_id': response['data'][0],
             'device_revision': response['data'][1] & 0b1111,
@@ -267,8 +266,6 @@ class Command(object):
         """
         response = self.raw_command(netfn=0, command=9, data=(5, 0, 0))
         # interpret response per 'get system boot options'
-        if 'error' in response:
-            raise exc.IpmiException(response['error'])
         # this should only be invoked for get system boot option complying to
         # ipmi spec and targeting the 'boot flags' parameter
         assert (response['command'] == 9
@@ -308,7 +305,7 @@ class Command(object):
         self.oem_init()
         self._oem.reseat_bay(bay)
 
-    def set_power(self, powerstate, wait=False, bridge_request=None):
+    async def set_power(self, powerstate, wait=False, bridge_request=None):
         """Request power state change (helper)
 
         :param powerstate:
@@ -329,7 +326,7 @@ class Command(object):
         :raises: IpmiException on an error
         :returns: dict -- A dict describing the response retrieved
         """
-        self.oem_init()
+        await self.oem_init()
 
         if hasattr(self._oem, 'set_power'):
             return self._oem.set_power(powerstate,
@@ -343,16 +340,14 @@ class Command(object):
             raise exc.InvalidParameterValue(
                 "Unknown power state %s requested" % powerstate)
         newpowerstate = powerstate
-        oldpowerstate = self._get_power_state(bridge_request=bridge_request)
+        oldpowerstate = await self._get_power_state(bridge_request=bridge_request)
         if oldpowerstate == newpowerstate:
             return {'powerstate': oldpowerstate}
         if newpowerstate == 'boot':
             newpowerstate = 'on' if oldpowerstate == 'off' else 'reset'
-        response = self.raw_command(
+        response = await self.raw_command(
             netfn=0, command=2, data=[power_states[newpowerstate]],
             bridge_request=bridge_request)
-        if 'error' in response:
-            raise exc.IpmiException(response['error'])
         lastresponse = {'pendingpowerstate': newpowerstate}
         waitattempts = 300
         if not isinstance(wait, bool):
@@ -364,8 +359,8 @@ class Command(object):
                 waitpowerstate = newpowerstate
             currpowerstate = None
             while currpowerstate != waitpowerstate and waitattempts > 0:
-                currpowerstate = self._get_power_state(
-                    delay_xmit=1,
+                await asyncio.sleep(1)
+                currpowerstate = await self._get_power_state(
                     bridge_request=bridge_request)
                 waitattempts -= 1
             if currpowerstate != waitpowerstate:
@@ -375,14 +370,11 @@ class Command(object):
         else:
             return lastresponse
 
-    async def _get_power_state(self, delay_xmit=None, bridge_request=None):
-        response = await self.raw_command(netfn=0, command=1, delay_xmit=delay_xmit,
+    async def _get_power_state(self, bridge_request=None):
+        response = await self.raw_command(netfn=0, command=1,
                                     bridge_request=bridge_request)
-        if 'error' in response:
-            raise exc.IpmiException(response['error'])
         assert (response['command'] == 1 and response['netfn'] == 1)
         curr_power_state = 'on' if (response['data'][0] & 1) else 'off'
-
         return curr_power_state
 
     def get_video_launchdata(self):
@@ -448,8 +440,12 @@ class Command(object):
             raise exc.IpmiException(response['error'])
         return {'bootdev': bootdev}
 
-    async def xraw_command(self, netfn, command, bridge_request=(), data=(),
-                     delay_xmit=None, retry=True, timeout=None, rslun=0):
+    async def xraw_command(self, **kwargs):
+        print("WARNING: deprecated xraw call here")
+        return await self.raw_command(**kwargs)
+
+    async def raw_command(self, netfn, command, bridge_request=(), data=(),
+                     retry=True, timeout=None, rslun=0):
         """Send raw ipmi command to BMC, raising exception on error
 
         This is identical to raw_command, except it raises exceptions
@@ -471,7 +467,7 @@ class Command(object):
         """
         rsp = await self.ipmi_session.raw_command(netfn=netfn, command=command,
                                             bridge_request=bridge_request,
-                                            data=data, delay_xmit=delay_xmit,
+                                            data=data,
                                             retry=retry, timeout=timeout,
                                             rslun=rslun)
         if 'error' in rsp:
@@ -497,8 +493,8 @@ class Command(object):
         self.oem_init()
         return self._oem.get_description()
 
-    async def raw_command(self, netfn, command, bridge_request=(), data=(),
-                    delay_xmit=None, retry=True, timeout=None, rslun=0):
+    async def oldraw_command(self, netfn, command, bridge_request=(), data=(),
+                    retry=True, timeout=None, rslun=0):
         """Send raw ipmi command to BMC
 
         This allows arbitrary IPMI bytes to be issued.  This is commonly used
@@ -518,7 +514,7 @@ class Command(object):
         """
         rsp = await self.ipmi_session.raw_command(netfn=netfn, command=command,
                                             bridge_request=bridge_request,
-                                            data=data, delay_xmit=delay_xmit,
+                                            data=data,
                                             retry=retry, timeout=timeout,
                                             rslun=rslun)
         return rsp
@@ -564,8 +560,6 @@ class Command(object):
             if duration < 0:
                 duration = 0
             response = self.raw_command(netfn=0, command=4, data=[duration])
-            if 'error' in response:
-                raise exc.IpmiException(response['error'])
             return
         forceon = 0
         if on:
@@ -577,8 +571,6 @@ class Command(object):
         else:
             identifydata = [0, forceon]
         response = self.raw_command(netfn=0, command=4, data=identifydata)
-        if 'error' in response:
-            raise exc.IpmiException(response['error'])
 
     def init_sdr(self):
         """Initialize SDR
@@ -692,9 +684,8 @@ class Command(object):
         # get system uuid return data.
         if 'UUID' not in zerofru:
             guiddata = self.raw_command(netfn=6, command=0x37)
-            if 'error' not in guiddata:
-                zerofru['UUID'] = util.\
-                    decode_wireformat_uuid(guiddata['data'])
+            zerofru['UUID'] = util.\
+                decode_wireformat_uuid(guiddata['data'])
         return zerofru
 
     def get_inventory(self):
@@ -796,8 +787,6 @@ class Command(object):
                 rsp = self.raw_command(command=0x2d, netfn=4,
                                        rslun=currsensor.sensor_lun,
                                        data=(currsensor.sensor_number,))
-                if 'error' in rsp:
-                    raise exc.IpmiException(rsp['error'], rsp['code'])
                 return self._sdr.sensors[sensor].decode_sensor_reading(
                     self, rsp['data'])
         self.oem_init()
@@ -812,7 +801,7 @@ class Command(object):
         """
         fetchcmd = bytearray((channel, param, 0, 0))
         try:
-            fetched = self.xraw_command(0xc, 2, data=fetchcmd)
+            fetched = self.oldraw_command(0xc, 2, data=fetchcmd)
         except exc.IpmiException as ie:
             if ie.ipmicode == 0x80:
                 return None
@@ -886,17 +875,17 @@ class Command(object):
                 plen = int(plen)
                 vab = bytearray(socket.inet_pton(socket.AF_INET6, va))
                 cmddata = bytearray([channel, 56, 0, 0x80]) + vab + bytearray([plen, 0])
-                self.xraw_command(netfn=0xc, command=1, data=cmddata)
+                self.raw_command(netfn=0xc, command=1, data=cmddata)
         if static_gateway is not None:
             gwb = bytearray(socket.inet_pton(socket.AF_INET6, static_gateway))
             cmddata = bytearray([channel, 65]) + gwb
-            self.xraw_command(netfn=0xc, command=1, data=cmddata)
+            self.raw_command(netfn=0xc, command=1, data=cmddata)
     
     def get_net6_configuration(self, channel=None):
         if channel is None:
             channel = self.get_network_channel()
         retdata = {}
-        ip6a = self.xraw_command(netfn=0xc, command=2, data=(channel, 56, 0, 0))
+        ip6a = self.raw_command(netfn=0xc, command=2, data=(channel, 56, 0, 0))
         ip6d = bytearray(ip6a['data'])
         if ip6d[0] != 0x11:
             raise Exception('Unsupported reply')
@@ -905,7 +894,7 @@ class Command(object):
             ip6addr = socket.inet_ntop(socket.AF_INET6, ip6b)
             plen = ip6d[19]
             retdata['static_addrs'] = ['{}/{}'.format(ip6addr, plen)]
-        ip6g = self.xraw_command(netfn=0xc, command=2, data=(channel, 65, 0, 0))
+        ip6g = self.raw_command(netfn=0xc, command=2, data=(channel, 65, 0, 0))
         ip6gd = bytearray(ip6g['data'])
         if ip6gd[0] != 0x11:
             raise Exception('Unsupported reply')
@@ -913,7 +902,7 @@ class Command(object):
         retdata['static_gateway'] = gwa
         return retdata
 
-    def set_net_configuration(self, ipv4_address=None, ipv4_configuration=None,
+    async def set_net_configuration(self, ipv4_address=None, ipv4_configuration=None,
                               ipv4_gateway=None, channel=None):
         """Set network configuration data.
 
@@ -941,14 +930,14 @@ class Command(object):
             else:
                 raise Exception('Unrecognized ipv4cfg parameter {0}'.format(
                     ipv4_configuration))
-            self.xraw_command(netfn=0xc, command=1, data=cmddata)
+            self.raw_command(netfn=0xc, command=1, data=cmddata)
         if ipv4_address is not None:
             netmask = None
             if '/' in ipv4_address:
                 ipv4_address, prefix = ipv4_address.split('/')
                 netmask = _cidr_to_mask(int(prefix))
             cmddata = bytearray((channel, 3)) + socket.inet_aton(ipv4_address)
-            self.xraw_command(netfn=0xc, command=1, data=cmddata)
+            await self.raw_command(netfn=0xc, command=1, data=cmddata)
             if netmask is not None:
                 cmddata = bytearray((channel, 6)) + netmask
                 self.xraw_command(netfn=0xc, command=1, data=cmddata)
@@ -1053,7 +1042,7 @@ class Command(object):
         self._oem.add_extra_net_configuration(retdata, channel)
         return retdata
 
-    def get_sensor_data(self):
+    async def get_sensor_data(self):
         """Get sensor reading objects
 
         Iterates sensor reading objects pertaining to the currently
@@ -1064,9 +1053,9 @@ class Command(object):
         self.init_sdr()
         for sensor in self._sdr.get_sensor_numbers():
             currsensor = self._sdr.sensors[sensor]
-            rsp = self.raw_command(command=0x2d, netfn=4,
-                                   rslun=currsensor.sensor_lun,
-                                   data=(currsensor.sensor_number,))
+            rsp = await self.xraw_command(command=0x2d, netfn=4,
+                                          rslun=currsensor.sensor_lun,
+                                          data=(currsensor.sensor_number,))
             if 'error' in rsp:
                 if rsp['code'] == 203:  # Sensor does not exist, optional dev
                     continue
@@ -1348,7 +1337,7 @@ class Command(object):
         if not ip == '0.0.0.0':
             self._assure_alert_policy(channel, destination)
 
-    def get_hostname(self):
+    async def get_hostname(self):
         """Get the hostname used by the BMC in various contexts
 
         This can vary somewhat in interpretation, but generally speaking
@@ -1357,13 +1346,13 @@ class Command(object):
 
         :return: current hostname
         """
-        self.oem_init()
+        await self.oem_init()
         try:
-            return self._oem.get_hostname()
+            return await self._oem.get_hostname()
         except exc.UnsupportedFunctionality:
             # Use the DCMI MCI field as a fallback, since it's the closest
             # thing in the IPMI Spec for this
-            return self.get_mci()
+            return await self.get_mci()
 
     def get_mci(self):
         """Set the management controller identifier.
