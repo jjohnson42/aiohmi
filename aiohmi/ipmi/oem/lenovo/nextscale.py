@@ -527,8 +527,11 @@ class SMMClient(object):
             }
             for baynum in range(numbays):
                 baynum += 1
-                baycapinfo = self.ipmicmd.xraw_command(
-                    0x32, 0x9d, data=[baynum])
+                try:
+                    baycapinfo = self.ipmicmd.xraw_command(
+                        0x32, 0x9d, data=[baynum])
+                except Exception:
+                    continue
                 capmin, capmax, protcap, usercap, thermcap = struct.unpack(
                     '<HHHHH', baycapinfo['data'][retoffset:retoffset + 10])
                 settings['bay{0}_user_cap'.format(baynum)] = {
@@ -543,8 +546,11 @@ class SMMClient(object):
                     'help': 'Show the current protective cap for the system '
                             'in bay {0}'.format(baynum)
                 }
-                baycapstate = self.ipmicmd.xraw_command(
-                    0x32, 0xa0, data=[baynum])
+                try:
+                    baycapstate = self.ipmicmd.xraw_command(
+                        0x32, 0xa0, data=[baynum])
+                except Exception:
+                    continue
                 baycapstate = bool(baycapstate['data'][retoffset])
                 settings['bay{0}_user_cap_active'.format(baynum)] = {
                     'value': 'Enable' if baycapstate else 'Disable',
