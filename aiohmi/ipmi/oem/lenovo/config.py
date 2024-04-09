@@ -372,7 +372,13 @@ class LenovoFirmwareConfig(object):
                         if not instances:
                             protect = True  # not supported yet
                         else:
-                            current = [x.text for x in instances]
+                            instbynum = {}
+                            defidx = 1
+                            for x in instances:
+                                xid = int(x.get('ID', defidx))
+                                instbynum[xid] = x
+                                defidx += 1
+                            current = [instbynum[idx].text for idx in sorted(instbynum)]
                         default = onedata.get('default', None)
                         if default == '':
                             default = None
