@@ -60,22 +60,28 @@ class Console(object):
         self.port = port
         self.ipmi_session = None
         self.callgotsession = None
-        self.ipmi_session = session.Session(bmc=bmc,
-                                            userid=userid,
-                                            password=password,
-                                            port=port,
-                                            kg=kg,
-                                            onlogon=self._got_session)
+        self.bmc = bmc
+        self.userid = userid
+        self.password = password
+        self.port = port
+        self.kg = kg
+        self.broken = False
+
+    async def connect(self):
+        bmc = self.bmc
+        userid = self.userid
+        password = self.password
+        port = self.port
+        kg = self.kg
+        self.ipmi_session = await session.Session(
+            bmc=bmc, userid=userid, password=password, port=port, kg=kg)
         # induce one iteration of the loop, now that we would be
         # prepared for it in theory
-        session.Session.wait_for_rsp(0)
-        if self.callgotsession is not None:
-            self._got_session(self.callgotsession)
-            self.callgotsession = None
+        await self._got_session({})
 
-    def _got_session(self, response):
+
+    async def _got_session(self, response):
         """Private function to navigate SOL payload activation"""
-
         if 'error' in response:
             self._print_error(response['error'])
             return
@@ -90,8 +96,8 @@ class Console(object):
         #        0b11000000, -encrypt, authenticate,
         #                      disable serial/modem alerts, CTS fine
         #        0, 0, 0 reserved
-        response = self.ipmi_session.raw_command(netfn=0x6, command=0x48,
-                                                 data=(1, 1, 192, 0, 0, 0))
+        response = await self.ipmi_session.raw_command(netfn=0x6, command=0x48,
+                                                       data=(1, 1, 192, 0, 0, 0))
         # given that these are specific to the command,
         # it's probably best if one can grep the error
         # here instead of in constants
@@ -109,11 +115,11 @@ class Console(object):
             elif response['code'] == 0x80:
                 if self.force_session and not self.retriedpayload:
                     self.retriedpayload = 1
-                    sessrsp = self.ipmi_session.raw_command(
+                    sessrsp = await self.ipmi_session.raw_command(
                         netfn=0x6,
                         command=0x49,
                         data=(1, 1, 0, 0, 0, 0))
-                    self._got_session(sessrsp)
+                    await self._got_session(sessrsp)
                     return
                 else:
                     self._print_error('SOL Session active for another client')
@@ -156,7 +162,7 @@ class Console(object):
         self.ipmi_session.sol_handler = self._got_sol_payload
         self.connected = True
         # self._sendpendingoutput() checks len(self._sendpendingoutput)
-        self._sendpendingoutput()
+        await self._sendpendingoutput()
 
     def _got_payload_instance_info(self, response):
         if 'error' in response:
@@ -209,21 +215,21 @@ class Console(object):
                 # run with the implicit success
                 pass
 
-    def send_data(self, data):
+    async def send_data(self, data):
         if self.broken:
             return
         self._addpendingdata(data)
         if not self.connected:
             return
         if not self.awaitingack:
-            self._sendpendingoutput()
+            await self._sendpendingoutput()
 
-    def send_break(self):
+    async def send_break(self):
         self._addpendingdata({'break': 1})
         if not self.connected:
             return
         if not self.awaitingack:
-            self._sendpendingoutput()
+            await self._sendpendingoutput()
 
     @classmethod
     def wait_for_rsp(cls, timeout):
@@ -235,7 +241,7 @@ class Console(object):
         """
         return session.Session.wait_for_rsp(timeout=timeout)
 
-    def _sendpendingoutput(self):
+    async def _sendpendingoutput(self):
         with self.outputlock:
             dobreak = False
             chunk = ''
@@ -255,9 +261,9 @@ class Console(object):
             else:
                 chunk = self.pendingoutput[0]
                 del self.pendingoutput[0]
-            self._sendoutput(chunk, sendbreak=dobreak)
+            await self._sendoutput(chunk, sendbreak=dobreak)
 
-    def _sendoutput(self, output, sendbreak=False):
+    async def _sendoutput(self, output, sendbreak=False):
         self.myseq += 1
         self.myseq &= 0xf
         if self.myseq == 0:
@@ -279,12 +285,12 @@ class Console(object):
             needskeepalive = True
         self.awaitingack = True
         self.lastpayload = payload
-        self.send_payload(payload, retry=False, needskeepalive=needskeepalive)
+        await self.send_payload(payload, retry=False, needskeepalive=needskeepalive)
         retries = 5
         while retries and self.awaitingack:
             expiry = _monotonic_time() + 5.5 - retries
             while self.awaitingack and _monotonic_time() < expiry:
-                self.wait_for_rsp(0.5)
+                await self.wait_for_rsp(0.5)
             if self.awaitingack:
                 self.send_payload(payload, retry=False,
                                   needskeepalive=needskeepalive)
@@ -292,14 +298,14 @@ class Console(object):
         if not retries:
             self._print_error('Connection lost')
 
-    def send_payload(self, payload, payload_type=1, retry=True,
+    async def send_payload(self, payload, payload_type=1, retry=True,
                      needskeepalive=False):
         while not (self.connected or self.broken):
             session.Session.wait_for_rsp(timeout=10)
         if self.ipmi_session is None or not self.ipmi_session.logged:
             self._print_error('Session no longer connected')
             raise exc.IpmiException('Session no longer connected')
-        self.ipmi_session.send_payload(payload,
+        await self.ipmi_session.send_payload(payload,
                                        payload_type=payload_type,
                                        retry=retry,
                                        needskeepalive=needskeepalive)
@@ -329,7 +335,7 @@ class Console(object):
         """
         self.out_handler(data)
 
-    def _got_sol_payload(self, payload):
+    async def _got_sol_payload(self, payload):
         """SOL payload callback"""
 
         # TODO(jbjohnso) test cases to throw some likely scenarios at functions
@@ -372,7 +378,7 @@ class Console(object):
             # and might be hard to decide what to do in the context of
             # retry situation
             try:
-                self.send_payload(ackpayload, retry=False)
+                await self.send_payload(ackpayload, retry=False)
             except exc.IpmiException:
                 # if the session is broken, then close the SOL session
                 self.close()

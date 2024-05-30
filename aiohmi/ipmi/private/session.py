@@ -99,6 +99,9 @@ async def terminate():
     iosockets[0].sendto(
                 b'\x01', (myself, iosockets[0].getsockname()[1]))
 
+def sock_completion(cloop, currsock, fut):
+    cloop.remove_reader(currsock)
+    fut.set_result(None)
 
 async def watchsockets():
     global sockwatching
@@ -119,8 +122,7 @@ async def watchsockets():
         currfutures = []
         for currsock in iosockets:
             currfut = asyncio.Future()
-            asyncio.get_event_loop().add_reader(currsock, currfut.set_result, None)
-            currfut.add_done_callback(lambda x: asyncio.get_event_loop().remove_reader(currsock))
+            asyncio.get_event_loop().add_reader(currsock, sock_completion, asyncio.get_event_loop(), currsock, currfut)
             currfutures.append(currfut)
         #select.select(iosockets, (), (), timeout)
         done, futures = await asyncio.wait(currfutures, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
@@ -1384,8 +1386,8 @@ class Session(object):
                     return
                 if self.autokeepalive:
                     print("ok here")
-                    self.raw_command(netfn=6, command=1,
-                                     callback=self._keepalive_wrapper(None))
+                    await self.raw_command(netfn=6, command=1,
+                                           callback=self._keepalive_wrapper(None))
                 else:
                     await self.logout()
         except exc.IpmiException:
@@ -1548,7 +1550,7 @@ class Session(object):
                                           payload_type=nextpayloadtype,
                                           retry=retry)
                 if self.sol_handler:
-                    self.sol_handler(payload)
+                    await self.sol_handler(payload)
 
     async def _got_rmcp_response(self, data):
         # see RMCP+ open session response table
@@ -1811,7 +1813,11 @@ class Session(object):
                               payload_type=nextpayloadtype,
                               retry=retry)
         if self.ipmicallback:
-            await self.ipmicallback(response)
+            print(repr(self.ipmicallback))
+            rsp = self.ipmicallback(response)
+            if rsp:
+                await rsp
+
 
     async def _timedout(self):
         if not self.lastpayload:

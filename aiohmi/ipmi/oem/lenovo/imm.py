@@ -1734,11 +1734,11 @@ class XCCClient(IMMClient):
             self._keepalivesession = self._wc
             self._wc = None
 
-    def keepalive(self):
+    async def keepalive(self):
         if self.fwo and util._monotonic_time() - self.fwovintage > 15:
             self.fwo = None
         if self._keepalivesession:
-            self._refresh_token_wc(self._keepalivesession)
+            await self._refresh_token_wc(self._keepalivesession)
         elif self._wc and self._wc.vintage < util._monotonic_time() - 20:
             self.weblogout()
 
