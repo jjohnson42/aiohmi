@@ -1813,7 +1813,6 @@ class Session(object):
                               payload_type=nextpayloadtype,
                               retry=retry)
         if self.ipmicallback:
-            print(repr(self.ipmicallback))
             rsp = self.ipmicallback(response)
             if rsp:
                 await rsp
