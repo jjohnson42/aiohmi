@@ -32,8 +32,8 @@ class EnergyManager(object):
         try:
             rsp = ipmicmd.xraw_command(netfn=0x3a, command=0x32, data=[4, 2, 0, 0, 0])
             if len(rsp['data']) >= 8:
-                self.supportedmeters = ('DC Energy',)  # 'GPU Power',
-                                        # 'Node Power', 'Total Power')
+                self.supportedmeters = ('DC Energy', 'GPU Power',
+                                        'Node Power', 'Total Power')
                 self._mypowermeters = ('node power', 'total power', 'gpu power', 'riser 1 power', 'riser 2 power')
                 self._usefapm = True
                 return
@@ -68,8 +68,21 @@ class EnergyManager(object):
     def get_sensor(self, name, ipmicmd):
         if name.lower() not in self._mypowermeters:
             raise pygexc.UnsupportedFunctionality('Unrecogcized sensor')
-        rsp = ipmicmd.xraw_command(netfn=0x3a, command=0x32, data=[4, 8, 0, 0, 0])
-        npow, gpupow, r1pow, r2pow = struct.unpack('<HHHH', rsp['data'][6:10])
+        tries = 3
+        rsp = None
+        while tries:
+            tries -= 1
+            try:
+                rsp = ipmicmd.xraw_command(netfn=0x3a, command=0x32, data=[4, 8, 0, 0, 0])
+                break
+            except pygexc.IpmiException as ie:
+                if tries and ie.ipmicode == 0xc3:
+                    ipmicmd.ipmi_session.pause(0.1)
+                    continue
+                raise
+        if rsp is None:
+            raise pygexc.UnsupportedFunctionality('Unrecogcized sensor')
+        npow, gpupow, r1pow, r2pow = struct.unpack('<HHHH', rsp['data'][6:14])
         if name.lower().startswith('node'):
             return npow, 'W'
         elif name.lower().startswith('gpu'):
