@@ -292,8 +292,8 @@ class Console(object):
             while self.awaitingack and _monotonic_time() < expiry:
                 await self.wait_for_rsp(0.5)
             if self.awaitingack:
-                self.send_payload(payload, retry=False,
-                                  needskeepalive=needskeepalive)
+                await self.send_payload(payload, retry=False,
+                                        needskeepalive=needskeepalive)
             retries -= 1
         if not retries:
             self._print_error('Connection lost')
@@ -403,7 +403,7 @@ class Console(object):
                         else:
                             self.pendingoutput = [newtext] + self.pendingoutput
             # self._sendpendingoutput() checks len(self._sendpendingoutput)
-            self._sendpendingoutput()
+            await self._sendpendingoutput()
         elif ackseq != 0 and self.awaitingack:
             # if an ack packet came in, but did not match what we
             # expected, retry our payload now.
@@ -413,7 +413,7 @@ class Console(object):
             # try to mitigate by avoiding overeager retries
             # occasional retry of a packet
             # sooner than timeout suggests is evidently a big deal
-            self.send_payload(payload=self.lastpayload, retry=False)
+            await self.send_payload(payload=self.lastpayload, retry=False)
 
     def main_loop(self):
         """Process all events until no more sessions exist.

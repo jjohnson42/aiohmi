@@ -1336,8 +1336,8 @@ class Session(object):
     def _keepalive_wrapper(self, callback):
         # generates a wrapped keepalive to cleanup session state
         # and call callback if appropriate
-        def _keptalive(response):
-            self._generic_callback(response)
+        async def _keptalive(response):
+            await self._generic_callback(response)
             response = self.lastresponse
             self.lastresponse = None
             self.incommand = False
@@ -1351,9 +1351,7 @@ class Session(object):
     async def _keepalive(self):
         """Performs a keepalive to avoid idle disconnect"""
         if self.awaitingresponse:
-            print("nah")
             return
-        print("ok...")
         try:
             keptalive = False
             if self._customkeepalives:
@@ -1363,22 +1361,17 @@ class Session(object):
                         cmd, callback = self._customkeepalives[keepalive]
                     except TypeError:
                         # raw_command made customkeepalives None
-                        print("huh...")
                         break
                     except KeyError:
                         # raw command ultimately caused a keepalive to
                         # deregister
-                        print("nope...")
                         continue
                     if callable(cmd):
-                        print("huh>>>")
-                        print(repr(cmd))
-                        #cmd()
+                        await cmd()
                         continue
-                    print(repr(cmd))
                     keptalive = True
                     cmd['callback'] = self._keepalive_wrapper(callback)
-                    self.raw_command(**cmd)
+                    await self.raw_command(**cmd)
             print(repr(keptalive))
             if not keptalive:
                 if self.incommand:
