@@ -220,7 +220,7 @@ class WebConnection:
                 kwargs['data'] = data
             async with thefunc(url, headers=headers, ssl=self.ssl, **kwargs) as rsp:
                 if rsp.status >= 200 and rsp.status < 300:
-                    return await rsp.json(), rsp.status
+                    return await rsp.json(content_type=''), rsp.status
                 else:
                     return await rsp.read(), rsp.status
 
