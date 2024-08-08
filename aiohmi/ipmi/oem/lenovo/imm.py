@@ -2349,9 +2349,9 @@ class XCCClient(IMMClient):
                 info['Wattage'] = psus['rated_power']
                 break
 
-    def get_health(self, summary):
+    async def get_health(self, summary):
         try:
-            wc = self.get_webclient(False)
+            wc = await self.get_webclient(False)
         except (socket.timeout, socket.error):
             wc = None
         if not wc:
@@ -2363,7 +2363,7 @@ class XCCClient(IMMClient):
                                    'health': pygconst.Health.Critical,
                                    'type': 'BMC'}, ''))
             raise pygexc.BypassGenericBehavior()
-        rsp = wc.grab_json_response('/api/providers/imm_active_events')
+        rsp = await wc.grab_json_response('/api/providers/imm_active_events')
         if 'items' in rsp and len(rsp['items']) == 0:
             # The XCC reports healthy, no need to interrogate
             raise pygexc.BypassGenericBehavior()

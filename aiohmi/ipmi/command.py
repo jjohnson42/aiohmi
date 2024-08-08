@@ -737,7 +737,7 @@ class Command(object):
         self.oem_init()
         return self._oem.set_ntp_server(server, index)
 
-    def get_health(self):
+    async def get_health(self):
         """Summarize health of managed system
 
         This provides a summary of the health of the managed system.
@@ -747,9 +747,9 @@ class Command(object):
         summary = {'badreadings': [], 'health': const.Health.Ok}
         fallbackreadings = []
         try:
-            self.oem_init()
-            fallbackreadings = self._oem.get_health(summary)
-            for reading in self.get_sensor_data():
+            await self.oem_init()
+            fallbackreadings = await self._oem.get_health(summary)
+            async for reading in self.get_sensor_data():
                 if reading.health != const.Health.Ok:
                     summary['health'] |= reading.health
                     summary['badreadings'].append(reading)
