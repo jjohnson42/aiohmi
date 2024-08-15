@@ -155,7 +155,7 @@ class Console(object):
         if self.ipmi_session.sol_handler is not None:
             # If there is erroneously another SOL handler already, notify
             # it of newly established session
-            self.ipmi_session.sol_handler({'error': 'Session Disconnected'})
+            await self.ipmi_session.sol_handler({'error': 'Session Disconnected'})
         self.keepaliveid = self.ipmi_session.register_keepalive(
             cmd={'netfn': 6, 'command': 0x4b, 'data': (1, 1)},
             callback=self._got_payload_instance_info)
@@ -201,14 +201,14 @@ class Console(object):
         if not self.awaitingack:
             self._sendpendingoutput()
 
-    def close(self):
+    async def close(self):
         """Shut down an SOL session"""
 
         if self.ipmi_session:
             self.ipmi_session.unregister_keepalive(self.keepaliveid)
         if self.activated and self.ipmi_session is not None:
             try:
-                self.ipmi_session.raw_command(netfn=6, command=0x49,
+                await self.ipmi_session.raw_command(netfn=6, command=0x49,
                                               data=(1, 1, 0, 0, 0, 0))
             except exc.IpmiException:
                 # if underlying ipmi session is not working, then

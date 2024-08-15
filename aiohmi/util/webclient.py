@@ -216,7 +216,7 @@ class WebConnection:
             kwargs = {}
             if isinstance(data, dict):
                 kwargs['json'] = data
-            elif data:
+            elif data is not None:
                 kwargs['data'] = data
             async with thefunc(url, headers=headers, ssl=self.ssl, **kwargs) as rsp:
                 if rsp.status >= 200 and rsp.status < 300:
