@@ -83,7 +83,7 @@ class Console(object):
     async def _got_session(self, response):
         """Private function to navigate SOL payload activation"""
         if 'error' in response:
-            self._print_error(response['error'])
+            await self._print_error(response['error'])
             return
         if not self.ipmi_session:
             self.callgotsession = response
@@ -109,7 +109,7 @@ class Console(object):
         }
         if 'code' in response and response['code']:
             if response['code'] in constants.ipmi_completion_codes:
-                self._print_error(
+                await self._print_error(
                     constants.ipmi_completion_codes[response['code']])
                 return
             elif response['code'] == 0x80:
@@ -122,13 +122,13 @@ class Console(object):
                     await self._got_session(sessrsp)
                     return
                 else:
-                    self._print_error('SOL Session active for another client')
+                    await self._print_error('SOL Session active for another client')
                     return
             elif response['code'] in sol_activate_codes:
-                self._print_error(sol_activate_codes[response['code']])
+                await self._print_error(sol_activate_codes[response['code']])
                 return
             else:
-                self._print_error(
+                await self._print_error(
                     'SOL encountered Unrecognized error code %d' %
                     response['code'])
                 return
@@ -164,10 +164,10 @@ class Console(object):
         # self._sendpendingoutput() checks len(self._sendpendingoutput)
         await self._sendpendingoutput()
 
-    def _got_payload_instance_info(self, response):
+    async def _got_payload_instance_info(self, response):
         if 'error' in response:
             self.activated = False
-            self._print_error(response['error'])
+            await self._print_error(response['error'])
             return
         currowner = struct.unpack(
             "<I", struct.pack('4B', *response['data'][:4]))
@@ -296,24 +296,24 @@ class Console(object):
                                         needskeepalive=needskeepalive)
             retries -= 1
         if not retries:
-            self._print_error('Connection lost')
+            await self._print_error('Connection lost')
 
     async def send_payload(self, payload, payload_type=1, retry=True,
                      needskeepalive=False):
         while not (self.connected or self.broken):
             session.Session.wait_for_rsp(timeout=10)
         if self.ipmi_session is None or not self.ipmi_session.logged:
-            self._print_error('Session no longer connected')
+            await self._print_error('Session no longer connected')
             raise exc.IpmiException('Session no longer connected')
         await self.ipmi_session.send_payload(payload,
                                        payload_type=payload_type,
                                        retry=retry,
                                        needskeepalive=needskeepalive)
 
-    def _print_info(self, info):
-        self._print_data({'info': info})
+    async def _print_info(self, info):
+        await self._print_data({'info': info})
 
-    def _print_error(self, error):
+    async def _print_error(self, error):
         self.broken = True
         if self.ipmi_session:
             self.ipmi_session.unregister_keepalive(self.keepaliveid)
@@ -322,18 +322,18 @@ class Console(object):
                 self.ipmi_session.sol_handler = None
             self.ipmi_session = None
         if type(error) == dict:
-            self._print_data(error)
+            await self._print_data(error)
         else:
-            self._print_data({'error': error})
+            await self._print_data({'error': error})
 
-    def _print_data(self, data):
+    async def _print_data(self, data):
         """Convey received data back to caller in the format of their choice.
 
         Caller may elect to provide this class filehandle(s) or else give a
         callback function that this class will use to convey data back to
         caller.
         """
-        self.out_handler(data)
+        await self.out_handler(data)
 
     async def _got_sol_payload(self, payload):
         """SOL payload callback"""
@@ -343,7 +343,7 @@ class Console(object):
         # retry with unexpected sequence number
         if type(payload) == dict:  # we received an error condition
             self.activated = False
-            self._print_error(payload)
+            await self._print_error(payload)
             return
         newseq = payload[0] & 0b1111
         ackseq = payload[1] & 0b1111
@@ -372,7 +372,7 @@ class Console(object):
                 self.remseq = newseq
             self.lastsize = remdatalen
             if remdata:  # Do not subject callers to empty data
-                self._print_data(remdata)
+                await self._print_data(remdata)
             ackpayload = bytearray((0, self.remseq, remdatalen, 0))
             # Why not put pending data into the ack? because it's rare
             # and might be hard to decide what to do in the context of
@@ -387,10 +387,10 @@ class Console(object):
             self.awaitingack = False
             if nacked and not breakdetected:  # the BMC was in some way unhappy
                 if poweredoff:
-                    self._print_info("Remote system is powered down")
+                    await self._print_info("Remote system is powered down")
                 if deactivated:
                     self.activated = False
-                    self._print_error("Remote IPMI console disconnected")
+                    await self._print_error("Remote IPMI console disconnected")
                 else:  # retry all or part of packet, but in a new form
                     # also add pending output for efficiency and ease
                     newtext = self.lastpayload[4 + ackcount:]
@@ -462,7 +462,7 @@ class ServerConsole(Console):
 
         session.Session.wait_for_rsp(0)
 
-    def _got_sol_payload(self, payload):
+    async def _got_sol_payload(self, payload):
         """SOL payload callback"""
 
         # TODO(jbjohnso) test cases to throw some likely scenarios at functions
@@ -470,7 +470,7 @@ class ServerConsole(Console):
         # retry with unexpected sequence number
         if type(payload) == dict:  # we received an error condition
             self.activated = False
-            self._print_error(payload)
+            await self._print_error(payload)
             return
         newseq = payload[0] & 0b1111
         ackseq = payload[1] & 0b1111
@@ -511,7 +511,7 @@ class ServerConsole(Console):
                 # if the session is broken, then close the SOL session
                 self.close()
             if remdata:  # Do not subject callers to empty data
-                self._print_data(remdata)
+                await self._print_data(remdata)
         if self.myseq != 0 and ackseq == self.myseq:  # the bmc has something
             # to say about last xmit
             self.awaitingack = False

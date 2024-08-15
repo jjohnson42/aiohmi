@@ -1344,7 +1344,7 @@ class Session(object):
             while self.evq:
                 self.evq.popleft().set()
             if callback:
-                callback(response)
+                await callback(response)
 
         return _keptalive
 
