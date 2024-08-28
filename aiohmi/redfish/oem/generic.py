@@ -817,7 +817,7 @@ class OEMHandler(object):
             }
             yield (name, meminfo)
 
-    def _get_mem_urls(self):939e976791e403caf76a65a77771d4de33f270f2
+    def _get_mem_urls(self):
         memurl = self._varsysinfo.get('Memory', {}).get('@odata.id', None)
         if not memurl:
             urls = []
