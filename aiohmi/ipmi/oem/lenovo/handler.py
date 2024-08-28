@@ -1188,12 +1188,12 @@ class OEMHandler(generic.OEMHandler):
                                                        progress=progress,
                                                        bank=bank)
 
-    def get_description(self):
-        if self.has_xcc:
-            return self.immhandler.get_description()
-        if self.is_fpc:
+    async def get_description(self):
+        if await self.has_xcc():
+            return await self.immhandler.get_description()
+        if await self.is_fpc():
             return {'height': self._fpc_variant & 0xf, 'slot': 0}
-        return super(OEMHandler, self).get_description()
+        return await super(OEMHandler, self).get_description()
 
     def get_extended_bmc_configuration(self):
         if self.has_xcc:

@@ -475,23 +475,23 @@ class Command(object):
         rsp['data'] = buffer(rsp['data'])
         return rsp
 
-    def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
+    async def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
         if os.path.exists(savefile) and not os.path.isdir(savefile):
             raise exc.InvalidParameterValue(
                 'Not allowed to overwrite existing file: {0}'.format(
                     savefile))
-        self.oem_init()
+        await self.oem_init()
         return self._oem.get_diagnostic_data(savefile, progress, autosuffix)
 
-    def get_description(self):
+    async def get_description(self):
         """Get physical attributes for the system, e.g. for GUI use
 
         :returns: dict -- dict containing attributes, 'height' is for
                how many U tall, 'slot' for what slot in a blade enclosure
                or 0 if not blade, for example.
         """
-        self.oem_init()
-        return self._oem.get_description()
+        await self.oem_init()
+        return await self._oem.get_description()
 
     async def oldraw_command(self, netfn, command, bridge_request=(), data=(),
                     retry=True, timeout=None, rslun=0):

@@ -149,6 +149,13 @@ class OEMHandler(generic.OEMHandler):
         self.fwc = None
         self.fwo = None
 
+    def get_extended_bmc_configuration(self, fishclient, hideadvanced=True):
+        immsettings = self.get_system_configuration(fetchimm=True, hideadvanced=hideadvanced)
+        for setting in list(immsettings):
+            if not setting.startswith('IMM.'):
+                del immsettings[setting]
+        return immsettings
+
     async def get_system_configuration(self, hideadvanced=True, fishclient=None,
                                  fetchimm=False):
         if not self.fwc:
@@ -1553,7 +1560,7 @@ class OEMHandler(generic.OEMHandler):
             progress({'phase': 'complete'})
         return savefile
 
-    def get_licenses(self):
+    def get_licenses(self, fishclient):
         licdata = self.wc.grab_json_response('/api/providers/imm_fod')
         for lic in licdata.get('items', [{}])[0].get('keys', []):
             if lic['status'] == 0:
@@ -1564,7 +1571,7 @@ class OEMHandler(generic.OEMHandler):
                     'state': 'Missing required license'
                 }
 
-    def delete_license(self, name):
+    def delete_license(self, name, fishclient):
         licdata = self.wc.grab_json_response('/api/providers/imm_fod')
         for lic in licdata.get('items', [{}])[0].get('keys', []):
             if lic.get('feature', None) == name:
@@ -1577,7 +1584,7 @@ class OEMHandler(generic.OEMHandler):
                 )
                 break
 
-    def save_licenses(self, directory):
+    def save_licenses(self, directory, fishclient):
         licdata = self.wc.grab_json_response('/api/providers/imm_fod')
         for lic in licdata.get('items', [{}])[0].get('keys', []):
             licid = ','.join((str(lic['type']), str(lic['id'])))
@@ -1594,7 +1601,7 @@ class OEMHandler(generic.OEMHandler):
                     self._refresh_token()
                 yield savefile
 
-    def apply_license(self, filename, progress=None, data=None):
+    def apply_license(self, filename, fishclient, progress=None, data=None):
         license_errors = {
             310: "License is for a different model of system",
             311: "License is for a different system serial number",
@@ -1618,7 +1625,7 @@ class OEMHandler(generic.OEMHandler):
             if rsp.get('return', 0) in license_errors:
                 raise pygexc.InvalidParameterValue(
                     license_errors[rsp['return']])
-        return self.get_licenses()
+        return self.get_licenses(fishclient)
 
     def user_delete(self, uid):
         userinfo = self.wc.grab_json_response('/api/dataset/imm_users')

@@ -18,6 +18,7 @@ import os
 import re
 import time
 
+import base64
 import aiohmi.constants as const
 import aiohmi.exceptions as exc
 import aiohmi.media as media
@@ -42,6 +43,12 @@ class SensorReading(object):
         self.imprecision = None
         self.units = units
         self.unavailable = unavailable
+
+def _normalize_mac(mac):
+    if ':' not in mac:
+        mac = ':'.join((mac[:2], mac[2:4], mac[4:6], mac[6:8], mac[8:10], mac[10:12]))
+    return mac.lower()
+
 
 _healthmap = {
     'Critical': const.Health.Critical,
@@ -533,6 +540,13 @@ class OEMHandler(object):
                 'Model': self._varsysinfo.get(
                     'SKU', self._varsysinfo.get('PartNumber', '')),
             }
+            if sysinfo['UUID'] and '-' not in sysinfo['UUID']:
+                sysinfo['UUID'] = '-'.join((
+                    sysinfo['UUID'][:8], sysinfo['UUID'][8:12],
+                    sysinfo['UUID'][12:16], sysinfo['UUID'][16:20],
+                    sysinfo['UUID'][20:]))
+            sysinfo['UUID'] = sysinfo['UUID'].lower()
+
             return sysinfo
         else:
             for invpair in self.get_inventory():
@@ -548,6 +562,12 @@ class OEMHandler(object):
             'Model': self._varsysinfo.get(
                 'SKU', self._varsysinfo.get('PartNumber', '')),
         }
+        if sysinfo['UUID'] and '-' not in sysinfo['UUID']:
+            sysinfo['UUID'] = '-'.join((
+                sysinfo['UUID'][:8], sysinfo['UUID'][8:12],
+                sysinfo['UUID'][12:16], sysinfo['UUID'][16:20],
+                sysinfo['UUID'][20:]))
+        sysinfo['UUID'] = sysinfo['UUID'].lower()
         yield ('System', sysinfo)
         self._hwnamemap = {}
         cpumemurls = []
@@ -599,22 +619,39 @@ class OEMHandler(object):
             yield (dname, ddata)
 
     def _get_adp_inventory(self, onlyname=False, withids=False, urls=None):
+        foundmacs = False
+        macinfobyadpname = {}
+        if 'NetworkInterfaces' in self._varsysinfo:
+            nifurls = self._do_web_request(self._varsysinfo['NetworkInterfaces']['@odata.id'])
+            nifurls = nifurls.get('Members', [])
+            nifurls = [x['@odata.id'] for x in nifurls]
+            for nifurl in nifurls:
+                nifinfo = self._do_web_request(nifurl)
+
+                nadurl = nifinfo.get('Links', {}).get('NetworkAdapter', {}).get("@odata.id")
+                if nadurl:
+                    nadinfo = self._do_web_request(nadurl)
+                    if 'Name' not in nadinfo:
+                        continue
+                    nicname = nadinfo['Name']
+                    yieldinf = {}
+                    macidx = 1
+                    for ctrlr in nadinfo.get('Controllers', []):
+                        porturls = [x['@odata.id'] for x in ctrlr.get(
+                            'Links', {}).get('Ports', [])]
+                        for porturl in porturls:
+                            portinfo = self._do_web_request(porturl)
+                            macs = [x for x in portinfo.get(
+                                'Ethernet', {}).get(
+                                    'AssociatedMACAddresses', [])]
+                            for mac in macs:
+                                label = 'MAC Address {}'.format(macidx)
+                                yieldinf[label] = _normalize_mac(mac)
+                                macidx += 1
+                                foundmacs = True
+                    macinfobyadpname[nicname] = yieldinf
         if not urls:
             urls = self._get_adp_urls()
-            if not urls:
-                # No PCIe device inventory, but *maybe* ethernet inventory...
-                aidx = 1
-                for nicinfo in self._get_eth_urls():
-                    nicinfo = self._do_web_request(nicinfo)
-                    nicname = nicinfo.get('Name', None)
-                    nicinfo = nicinfo.get('MACAddress', None)
-                    if not nicname:
-                        nicname = 'NIC'
-                    if nicinfo:
-                        yield (nicname,
-                               {'MAC Address {0}'.format(aidx): nicinfo})
-                        aidx += 1
-                return
         for inf in self._do_bulk_requests(urls):
             adpinfo, url = inf
             aname = adpinfo.get('Name', 'Unknown')
@@ -636,6 +673,8 @@ class OEMHandler(object):
                 yieldinf = {'Id': adpinfo.get('Id', aname)}
             else:
                 yieldinf = {}
+            if aname in macinfobyadpname:
+                yieldinf.update(macinfobyadpname[aname])
             funurls = [x['@odata.id'] for x in functions]
             for fun in self._do_bulk_requests(funurls):
                 funinfo, url = fun
@@ -648,14 +687,43 @@ class OEMHandler(object):
                 yieldinf['PCI Subsystem Vendor ID'] = funinfo[
                     'SubsystemVendorId'].replace('0x', '')
                 yieldinf['Type'] = funinfo['DeviceClass']
-                for nicinfo in funinfo.get('Links', {}).get(
-                        'EthernetInterfaces', []):
-                    nicinfo = self._do_web_request(nicinfo['@odata.id'])
-                    macaddr = nicinfo.get('MACAddress', None)
-                    if macaddr:
-                        yieldinf['MAC Address {0}'.format(nicidx)] = macaddr
-                        nicidx += 1
+                if aname not in macinfobyadpname:
+                    for nicinfo in funinfo.get('Links', {}).get(
+                            'EthernetInterfaces', []):
+                        nicinfo = self._do_web_request(nicinfo['@odata.id'])
+                        macaddr = nicinfo.get('MACAddress', None)
+                        if macaddr:
+                            macaddr = _normalize_mac(macaddr)
+                            foundmacs = True
+                            yieldinf['MAC Address {0}'.format(nicidx)] = macaddr
+                            nicidx += 1
+            if aname in macinfobyadpname:
+                del macinfobyadpname[aname]
             yield aname, yieldinf
+        if macinfobyadpname:
+            for adp in macinfobyadpname:
+                yield adp, macinfobyadpname[adp]
+        if not foundmacs:
+            # No PCIe device inventory, but *maybe* ethernet inventory...
+            idxsbyname = {}
+            for nicinfo in self._get_eth_urls():
+                nicinfo = self._do_web_request(nicinfo)
+                nicname = nicinfo.get('Name', None)
+                nicinfo = nicinfo.get('MACAddress', nicinfo.get('PermanentAddress', None))
+                if nicinfo and ':' not in nicinfo:
+                    nicinfo = ':'.join((
+                        nicinfo[:2], nicinfo[2:4], nicinfo[4:6], nicinfo[6:8],
+                        nicinfo[8:10], nicinfo[10:12]))
+                if not nicname:
+                    nicname = 'NIC'
+                if nicinfo:
+                    if nicname not in idxsbyname:
+                        idxsbyname[nicname] = 0
+                    idxsbyname[nicname] += 1
+                    nicinfo = nicinfo.lower()
+                    yield (nicname,
+                            {'MAC Address {}'.format(idxsbyname[nicname]): nicinfo})
+
 
     def _get_eth_urls(self):
         ethurls = self._varsysinfo.get('EthernetInterfaces', {})
@@ -749,7 +817,7 @@ class OEMHandler(object):
             }
             yield (name, meminfo)
 
-    def _get_mem_urls(self):
+    def _get_mem_urls(self):939e976791e403caf76a65a77771d4de33f270f2
         memurl = self._varsysinfo.get('Memory', {}).get('@odata.id', None)
         if not memurl:
             urls = []
@@ -780,20 +848,24 @@ class OEMHandler(object):
 
     def update_firmware(self, filename, data=None, progress=None, bank=None):
         usd = self._do_web_request('/redfish/v1/UpdateService')
-        if usd.get('HttpPushUriTargetsBusy', False):
-            raise exc.TemporaryError('Cannot run multtiple updates to '
-                                        'same target concurrently')
-        try:
-            upurl = usd['HttpPushUri']
-        except KeyError:
-            raise exc.UnsupportedFunctionality('Redfish firmware update only supported for implementations with push update support')
-        if 'HttpPushUriTargetsBusy' in usd:
-            self._do_web_request(
-                '/redfish/v1/UpdateService',
-                {'HttpPushUriTargetsBusy': True}, method='PATCH')
+        upurl = usd.get('MultipartHttpPushUri', None)
+        ismultipart = True
+        if not upurl:
+            ismultipart = False
+            if usd.get('HttpPushUriTargetsBusy', False):
+                raise exc.TemporaryError('Cannot run multtiple updates to '
+                                            'same target concurrently')
+            try:
+                upurl = usd['HttpPushUri']
+            except KeyError:
+                raise exc.UnsupportedFunctionality('Redfish firmware update only supported for implementations with push update upport')
+            if 'HttpPushUriTargetsBusy' in usd:
+                self._do_web_request(
+                    '/redfish/v1/UpdateService',
+                    {'HttpPushUriTargetsBusy': True}, method='PATCH')
         try:
             uploadthread = webclient.FileUploader(
-                self.webclient, upurl, filename, data, formwrap=False,
+                self.webclient, upurl, filename, data, formwrap=ismultipart,
                 excepterror=False)
             uploadthread.start()
             wc = self.webclient
@@ -823,6 +895,7 @@ class OEMHandler(object):
             # sometimes we get an empty pgress when transitioning from the apply phase to
             # the validating phase; add a retry here so we don't exit the loop in this case
             retry = 3
+            pct = 0.0
             while not complete and retry > 0:
                 pgress = self._do_web_request(monitorurl, cache=False)
                 if not pgress:
@@ -837,7 +910,10 @@ class OEMHandler(object):
                              'Suspended'):
                     raise Exception(
                         json.dumps(json.dumps(pgress['Messages'])))
-                pct = float(pgress['PercentComplete'])
+                if 'PercentComplete' in pgress:
+                    pct = float(pgress['PercentComplete'])
+                else:
+                    print(repr(pgress))
                 complete = state == 'Completed'
                 progress({'phase': phase, 'progress': pct})
                 if complete:
@@ -910,17 +986,64 @@ class OEMHandler(object):
         raise exc.UnsupportedFunctionality(
             'Retrieving diagnostic data is not implemented for this platform')
 
-    def get_licenses(self):
+    def _get_license_collection_url(self, fishclient):
+        overview = fishclient._do_web_request('/redfish/v1/')
+        licsrv = overview.get('LicenseService', {}).get('@odata.id', None)
+        if not licsrv:
+            raise exc.UnsupportedFunctionality()
+        lcs = fishclient._do_web_request(licsrv)
+        licenses = lcs.get('Licenses', {}).get('@odata.id',None)
+        if not licenses:
+            raise exc.UnsupportedFunctionality()
+        return licenses
+
+    def get_extended_bmc_configuration(self, fishclient, hideadvanced=True):
         raise exc.UnsupportedFunctionality()
 
-    def delete_license(self, name):
-        raise exc.UnsupportedFunctionality()
 
-    def save_licenses(self, directory):
-        raise exc.UnsupportedFunctionality()
+    def _get_licenses(self, fishclient):
+        licenses = self._get_license_collection_url(fishclient)
+        collection = fishclient._do_web_request(licenses)
+        alllic = [x['@odata.id'] for x in collection.get('Members', [])]
+        for license in alllic:
+            licdet = fishclient._do_web_request(license)
+            state = licdet.get('Status', {}).get('State')
+            if state != 'Enabled':
+                continue
+            yield licdet
 
-    def apply_license(self, filename, progress=None, data=None):
-        raise exc.UnsupportedFunctionality()
+    def get_licenses(self, fishclient):
+        for licdet in self._get_licenses(fishclient):
+            name = licdet['Name']
+            yield {'name': name, 'state': 'Active'}
+
+    def delete_license(self, name, fishclient):
+        for licdet in self._get_licenses(fishclient):
+            lname = licdet['Name']
+            if name == lname:
+                fishclient._do_web_request(licdet['@odata.id'], method='DELETE')
+
+    def save_licenses(self, directory, fishclient):
+        for licdet in self._get_licenses(fishclient):
+            dload = licdet.get('DownloadURI', None)
+            if dload:
+                filename = os.path.basename(dload)
+                savefile = os.path.join(directory, filename)
+                fd = webclient.FileDownloader(fishclient.wc, dload, savefile)
+                fd.start()
+                while fd.isAlive():
+                    fd.join(1)
+                yield savefile
+
+    def apply_license(self, filename, fishclient, progress=None, data=None):
+        licenses = self._get_license_collection_url(fishclient)
+        if data is None:
+            data = open(filename, 'rb')
+        licdata = data.read()
+        lic64 = base64.b64encode(licdata).decode()
+        licinfo = {"LicenseString": lic64}
+        fishclient._do_web_request(licenses, licinfo)
+
 
     def get_user_expiration(self, uid):
         return None
