@@ -550,7 +550,7 @@ class Command(object):
                 msgid = ','.join(msgid)
                 raise exc.RedfishError(errmsg, msgid=msgid)
             except (ValueError, KeyError):
-                raise exc.PyghmiException(str(url) + ":" + res[0])
+                raise exc.PyghmiException(str(url) + ":" + str(res[0]))
         if payload is None and method is None:
             self._urlcache[url] = {'contents': res[0],
                                    'vintage': os.times()[4]}
@@ -973,7 +973,7 @@ class Command(object):
 
     def get_firmware(self, components=()):
         try:
-            for firminfo in self.oem.get_firmware_inventory(components):
+            for firminfo in self.oem.get_firmware_inventory(components, self):
                 yield firminfo
         except exc.BypassGenericBehavior:
             return

@@ -674,7 +674,7 @@ class OEMHandler(generic.OEMHandler):
             for diskent in adp.get('aimDisks', ()):
                 yield self._get_disk_firmware_single(diskent)
 
-    def get_firmware_inventory(self, components):
+    def get_firmware_inventory(self, components, fishclient):
         sysinf = self.wc.grab_json_response('/api/dataset/sys_info')
         for item in sysinf.get('items', {}):
             for firm in item.get('firmware', []):

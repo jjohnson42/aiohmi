@@ -491,7 +491,7 @@ class OEMHandler(object):
     def get_description(self):
         return {}
 
-    def get_firmware_inventory(self, components):
+    def get_firmware_inventory(self, components, fishclient):
         return []
 
     def set_credentials(self, username, password):

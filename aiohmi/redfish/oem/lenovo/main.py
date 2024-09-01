@@ -19,11 +19,23 @@ from aiohmi.redfish.oem.lenovo import xcc
 
 def get_handler(sysinfo, sysurl, webclient, cache, cmd):
     leninf = sysinfo.get('Oem', {}).get('Lenovo', {})
+    mgrinfo = {}
+    if leninf:
+        mgrinf, status = webclient.grab_json_response_with_status('/redfish/v1/Managers/1')
+        if status != 200:
+            mgrinfo = {}
     if not leninf:
         bmcinfo = cmd.bmcinfo
         if 'Ami' in bmcinfo.get('Oem', {}):
             return tsma.TsmHandler(sysinfo, sysurl, webclient, cache)
-    if 'FrontPanelUSB' in leninf or 'USBManagementPortAssignment' in leninf or sysinfo.get('SKU', '').startswith('7X58'):
+    elif 'xclarity controller' in mgrinf.get('Model', '').lower():
+        if mgrinf['Model'].endswith('3'):
+            return xcc3.OEMHandler(sysinfo, sysurl, webclient, cache,
+                                   gpool=cmd._gpool)
+        else:
+            return xcc.OEMHandler(sysinfo, sysurl, webclient, cache,
+                                  gpool=cmd._gpool)
+    elif 'FrontPanelUSB' in leninf or 'USBManagementPortAssignment' in leninf or sysinfo.get('SKU', '').startswith('7X58'):
         return xcc.OEMHandler(sysinfo, sysurl, webclient, cache,
                               gpool=cmd._gpool)
     else:
