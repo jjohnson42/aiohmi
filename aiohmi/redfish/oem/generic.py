@@ -44,9 +44,26 @@ class SensorReading(object):
         self.units = units
         self.unavailable = unavailable
 
+
+def _to_boolean(attrval):
+    attrval = attrval.lower()
+    if not attrval:
+        return False
+    if ('true'.startswith(attrval) or 'yes'.startswith(attrval)
+            or 'enabled'.startswith(attrval) or attrval == '1'):
+        return True
+    if ('false'.startswith(attrval) or 'no'.startswith(attrval)
+            or 'disabled'.startswith(attrval) or attrval == '0'):
+        return False
+    raise Exception(
+        'Unrecognized candidate for boolean: {0}'.format(attrval))
+
+
 def _normalize_mac(mac):
     if ':' not in mac:
-        mac = ':'.join((mac[:2], mac[2:4], mac[4:6], mac[6:8], mac[8:10], mac[10:12]))
+        mac = ':'.join((
+            mac[:2], mac[2:4], mac[4:6],
+            mac[6:8], mac[8:10], mac[10:12]))
     return mac.lower()
 
 
@@ -170,6 +187,54 @@ class OEMHandler(object):
         self._urlcache = cache
         self.webclient = webclient
 
+    async def supports_expand(self, url):
+        # Unfortunately, the state of expand in redfish is pretty dicey,
+        # so an OEM handler must opt into this behavior
+        # There is a way an implementation advertises support, however
+        # this isn't to be trusted.
+        # Even among some generally reputable implementations, they will fail in some scenarios
+        # and you'll see in their documentation "some urls will fail if you try to expand them"
+        # perhaps being specific, but other times being vague, but in either case,
+        # nothing programattic to consume to know when to do or not do an expand..
+        return False
+
+    def get_system_power_watts(self, fishclient):
+        totalwatts = 0
+        gotpower = False
+        for chassis in fishclient.sysinfo.get('Links', {}).get('Chassis', []):
+            envinfo = fishclient._get_chassis_env(chassis)
+            currwatts = envinfo.get('watts', None)
+            if currwatts is not None:
+                gotpower = True
+                totalwatts += envinfo['watts']
+        if not gotpower:
+            raise exc.UnsupportedFunctionality("System does not provide Power under redfish EnvironmentMetrics")
+        return totalwatts
+
+    def _get_cpu_temps(self, fishclient):
+        cputemps = []
+        for chassis in fishclient.sysinfo.get('Links', {}).get('Chassis', []):
+            thermals = fishclient._get_thermals(chassis)
+            for temp in thermals:
+                if temp.get('PhysicalContext', '') != 'CPU':
+                    continue
+                if temp.get('ReadingCelsius', None) is None:
+                    continue
+                cputemps.append(temp)
+        return cputemps
+
+    def get_average_processor_temperature(self, fishclient):
+        cputemps = self._get_cpu_temps(fishclient)
+        if not cputemps:
+            return  SensorReading(
+            None, {'name': 'Average Processor Temperature'}, value=None, units='°C',
+                   unavailable=True)
+        cputemps = [x['ReadingCelsius'] for x in cputemps]
+        avgtemp = sum(cputemps) / len(cputemps)
+        return SensorReading(
+            None, {'name': 'Average Processor Temperature'}, value=avgtemp, units='°C')
+
+
     def get_health(self, fishclient, verbose=True):
         health = fishclient.sysinfo.get('Status', {})
         health = health.get('HealthRollup', health.get('Health', 'Unknown'))
@@ -209,9 +274,9 @@ class OEMHandler(object):
                                             memsumstatus.get('Health', None))
             if memsumstatus != 'OK':
                 dimmfound = False
-                for mem in fishclient._do_web_request(
-                        fishclient.sysinfo['Memory']['@odata.id'])['Members']:
-                    dimminfo = fishclient._do_web_request(mem['@odata.id'])
+                dimmdata = await self._get_mem_data()
+                for dimminfo in dimmdata['Members']:
+
                     if dimminfo.get('Status', {}).get(
                             'State', None) == 'Absent':
                         continue
@@ -309,11 +374,11 @@ class OEMHandler(object):
         raise exc.UnsupportedFunctionality(
             'Platform does not support setting bmc attributes')
 
-    def _get_biosreg(self, url, fishclient):
+    async def _get_biosreg(self, url, fishclient):
         addon = {}
         valtodisplay = {}
         displaytoval = {}
-        reg = fishclient._do_web_request(url)
+        reg = await fishclient._do_web_request(url)
         reg = reg['RegistryEntries']
         for attr in reg['Attributes']:
             vals = attr.get('Value', [])
@@ -346,43 +411,49 @@ class OEMHandler(object):
     def get_system_configuration(self, hideadvanced=True, fishclient=None):
         return self._getsyscfg(fishclient)[0]
 
-    def _getsyscfg(self, fishclient):
+    async def _get_attrib_registry(self, fishclient, attribreg):
+        overview = await fishclient._do_web_request('/redfish/v1/')
+        reglist = overview['Registries']['@odata.id']
+        reglist = await fishclient._do_web_request(reglist)
+        regurl = None
+        for cand in reglist.get('Members', []):
+            cand = cand.get('@odata.id', '')
+            candname = cand.split('/')[-1]
+            if candname == '':  # implementation uses trailing slash
+                candname = cand.split('/')[-2]
+            if candname == attribreg:
+                regurl = cand
+                break
+        if not regurl:
+            # Workaround a vendor bug where they link to a
+            # non-existant name
+            for cand in reglist.get('Members', []):
+                cand = cand.get('@odata.id', '')
+                candname = cand.split('/')[-1]
+                candname = candname.split('.')[0]
+                if candname == attribreg.split('.')[0]:
+                    regurl = cand
+                    break
+        if regurl:
+            reginfo = await fishclient._do_web_request(regurl)
+            for reg in reginfo.get('Location', []):
+                if reg.get('Language', 'en').startswith('en'):
+                    reguri = reg['Uri']
+                    reginfo = await self._get_biosreg(reguri, fishclient)
+                    return reginfo
+                    extrainfo, valtodisplay, _, self.attrdeps = reginfo
+
+
+    async def _getsyscfg(self, fishclient):
         biosinfo = self._do_web_request(fishclient._biosurl, cache=False)
         reginfo = ({}, {}, {}, {})
         extrainfo = {}
         valtodisplay = {}
         self.attrdeps = {'Dependencies': [], 'Attributes': []}
         if 'AttributeRegistry' in biosinfo:
-            overview = fishclient._do_web_request('/redfish/v1/')
-            reglist = overview['Registries']['@odata.id']
-            reglist = fishclient._do_web_request(reglist)
-            regurl = None
-            for cand in reglist.get('Members', []):
-                cand = cand.get('@odata.id', '')
-                candname = cand.split('/')[-1]
-                if candname == '':  # implementation uses trailing slash
-                    candname = cand.split('/')[-2]
-                if candname == biosinfo['AttributeRegistry']:
-                    regurl = cand
-                    break
-            if not regurl:
-                # Workaround a vendor bug where they link to a
-                # non-existant name
-                for cand in reglist.get('Members', []):
-                    cand = cand.get('@odata.id', '')
-                    candname = cand.split('/')[-1]
-                    candname = candname.split('.')[0]
-                    if candname == biosinfo[
-                            'AttributeRegistry'].split('.')[0]:
-                        regurl = cand
-                        break
-            if regurl:
-                reginfo = fishclient._do_web_request(regurl)
-                for reg in reginfo.get('Location', []):
-                    if reg.get('Language', 'en').startswith('en'):
-                        reguri = reg['Uri']
-                        reginfo = self._get_biosreg(reguri, fishclient)
-                        extrainfo, valtodisplay, _, self.attrdeps = reginfo
+            reginfo = await self._get_attrib_registry(fishclient, biosinfo['AttributeRegistry'])
+            if reginfo:
+                extrainfo, valtodisplay, _, self.attrdeps = reginfo
         currsettings = {}
         try:
             pendingsettings = fishclient._do_web_request(
@@ -419,10 +490,20 @@ class OEMHandler(object):
         rawsettings = fishclient._do_web_request(fishclient._biosurl,
                                                  cache=False)
         rawsettings = rawsettings.get('Attributes', {})
-        pendingsettings = fishclient._do_web_request(fishclient._setbiosurl)
+        pendingsettings = await fishclient._do_web_request(
+            fishclient._setbiosurl)
+        return await self._set_redfish_settings(
+            changeset, fishclient, currsettings, rawsettings,
+            pendingsettings, self.attrdeps, reginfo,
+            fishclient._setbiosurl)
+
+    async def _set_redfish_settings(self, changeset, fishclient, currsettings,
+                              rawsettings, pendingsettings, attrdeps, reginfo,
+                              seturl):
+
         etag = pendingsettings.get('@odata.etag', None)
         pendingsettings = pendingsettings.get('Attributes', {})
-        dephandler = AttrDependencyHandler(self.attrdeps, rawsettings,
+        dephandler = AttrDependencyHandler(attrdeps, rawsettings,
                                            pendingsettings)
         for change in list(changeset):
             if change not in currsettings:
@@ -441,7 +522,7 @@ class OEMHandler(object):
             changeval = changeset[change]
             overrides, blameattrs = dephandler.get_overrides(change)
             meta = {}
-            for attr in self.attrdeps['Attributes']:
+            for attr in attrdeps['Attributes']:
                 if attr['AttributeName'] == change:
                     meta = dict(attr)
                     break
@@ -479,8 +560,8 @@ class OEMHandler(object):
                     if regentry.get('Type', None) == 'Boolean':
                         changeset[change] = _to_boolean(changeset[change])
         redfishsettings = {'Attributes': changeset}
-        fishclient._do_web_request(
-            fishclient._setbiosurl, redfishsettings, 'PATCH', etag=etag)
+        await fishclient._do_web_request(
+           seturl, redfishsettings, 'PATCH', etag=etag)
 
     def attach_remote_media(self, url, username, password, vmurls):
         return None
@@ -488,7 +569,13 @@ class OEMHandler(object):
     def detach_remote_media(self):
         return None
 
-    def get_description(self):
+    async def get_description(self):
+        for chassis in fishclient.sysinfo.get('Links', {}).get('Chassis', []):
+            chassisurl = chassis['@odata.id']
+            chassisinfo = await self._do_web_request(chassisurl)
+            hmm = chassisinfo.get('HeightMm', None)
+            if hmm:
+                return {'height': hmm/44.45}
         return {}
 
     def get_firmware_inventory(self, components, fishclient):
@@ -570,32 +657,14 @@ class OEMHandler(object):
         sysinfo['UUID'] = sysinfo['UUID'].lower()
         yield ('System', sysinfo)
         self._hwnamemap = {}
-        cpumemurls = []
-        memurl = self._varsysinfo.get('Memory', {}).get('@odata.id', None)
-        if memurl:
-            cpumemurls.append(memurl)
-        cpurl = self._varsysinfo.get('Processors', {}).get('@odata.id', None)
-        if cpurl:
-            cpumemurls.append(cpurl)
-        list(self._do_bulk_requests(cpumemurls))
         adpurls = self._get_adp_urls()
-        if cpurl:
-            cpurls = self._get_cpu_urls()
-        else:
-            cpurls = []
-        if memurl:
-            memurls = self._get_mem_urls()
-        else:
-            memurls = []
         diskurls = self._get_disk_urls()
-        allurls = adpurls + cpurls + memurls + diskurls
+        allurls = adpurls + diskurls
         list(self._do_bulk_requests(allurls))
-        if cpurl:
-            for cpu in self._get_cpu_inventory(withids=withids, urls=cpurls):
-                yield cpu
-        if memurl:
-            for mem in self._get_mem_inventory(withids=withids, urls=memurls):
-                yield mem
+        for cpu in self._get_cpu_inventory(withids=withids):
+            yield cpu
+        for mem in self._get_mem_inventory(withids=withids):
+            yield mem
         for adp in self._get_adp_inventory(withids=withids, urls=adpurls):
             yield adp
         for disk in self._get_disk_inventory(withids=withids, urls=diskurls):
@@ -622,13 +691,11 @@ class OEMHandler(object):
         foundmacs = False
         macinfobyadpname = {}
         if 'NetworkInterfaces' in self._varsysinfo:
-            nifurls = self._do_web_request(self._varsysinfo['NetworkInterfaces']['@odata.id'])
-            nifurls = nifurls.get('Members', [])
-            nifurls = [x['@odata.id'] for x in nifurls]
-            for nifurl in nifurls:
-                nifinfo = self._do_web_request(nifurl)
-
-                nadurl = nifinfo.get('Links', {}).get('NetworkAdapter', {}).get("@odata.id")
+            nifdata = self._get_expanded_data(
+                self._varsysinfo['NetworkInterfaces']['@odata.id'])
+            for nifinfo in nifdata.get('Members', []):
+                nadurl = nifinfo.get(
+                    'Links', {}).get('NetworkAdapter', {}).get("@odata.id")
                 if nadurl:
                     nadinfo = self._do_web_request(nadurl)
                     if 'Name' not in nadinfo:
@@ -636,20 +703,31 @@ class OEMHandler(object):
                     nicname = nadinfo['Name']
                     yieldinf = {}
                     macidx = 1
-                    for ctrlr in nadinfo.get('Controllers', []):
-                        porturls = [x['@odata.id'] for x in ctrlr.get(
-                            'Links', {}).get('Ports', [])]
-                        for porturl in porturls:
-                            portinfo = self._do_web_request(porturl)
-                            macs = [x for x in portinfo.get(
-                                'Ethernet', {}).get(
-                                    'AssociatedMACAddresses', [])]
+                    if 'Ports' in nadinfo:
+                        for portinfo in self._get_expanded_data(
+                                nadinfo['Ports']['@odata.id']).get('Members', []):
+                            macs = [x for x in portinfo.get('Ethernet', {}).get('AssociatedMACAddresses', [])]
                             for mac in macs:
                                 label = 'MAC Address {}'.format(macidx)
                                 yieldinf[label] = _normalize_mac(mac)
                                 macidx += 1
                                 foundmacs = True
-                    macinfobyadpname[nicname] = yieldinf
+                        macinfobyadpname[nicname] = yieldinf
+                    else:
+                        for ctrlr in nadinfo.get('Controllers', []):
+                            porturls = [x['@odata.id'] for x in ctrlr.get(
+                                'Links', {}).get('Ports', [])]
+                            for porturl in porturls:
+                                portinfo = self._do_web_request(porturl)
+                                macs = [x for x in portinfo.get(
+                                    'Ethernet', {}).get(
+                                        'AssociatedMACAddresses', [])]
+                                for mac in macs:
+                                    label = 'MAC Address {}'.format(macidx)
+                                    yieldinf[label] = _normalize_mac(mac)
+                                    macidx += 1
+                                    foundmacs = True
+                        macinfobyadpname[nicname] = yieldinf
         if not urls:
             urls = self._get_adp_urls()
         for inf in self._do_bulk_requests(urls):
@@ -700,6 +778,8 @@ class OEMHandler(object):
             if aname in macinfobyadpname:
                 del macinfobyadpname[aname]
             yield aname, yieldinf
+        if onlyname:
+            return
         if macinfobyadpname:
             for adp in macinfobyadpname:
                 yield adp, macinfobyadpname[adp]
@@ -745,12 +825,9 @@ class OEMHandler(object):
         return urls
 
     def _get_cpu_inventory(self, onlynames=False, withids=False, urls=None):
-        if not urls:
-            urls = self._get_cpu_urls()
-        if not urls:
-            return
-        for res in self._do_bulk_requests(urls):
-            currcpuinfo, url = res
+        for currcpuinfo in self._get_cpu_data().get(
+                'Members', []):
+            url = currcpuinfo['@odata.id']
             name = currcpuinfo.get('Name', 'CPU')
             if name in self._hwnamemap:
                 self._hwnamemap[name] = None
@@ -775,21 +852,17 @@ class OEMHandler(object):
         return urls
 
     def _get_cpu_urls(self):
+        md = self._get_cpu_data(False)
+        return [x['@odata.id'] for x in md.get('Members', [])]
+
+    def _get_cpu_data(self, expand='.'):
         cpurl = self._varsysinfo.get('Processors', {}).get('@odata.id', None)
-        if cpurl is None:
-            urls = []
-        else:
-            cpurl = self._do_web_request(cpurl)
-            urls = [x['@odata.id'] for x in cpurl.get('Members', [])]
-        return urls
+        return self._get_expanded_data(cpurl, expand)
 
     def _get_mem_inventory(self, onlyname=False, withids=False, urls=None):
-        if not urls:
-            urls = self._get_mem_urls()
-        if not urls:
-            return
-        for mem in self._do_bulk_requests(urls):
-            currmeminfo, url = mem
+        memdata = self._get_mem_data()
+        for currmeminfo in memdata.get('Members', []): # self._do_bulk_requests(urls):
+            url = currmeminfo['@odata.id']
             name = currmeminfo.get('Name', 'Memory')
             if name in self._hwnamemap:
                 self._hwnamemap[name] = None
@@ -818,13 +891,30 @@ class OEMHandler(object):
             yield (name, meminfo)
 
     def _get_mem_urls(self):
+        md = self._get_mem_data(False)
+        return [x['@odata.id'] for x in md.get('Members', [])]
+
+    def _get_mem_data(self, expand='.'):
         memurl = self._varsysinfo.get('Memory', {}).get('@odata.id', None)
-        if not memurl:
-            urls = []
-        else:
-            memurl = self._do_web_request(memurl)
-            urls = [x['@odata.id'] for x in memurl.get('Members', [])]
-        return urls
+        return self._get_expanded_data(memurl, expand)
+
+    def _get_expanded_data(self, url, expand='.'):
+        topdata = []
+        if not url:
+            return topdata
+        if not expand:
+            return self._do_web_request(url)
+        elif self.supports_expand(url):
+            return self._do_web_request(url + '?$expand=' + expand)
+        else:  # emulate expand behavior
+            topdata = self._do_web_request(url)
+            newmembers = []
+            for x in topdata.get('Members', []):
+                newmembers.append(self._do_web_request(x['@odata.id']))
+            topdata['Members'] = newmembers
+            return topdata
+        return topdata
+
 
     def get_storage_configuration(self):
         raise exc.UnsupportedFunctionality(
@@ -846,8 +936,10 @@ class OEMHandler(object):
         raise exc.UnsupportedFunctionality(
             'Remote media upload not supported on this platform')
 
-    def update_firmware(self, filename, data=None, progress=None, bank=None):
-        usd = self._do_web_request('/redfish/v1/UpdateService')
+    def update_firmware(self, filename, data=None, progress=None, bank=None, otherfields=()):
+        # disable cache to make sure we trigger the token renewal logic if needed
+        usd = self._do_web_request('/redfish/v1/UpdateService', cache=False)
+
         upurl = usd.get('MultipartHttpPushUri', None)
         ismultipart = True
         if not upurl:
@@ -866,7 +958,7 @@ class OEMHandler(object):
         try:
             uploadthread = webclient.FileUploader(
                 self.webclient, upurl, filename, data, formwrap=ismultipart,
-                excepterror=False)
+                excepterror=False, otherfields=otherfields)
             uploadthread.start()
             wc = self.webclient
             while uploadthread.isAlive():
@@ -947,6 +1039,27 @@ class OEMHandler(object):
                                 cache=True):
         return self._do_web_request(url, payload, method, cache), url
 
+    async def _get_session_token(self, wc):
+        username = self.username
+        password = self.password
+        if not isinstance(username, str):
+            username = username.decode()
+        if not isinstance(password, str):
+            password = password.decode()
+        # specification actually indicates we can skip straight to this url
+        rsp = await wc.grab_rsp('/redfish/v1/SessionService/Sessions',
+                          {'UserName': username, 'Password': password})
+        await rsp.read()
+        self.xauthtoken = rsp.getheader('X-Auth-Token')
+        if self.xauthtoken:
+            if 'Authorization' in wc.stdheaders:
+                del wc.stdheaders['Authorization']
+            if 'Authorization' in self.webclient.stdheaders:
+                del self.webclient.stdheaders['Authorization']
+            wc.stdheaders['X-Auth-Token'] = self.xauthtoken
+            self.webclient.stdheaders['X-Auth-Token'] = self.xauthtoken
+
+
     def _do_web_request(self, url, payload=None, method=None, cache=True):
         res = None
         if cache and payload is None and method is None:
@@ -955,6 +1068,11 @@ class OEMHandler(object):
             return res
         wc = self.webclient.dupe()
         res = wc.grab_json_response_with_status(url, payload, method=method)
+        if res[1] == 401 and 'X-Auth-Token' in self.webclient.stdheaders:
+            wc.set_basic_credentials(self.username, self.password)
+            self._get_session_token(wc)
+            res = wc.grab_json_response_with_status(url, payload,
+                                                    method=method)
         if res[1] < 200 or res[1] >= 300:
             try:
                 info = json.loads(res[0])

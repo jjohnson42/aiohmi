@@ -45,7 +45,14 @@ import aiohmi.util.webclient as webclient
 try:
     from urllib import urlencode
 except ImportError:
-    from urllib.parse import urlencode
+    from urllib.parse import urlencode+    def set_identify(self, on, duration, blink):
++        if blink:
++            self.grab_redfish_response_with_status(
++                '/redfish/v1/Systems/1',
++                {'IndicatorLED': 'Blinking'},
++                method='PATCH')
++            raise pygexc.BypassGenericBehavior()
+
 
 
 numregex = re.compile('([0-9]+)')
@@ -960,6 +967,15 @@ class XCCClient(IMMClient):
                 fru['serial'] = memi['memory_serial_number'].strip()
                 fru['manufacturer'] = memi['memory_manufacturer']
                 break
+
+    def set_identify(self, on, duration, blink):
+        if blink:
+            self.grab_redfish_response_with_status(
+                '/redfish/v1/Systems/1',
+                {'IndicatorLED': 'Blinking'},
+                method='PATCH')
+            raise pygexc.BypassGenericBehavior()
+        raise pygexc.UnsupportedFunctionality()
 
     def get_description(self):
         dsc = self.wc.grab_json_response('/DeviceDescription.json')

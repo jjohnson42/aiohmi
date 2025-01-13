@@ -81,19 +81,6 @@ def _mask_to_cidr(mask):
     return cidr
 
 
-def _to_boolean(attrval):
-    attrval = attrval.lower()
-    if not attrval:
-        return False
-    if ('true'.startswith(attrval) or 'yes'.startswith(attrval)
-            or 'enabled'.startswith(attrval) or attrval == '1'):
-        return True
-    if ('false'.startswith(attrval) or 'no'.startswith(attrval)
-            or 'disabled'.startswith(attrval) or attrval == '0'):
-        return False
-    raise Exception(
-        'Unrecognized candidate for boolean: {0}'.format(attrval))
-
 
 def _cidr_to_mask(cidr):
     return socket.inet_ntop(
@@ -177,6 +164,7 @@ class Command(object):
         self._gpool = pool
         self._bmcv4ip = None
         self._bmcv6ip = None
+        self.xauthtoken = None
         for addrinf in socket.getaddrinfo(bmc, 0, 0, socket.SOCK_STREAM):
             if addrinf[0] == socket.AF_INET:
                 self._bmcv4ip = socket.inet_pton(addrinf[0], addrinf[-1][0])
@@ -189,12 +177,14 @@ class Command(object):
         self.wc.set_header('Accept-Encoding', 'gzip')
         self.wc.set_header('OData-Version', '4.0')
         overview = await self.wc.grab_json_response('/redfish/v1/')
-        self.wc.set_basic_credentials(userid, password)
         self.username = userid
         self.password = password
+        self.wc.set_basic_credentials(self.username, self.password)
         self.wc.set_header('Content-Type', 'application/json')
         if 'Systems' not in overview:
             raise exc.PyghmiException('Redfish not ready')
+        if 'SessionService' in overview:
+            await self._get_session_token(self.wc)
         systems = overview['Systems']['@odata.id']
         res = await self.wc.grab_json_response_with_status(systems)
         if res[1] == 401:
@@ -223,6 +213,26 @@ class Command(object):
         self.powerurl = sysinfo.get('Actions', {}).get(
             '#ComputerSystem.Reset', {}).get('target', None)
         return self
+
+    async def _get_session_token(self, wc):
+        # specification actually indicates we can skip straight to this url
+        username = self.username
+        password = self.password
+        if not isinstance(username, str):
+            username = username.decode()
+        if not isinstance(password, str):
+            password = password.decode()
+        rsp = await wc.grab_rsp('/redfish/v1/SessionService/Sessions',
+                          {'UserName': username, 'Password': password})
+        rsp.read()
+        self.xauthtoken = rsp.getheader('X-Auth-Token')
+        if self.xauthtoken:
+            if 'Authorization' in wc.stdheaders:
+                del wc.stdheaders['Authorization']
+            if 'Authorization' in self.wc.stdheaders:
+                del self.wc.stdheaders['Authorization']
+            wc.stdheaders['X-Auth-Token'] = self.xauthtoken
+            self.wc.stdheaders['X-Auth-Token'] = self.xauthtoken
 
     @property
     def _accountserviceurl(self):
@@ -537,6 +547,18 @@ class Command(object):
         finally:
             if 'If-Match' in wc.stdheaders:
                 del wc.stdheaders['If-Match']
+        if res[1] == 401 and self.xauthtoken:
+            wc.set_basic_credentials(self.username, self.password)
+            await self._get_session_token(wc)
+            if etag:
+                wc.stdheaders['If-Match'] = etag
+            try:
+                res = await wc.grab_json_response_with_status(url, payload,
+                                                              method=method)
+            finally:
+                if 'If-Match' in wc.stdheaders:
+                    del wc.stdheaders['If-Match']
+
         if res[1] < 200 or res[1] >= 300:
             try:
                 info = json.loads(res[0])
@@ -972,6 +994,7 @@ class Command(object):
                              {'HostName': hostname}, 'PATCH')
 
     def get_firmware(self, components=()):
+        self._fwnamemap = {}
         try:
             for firminfo in self.oem.get_firmware_inventory(components, self):
                 yield firminfo
@@ -979,7 +1002,6 @@ class Command(object):
             return
         fwlist = self._do_web_request(self._fwinventory)
         fwurls = [x['@odata.id'] for x in fwlist.get('Members', [])]
-        self._fwnamemap = {}
         for res in self._do_bulk_requests(fwurls):
             res = self._extract_fwinfo(res)
             if res[0] is None:
@@ -1081,6 +1103,7 @@ class Command(object):
 
     async def oem(self):
         if not self._oem:
+            await self._do_web_request(self.sysurl, cache=False)  # This is to trigger token validation and renewel
             sysinfo = await self.sysinfo()
             self._oem = oem.get_oem_handler(
                 sysinfo, self.sysurl, self.wc, self._urlcache, self)
@@ -1088,7 +1111,7 @@ class Command(object):
         return self._oem
 
     def get_description(self):
-        return self.oem.get_description()
+        return self.oem.get_description(self)
 
     def get_event_log(self, clear=False):
         bmcinfo = self._do_web_request(self._bmcurl)
@@ -1170,35 +1193,11 @@ class Command(object):
         return retval
 
     def get_average_processor_temperature(self):
-        cputemps = []
-        for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
-            thermals = self._get_thermals(chassis)
-            for temp in thermals:
-                if temp.get('PhysicalContext', '') != 'CPU':
-                    continue
-                if temp.get('ReadingCelsius', None) is None:
-                    continue
-                cputemps.append(temp['ReadingCelsius'])
-        if not cputemps:
-            return  SensorReading(
-            None, {'name': 'Average Processor Temperature'}, value=None, units='°C',
-                   unavailable=True)
-        avgtemp = sum(cputemps) / len(cputemps)
-        return SensorReading(
-            None, {'name': 'Average Processor Temperature'}, value=avgtemp, units='°C')
+        return self.oem.get_average_processor_temperature(self)
 
     def get_system_power_watts(self):
-        totalwatts = 0
-        gotpower = False
-        for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
-            envinfo = self._get_chassis_env(chassis)
-            currwatts = envinfo.get('watts', None)
-            if currwatts is not None:
-                gotpower = True
-                totalwatts += envinfo['watts']
-        if not gotpower:
-            raise exc.UnsupportedFunctionality("System does not provide Power under redfish EnvironmentMetrics")
-        return totalwatts
+        return self.oem.get_system_power_watts(self)
+
 
     def get_inlet_temperature(self):
         inlets = []

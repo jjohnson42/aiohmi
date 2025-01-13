@@ -675,9 +675,11 @@ class OEMHandler(generic.OEMHandler):
                                         led_status_default)
             yield (name, {'status': status})
 
-    def set_identify(self, on, duration):
+    def set_identify(self, on, duration, blink):
         if on and not duration and self.is_sd350:
             self.ipmicmd.xraw_command(netfn=0x3a, command=6, data=(1, 1))
+        elif self.has_xcc:
+            self.immhandler.set_identify(on, duration, blink)
         else:
             raise pygexc.UnsupportedFunctionality()
 

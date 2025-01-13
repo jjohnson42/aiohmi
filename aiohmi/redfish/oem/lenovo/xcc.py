@@ -579,7 +579,7 @@ class OEMHandler(generic.OEMHandler):
         summary['badreadings'] = fallbackdata
         return summary
 
-    def get_description(self):
+    def get_description(self, fishclient):
         description = self._do_web_request('/DeviceDescription.json')
         if description:
             description = description[0]

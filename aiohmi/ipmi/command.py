@@ -537,7 +537,7 @@ class Command(object):
         return {'powerstate': await self._get_power_state(
             bridge_request=bridge_request)}
 
-    def set_identify(self, on=True, duration=None):
+    def set_identify(self, on=True, duration=None, blink=False):
         """Request identify light
 
         Request the identify light to turn off, on for a duration,
@@ -549,10 +549,14 @@ class Command(object):
         """
         self.oem_init()
         try:
-            self._oem.set_identify(on, duration)
+            self._oem.set_identify(on, duration, blink)
             return
+        except exc.BypassGenericBehavior:
+             return
         except exc.UnsupportedFunctionality:
             pass
+        if blink:
+            raise exc.IpmiException('Blink not supported with generic IPMI')
         if duration is not None:
             duration = int(duration)
             if duration > 255:

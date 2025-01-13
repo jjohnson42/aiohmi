@@ -11,7 +11,10 @@ if grep wheezy /etc/os-release; then
     export DSCARGS=""
 fi
 # If not PBR, use the setup.py.tmpl
-$PYEXEC -c 'import pbr' || ./makesetup
+sed -e 's/~/./' ./makesetup > ./makesetup.deb
+chmod +x ./makesetup.deb
+./makesetup.deb
+#$PYEXEC -c 'import pbr' || ./makesetup
 VERSION=`$PYEXEC setup.py --version`
 $PYEXEC setup.py sdist
 py2dsc $DSCARGS dist/aiohmi-$VERSION.tar.gz
@@ -21,4 +24,4 @@ dpkg-buildpackage -rfakeroot -uc -us -i
 cd -
 rm -rf $(find deb_dist -mindepth 1 -maxdepth 1 -type d)
 rm $1/*aiohmi*
-cp deb_dist/* $1/
+cp deb_dist/*.deb $1/

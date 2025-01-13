@@ -15,6 +15,7 @@
 import aiohmi.redfish.oem.generic as generic
 from aiohmi.redfish.oem.lenovo import tsma
 from aiohmi.redfish.oem.lenovo import xcc
+from aiohmi.redfish.oem.lenovo import xcc3
 
 
 def get_handler(sysinfo, sysurl, webclient, cache, cmd):
