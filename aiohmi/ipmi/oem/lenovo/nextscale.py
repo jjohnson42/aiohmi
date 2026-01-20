@@ -762,7 +762,13 @@ class SMMClient(object):
                 rsp = {'data': [1]}
             rsp['data'] = bytearray(rsp['data'])
             if rsp['data'][0] == 2:  # shared io
-                rsp = self.ipmicmd.xraw_command(0x32, 0xa7, data=[bay - 1])
+                try:
+                    rsp = self.ipmicmd.xraw_command(0x32, 0xa7, data=[bay - 1])
+                except Exception:
+                    raise Exception('Shared IO detected trying to reseat {}, '
+                                    'but unable to determine status of '
+                                    'partner bay {}'.format(
+                                        bay, bay - 1))               
                 rsp['data'] = bytearray(rsp['data'])
                 if rsp['data'][1] == 0x80:
                     raise Exception('Unable to reseat bay {0} due to bay {1} '

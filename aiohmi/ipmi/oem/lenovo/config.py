@@ -51,7 +51,16 @@ class Unsupported(Exception):
 def fromstring(inputdata):
     if b'!entity' in inputdata.lower():
         raise Exception('Unsupported XML')
-    return etree.fromstring(inputdata)
+    try:
+        return etree.fromstring(inputdata)
+    except etree.XMLSyntaxError:
+        inputdata = bytearray(inputdata.decode('utf8', errors='backslashreplace').encode())
+        for i in range(len(inputdata)):
+            if inputdata[i] < 0x20 and inputdata[i] not in (9, 0xa, 0xd):
+                inputdata[i] = 63
+        inputdata = bytes(inputdata)
+        return etree.fromstring(inputdata)
+
 
 
 async def run_command_with_retry(connection, data):
@@ -349,6 +358,7 @@ class LenovoFirmwareConfig(object):
                             readonly = 'true'
                     possible = []
                     current = None
+                    currentidxes = []
                     default = None
                     reset = False
                     name = setting.find("mriName").text
@@ -379,6 +389,7 @@ class LenovoFirmwareConfig(object):
                                 instbynum[xid] = x
                                 defidx += 1
                             current = [instbynum[idx].text for idx in sorted(instbynum)]
+                            currentidxes = list(sorted(instbynum))
                         default = onedata.get('default', None)
                         if default == '':
                             default = None
@@ -440,6 +451,8 @@ class LenovoFirmwareConfig(object):
                         if current and len(current) > 1:
                             instidx = 1
                             for inst in current:
+                                if currentidxes:
+                                    instidx = currentidxes.pop(0)
                                 optname = '{0}.{1}'.format(optionname, instidx)
                                 options[optname] = dict(
                                     current=inst,

@@ -19,10 +19,15 @@ import re
 import time
 
 import base64
+import copy
 import aiohmi.constants as const
 import aiohmi.exceptions as exc
 import aiohmi.media as media
 import aiohmi.util.webclient as webclient
+from aiohmi.util.parse import parse_time
+from datetime import datetime
+from datetime import timedelta
+from dateutil import tz
 
 
 class SensorReading(object):
@@ -179,6 +184,7 @@ class AttrDependencyHandler(object):
 
 class OEMHandler(object):
     hostnic = None
+    usegenericsensors = True
 
     def __init__(self, sysinfo, sysurl, webclient, cache, gpool=None):
         self._gpool = gpool
@@ -186,6 +192,10 @@ class OEMHandler(object):
         self._varsysurl = sysurl
         self._urlcache = cache
         self.webclient = webclient
+
+    async def get_screenshot(self, outfile):
+        raise exc.UnsupportedFunctionality(
+            'Retrieving screenshot is not implemented for this platform')
 
     async def supports_expand(self, url):
         # Unfortunately, the state of expand in redfish is pretty dicey,
@@ -222,6 +232,75 @@ class OEMHandler(object):
                     continue
                 cputemps.append(temp)
         return cputemps
+
+    async def get_event_log(self, clear=False, fishclient=None, extraurls=[]):
+        bmcinfo = await self._do_web_request(fishclient._bmcurl)
+        lsurl = bmcinfo.get('LogServices', {}).get('@odata.id', None)
+        if not lsurl:
+            return
+        currtime = bmcinfo.get('DateTime', None)
+        correction = timedelta(0)
+        utz = tz.tzoffset('', 0)
+        ltz = tz.gettz()
+        if currtime:
+            currtime = parse_time(currtime)
+        if currtime:
+            now = datetime.now(utz)
+            try:
+                correction = now - currtime
+            except TypeError:
+                correction = now - currtime.replace(tzinfo=utz)
+        lurls = (await self._do_web_request(lsurl)).get('Members', [])
+        lurls.extend(extraurls)
+        for lurl in lurls:
+            lurl = lurl['@odata.id']
+            loginfo = await self._do_web_request(lurl, cache=(not clear))
+            entriesurl = loginfo.get('Entries', {}).get('@odata.id', None)
+            if not entriesurl:
+                continue
+            logid = loginfo.get('Id', '')
+            entries = await self._do_web_request(entriesurl, cache=False)
+            if clear:
+                # The clear is against the log service etag, not entries
+                # so we have to fetch service etag after we fetch entries
+                # until we can verify that the etag is consistent to prove
+                # that the clear is atomic
+                newloginfo = await self._do_web_request(lurl, cache=False)
+                clearurl = newloginfo.get('Actions', {}).get(
+                    '#LogService.ClearLog', {}).get('target', '')
+                while clearurl:
+                    try:
+                        await self._do_web_request(clearurl, method='POST',
+                                            payload={})
+                        clearurl = False
+                    except exc.PyghmiException as e:
+                        if 'EtagPreconditionalFailed' not in str(e):
+                            raise
+                        # This doesn't guarantee atomicity, but it mitigates
+                        # greatly.  Unfortunately some implementations
+                        # mutate the tag endlessly and we have no hope
+                        entries = await self._do_web_request(entriesurl, cache=False)
+                        newloginfo = await self._do_web_request(lurl, cache=False)
+            for log in entries.get('Members', []):
+                if ('Created' not in log and 'Message' not in log
+                        and 'Severity' not in log):
+                    # without any data, this log entry isn't actionable
+                    continue
+                record = {}
+                record['log_id'] = logid
+                parsedtime = parse_time(log.get('Created', ''))
+                if not parsedtime:
+                    parsedtime = parse_time(log.get('EventTimestamp', ''))
+                if parsedtime:
+                    entime = parsedtime + correction
+                    entime = entime.astimezone(ltz)
+                    record['timestamp'] = entime.strftime('%Y-%m-%dT%H:%M:%S')
+                else:
+                    record['timestamp'] = log.get('Created', '')
+                record['message'] = log.get('Message', None)
+                record['severity'] = _healthmap.get(
+                    log.get('Severity', 'Warning'), const.Health.Ok)
+                yield record
 
     def get_average_processor_temperature(self, fishclient):
         cputemps = self._get_cpu_temps(fishclient)
@@ -497,7 +576,7 @@ class OEMHandler(object):
             pendingsettings, self.attrdeps, reginfo,
             fishclient._setbiosurl)
 
-    async def _set_redfish_settings(self, changeset, fishclient, currsettings,
+    async def _set_redfish_settings(self, inchangeset, fishclient, currsettings,                      
                               rawsettings, pendingsettings, attrdeps, reginfo,
                               seturl):
 
@@ -505,6 +584,7 @@ class OEMHandler(object):
         pendingsettings = pendingsettings.get('Attributes', {})
         dephandler = AttrDependencyHandler(attrdeps, rawsettings,
                                            pendingsettings)
+        changeset = copy.deepcopy(inchangeset)
         for change in list(changeset):
             if change not in currsettings:
                 found = False
@@ -578,6 +658,9 @@ class OEMHandler(object):
                 return {'height': hmm/44.45}
         return {}
 
+    def _extract_fwinfo(self, inf):
+        return {}
+
     def get_firmware_inventory(self, components, fishclient):
         return []
 
@@ -591,13 +674,13 @@ class OEMHandler(object):
         except AttributeError:
             self.password = password
 
-    def list_media(self, fishclient):
-        bmcinfo = fishclient._do_web_request(fishclient._bmcurl)
+    def list_media(self, fishclient, cache=True):
+        bmcinfo = fishclient._do_web_request(fishclient._bmcurl, cache=cache)
         vmcoll = bmcinfo.get('VirtualMedia', {}).get('@odata.id', None)
         if vmcoll:
-            vmlist = fishclient._do_web_request(vmcoll)
+            vmlist = fishclient._do_web_request(vmcoll, cache=cache)
             vmurls = [x['@odata.id'] for x in vmlist.get('Members', [])]
-            for vminfo in fishclient._do_bulk_requests(vmurls):
+            for vminfo in fishclient._do_bulk_requests(vmurls, cache=cache):
                 vminfo = vminfo[0]
                 if vminfo.get('Image', None):
                     imageurl = vminfo['Image'].replace(
@@ -617,15 +700,30 @@ class OEMHandler(object):
         for adp in self._get_adp_inventory(True, withids):
             yield adp
 
-    def get_inventory_of_component(self, component):
+    async def _get_node_info(self):
+        nodeinfo = self._varsysinfo
+        if not nodeinfo:
+            overview = await self._do_web_request('/redfish/v1/')
+            chassismembs = overview.get('Chassis', {}).get('@odata.id', None)
+            if not chassismembs:
+                return nodeinfo
+            chassislist = await self._do_web_request(chassismembs)
+            chassismembs = chassislist.get('Members', [])
+            if len(chassismembs) == 1:
+                chassisurl = chassismembs[0]['@odata.id']
+                nodeinfo = await self._do_web_request(chassisurl)
+        return nodeinfo
+
+    async def get_inventory_of_component(self, component):
         if component.lower() == 'system':
+            nodeinfo = self._get_node_info()
             sysinfo = {
-                'UUID': self._varsysinfo.get('UUID', ''),
-                'Serial Number': self._varsysinfo.get('SerialNumber', ''),
-                'Manufacturer': self._varsysinfo.get('Manufacturer', ''),
-                'Product name': self._varsysinfo.get('Model', ''),
-                'Model': self._varsysinfo.get(
-                    'SKU', self._varsysinfo.get('PartNumber', '')),
+                'UUID': nodeinfo.get('UUID', ''),
+                'Serial Number': nodeinfo.get('SerialNumber', ''),
+                'Manufacturer': nodeinfo.get('Manufacturer', ''),
+                'Product name': nodeinfo.get('Model', ''),
+                'Model': nodeinfo.get(
+                    'SKU', nodeinfo.get('PartNumber', '')),
             }
             if sysinfo['UUID'] and '-' not in sysinfo['UUID']:
                 sysinfo['UUID'] = '-'.join((
@@ -701,17 +799,29 @@ class OEMHandler(object):
                     if 'Name' not in nadinfo:
                         continue
                     nicname = nadinfo['Name']
+                    if nicname == 'NetworkAdapter':
+                        nicname = nadinfo.get('Model', nicname)                   
                     yieldinf = {}
                     macidx = 1
                     if 'Ports' in nadinfo:
                         for portinfo in self._get_expanded_data(
                                 nadinfo['Ports']['@odata.id']).get('Members', []):
-                            macs = [x for x in portinfo.get('Ethernet', {}).get('AssociatedMACAddresses', [])]
-                            for mac in macs:
-                                label = 'MAC Address {}'.format(macidx)
-                                yieldinf[label] = _normalize_mac(mac)
-                                macidx += 1
-                                foundmacs = True
+                            ethinfo = portinfo.get('Ethernet', {})
+                            if ethinfo:
+                                macs = [x for x in ethinfo.get('AssociatedMACAddresses', [])]
+                                for mac in macs:
+                                    label = 'MAC Address {}'.format(macidx)
+                                    yieldinf[label] = _normalize_mac(mac)
+                                    macidx += 1
+                                    foundmacs = True
+                            ibinfo = portinfo.get('InfiniBand', {})
+                            if ibinfo:
+                                macs = [x for x in ibinfo.get('AssociatedPortGUIDs', [])]
+                                for mac in macs:
+                                    label = 'Port GUID {}'.format(macidx)
+                                    yieldinf[label] = mac
+                                    macidx += 1
+                                    foundmacs = True                            
                         macinfobyadpname[nicname] = yieldinf
                     else:
                         for ctrlr in nadinfo.get('Controllers', []):
@@ -857,6 +967,8 @@ class OEMHandler(object):
 
     def _get_cpu_data(self, expand='.'):
         cpurl = self._varsysinfo.get('Processors', {}).get('@odata.id', None)
+        if not cpurl:
+            return {}
         return self._get_expanded_data(cpurl, expand)
 
     def _get_mem_inventory(self, onlyname=False, withids=False, urls=None):
@@ -896,25 +1008,32 @@ class OEMHandler(object):
 
     def _get_mem_data(self, expand='.'):
         memurl = self._varsysinfo.get('Memory', {}).get('@odata.id', None)
-        return self._get_expanded_data(memurl, expand)
+        if not memurl:
+            return {}
+        return await self._get_expanded_data(memurl, expand)
 
-    def _get_expanded_data(self, url, expand='.'):
+    async def _get_expanded_data(self, url, expand='.'):
         topdata = []
         if not url:
             return topdata
         if not expand:
-            return self._do_web_request(url)
+            return await self._do_web_request(url)
         elif self.supports_expand(url):
-            return self._do_web_request(url + '?$expand=' + expand)
+            return await self._do_web_request(url + '?$expand=' + expand)
         else:  # emulate expand behavior
-            topdata = self._do_web_request(url)
+            topdata = await self._do_web_request(url)
             newmembers = []
             for x in topdata.get('Members', []):
-                newmembers.append(self._do_web_request(x['@odata.id']))
+                newmembers.append(await self._do_web_request(x['@odata.id']))
             topdata['Members'] = newmembers
             return topdata
         return topdata
+ 
+    async def get_ikvm_methods(self):
+        return []
 
+    async def get_ikvm_launchdata(self):
+        return {}
 
     def get_storage_configuration(self):
         raise exc.UnsupportedFunctionality(
@@ -935,6 +1054,16 @@ class OEMHandler(object):
     def upload_media(self, filename, progress=None, data=None):
         raise exc.UnsupportedFunctionality(
             'Remote media upload not supported on this platform')
+
+    async def get_update_status(self):
+        upd = await self._do_web_request('/redfish/v1/UpdateService')
+        health = upd.get('Status', {}).get('Health', 'Unknown')
+        if health == 'OK':
+            return 'ready'
+        if health == 'Unknown' and upd.get('ServiceEnabled'):
+            return 'ready'       
+        return 'unavailable'
+
 
     def update_firmware(self, filename, data=None, progress=None, bank=None, otherfields=()):
         # disable cache to make sure we trigger the token renewal logic if needed
@@ -989,11 +1118,15 @@ class OEMHandler(object):
             retry = 3
             pct = 0.0
             while not complete and retry > 0:
-                pgress = self._do_web_request(monitorurl, cache=False)
+                try:
+                    pgress = self._do_web_request(monitorurl, cache=False)
+                except socket.timeout:
+                    pgress = None
                 if not pgress:
                     retry -= 1
                     time.sleep(3)
                     continue
+                retry = 3
                 for msg in pgress.get('Messages', []):
                     if 'Verify failed' in msg.get('Message', ''):
                         raise Exception(msg['Message'])
@@ -1018,6 +1151,8 @@ class OEMHandler(object):
                         time.sleep(3)
                 else:
                     time.sleep(3)
+            if not retry:
+                raise Exception('Falied to monitor update progress due to excessive timeouts')
             return 'pending'
         finally:
             if 'HttpPushUriTargetsBusy' in usd:
@@ -1060,17 +1195,17 @@ class OEMHandler(object):
             self.webclient.stdheaders['X-Auth-Token'] = self.xauthtoken
 
 
-    def _do_web_request(self, url, payload=None, method=None, cache=True):
+    async def _do_web_request(self, url, payload=None, method=None, cache=True):
         res = None
         if cache and payload is None and method is None:
             res = self._get_cache(url)
         if res:
             return res
         wc = self.webclient.dupe()
-        res = wc.grab_json_response_with_status(url, payload, method=method)
+        res = await wc.grab_json_response_with_status(url, payload, method=method)
         if res[1] == 401 and 'X-Auth-Token' in self.webclient.stdheaders:
             wc.set_basic_credentials(self.username, self.password)
-            self._get_session_token(wc)
+            await self._get_session_token(wc)
             res = wc.grab_json_response_with_status(url, payload,
                                                     method=method)
         if res[1] < 200 or res[1] >= 300:
@@ -1168,4 +1303,4 @@ class OEMHandler(object):
 
     def reseat_bay(self, bay):
         raise exc.UnsupportedFunctionality(
-            'Bay reseat not supported on this platform')
+            'Reseat not supported on this platform')

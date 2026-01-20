@@ -68,6 +68,7 @@ _healthmap = {
     'Unknown': const.Health.Warning,
     'Warning': const.Health.Warning,
     'OK': const.Health.Ok,
+    None: const.Health.Ok,
 }
 
 
@@ -114,6 +115,7 @@ def natural_sort(iterable):
 class SensorReading(object):
     def __init__(self, healthinfo, sensor=None, value=None, units=None,
                  unavailable=False):
+        self.states = []
         if sensor:
             self.name = sensor['name']
         else:
@@ -123,7 +125,8 @@ class SensorReading(object):
             self.states = [healthinfo.get('Status', {}).get('Health',
                                                             'Unknown')]
             self.health = _healthmap[healthinfo['Status']['Health']]
-            self.states = [healthinfo['Status']['Health']]
+            if self.health == const.Health.Ok:
+                self.states = []
         self.value = value
         self.state_ids = None
         self.imprecision = None
@@ -181,37 +184,52 @@ class Command(object):
         self.password = password
         self.wc.set_basic_credentials(self.username, self.password)
         self.wc.set_header('Content-Type', 'application/json')
-        if 'Systems' not in overview:
+        if 'Systems' not in overview and 'Managers' not in overview:
             raise exc.PyghmiException('Redfish not ready')
         if 'SessionService' in overview:
             await self._get_session_token(self.wc)
-        systems = overview['Systems']['@odata.id']
-        res = await self.wc.grab_json_response_with_status(systems)
-        if res[1] == 401:
-            raise exc.PyghmiException('Access Denied')
-        elif res[1] < 200 or res[1] >= 300:
-            raise exc.PyghmiException(repr(res[0]))
-        members = res[0]
         self._varsensormap = {}
-        systems = members['Members']
-        if sysurl:
-            for system in systems:
-                if system['@odata.id'] == sysurl or system['@odata.id'].split('/')[-1] == sysurl:
-                    self.sysurl = system['@odata.id']
-                    break
+        self.powerurl = None
+        self.sysurl = None
+        if 'Managers' in overview:
+            bmcoll = systems = overview['Managers']['@odata.id']
+            res = await self.wc.grab_json_response_with_status(bmcoll)
+            if res[1] == 401:
+                raise exc.PyghmiException('Access Denied')
+            elif res[1] < 200 or res[1] >= 300:
+                raise exc.PyghmiException(repr(res[0]))
+            bmcs = res[0]['Members']
+            if len(bmcs) == 1:
+                self._varbmcurl = bmcs[0]['@odata.id']
+        if 'Systems' in overview:
+            systems = overview['Systems']['@odata.id']
+            res = await self.wc.grab_json_response_with_status(systems)
+            if res[1] == 401:
+                raise exc.PyghmiException('Access Denied')
+            elif res[1] < 200 or res[1] >= 300:
+                raise exc.PyghmiException(repr(res[0]))
+            members = res[0]
+            systems = members['Members']
+            if sysurl:
+                for system in systems:
+                    if system['@odata.id'] == sysurl or system['@odata.id'].split('/')[-1] == sysurl:
+                        self.sysurl = system['@odata.id']
+                        break
+                else:
+                    raise exc.PyghmiException(
+                        'Specified sysurl not found: {0}'.format(sysurl))
             else:
-                raise exc.PyghmiException(
-                    'Specified sysurl not found: {0}'.format(sysurl))
-        else:
-            if len(systems) != 1:
-                systems = [x for x in systems if 'DPU' not in x['@odata.id']]
-            if len(systems) != 1:
-                raise exc.PyghmiException(
-                    'Multi system manager, sysurl is required parameter')
-            self.sysurl = systems[0]['@odata.id']
-        sysinfo = await self.sysinfo()
-        self.powerurl = sysinfo.get('Actions', {}).get(
-            '#ComputerSystem.Reset', {}).get('target', None)
+                if len(systems) > 1:
+                    systems = [x for x in systems if 'DPU' not in x['@odata.id']]
+                if len(systems) > 1:
+                    raise exc.PyghmiException(
+                        'Multi system manager, sysurl is required parameter')
+                if len(systems):
+                    self.sysurl = systems[0]['@odata.id']
+                else:
+                    self.sysurl = None
+            self.powerurl = self.sysinfo.get('Actions', {}).get(
+                '#ComputerSystem.Reset', {}).get('target', None)               
         return self
 
     async def _get_session_token(self, wc):
@@ -418,6 +436,15 @@ class Command(object):
         self._do_web_request(accinfo[0], userinfo, method='PATCH', etag=etag)
         return True
 
+    async def get_screenshot(self, outfile):
+        return await self.oem.get_screenshot(outfile)
+
+    async def get_ikvm_methods(self):
+        return await self.oem.get_ikvm_methods()
+
+    async def get_ikvm_launchdata(self):
+        return await self.oem.get_ikvm_launchdata()   
+
     def user_delete(self, uid):
         self.oem.user_delete(uid)
 
@@ -458,7 +485,13 @@ class Command(object):
         return self._varfwinventory
 
     async def sysinfo(self):
-        return await self._do_web_request(self.sysurl)
+        if not self.sysurl:
+            return {}
+        try:
+            return await self._do_web_request(self.sysurl)
+        except exc.RedfishError:
+            self.sysurl = None
+            return {}
 
     @property
     def bmcinfo(self):
@@ -492,10 +525,8 @@ class Command(object):
             raise exc.InvalidParameterValue(
                 "Unknown power state %s requested" % powerstate)
         powerstate = powerstates[powerstate]
-        result = self.wc.grab_json_response_with_status(
+        self._do_web_request(
             self.powerurl, {'ResetType': powerstate})
-        if result[1] < 200 or result[1] >= 300:
-            raise exc.PyghmiException(result[0])
         if wait and reqpowerstate in ('on', 'off', 'softoff', 'shutdown'):
             if reqpowerstate in ('softoff', 'shutdown'):
                 reqpowerstate = 'off'
@@ -655,39 +686,59 @@ class Command(object):
                                                'not detected on this platform')
         return self._varsetbiosurl
 
-    @property
-    def _sensormap(self):
+    async def _sensormap(self):
         if not self._varsensormap:
-            for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
-                self._mapchassissensors(chassis)
+            if self.sysinfo:
+                for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
+                    self._mapchassissensors(chassis)
+            else:  # no system, but check if this is a singular chassis
+                rootinfo = await self._do_web_request('/redfish/v1/')
+                chassiscol = rootinfo.get('Chassis', {}).get('@odata.id', '')
+                if chassiscol:
+                    chassislist = await self._do_web_request(chassiscol)
+                    if len(chassislist.get('Members', [])) == 1:
+                        self._mapchassissensors(chassislist['Members'][0])
         return self._varsensormap
 
-    def _mapchassissensors(self, chassis):
+    async def _mapchassissensors(self, chassis):
         chassisurl = chassis['@odata.id']
-        chassisinfo = self._do_web_request(chassisurl)
-        powurl = chassisinfo.get('Power', {}).get('@odata.id', '')
-        if powurl:
-            powinf = self._do_web_request(powurl)
-            for voltage in powinf.get('Voltages', []):
-                if 'Name' in voltage:
-                    self._varsensormap[voltage['Name']] = {
-                        'name': voltage['Name'], 'url': powurl,
-                        'type': 'Voltage'}
-        thermurl = chassisinfo.get('Thermal', {}).get('@odata.id', '')
-        if thermurl:
-            therminf = self._do_web_request(thermurl)
-            for fan in therminf.get('Fans', []):
-                if 'Name' in fan:
-                    self._varsensormap[fan['Name']] = {
-                        'name': fan['Name'], 'type': 'Fan',
-                        'url': thermurl}
-            for temp in therminf.get('Temperatures', []):
-                if 'Name' in temp:
-                    self._varsensormap[temp['Name']] = {
-                        'name': temp['Name'], 'type': 'Temperature',
-                        'url': thermurl}
+        chassisinfo = await self._do_web_request(chassisurl)
+        sensors = None
+        if self.oem.usegenericsensors:
+            sensors = chassisinfo.get('Sensors', {}).get('@odata.id', '')
+        if sensors:
+            sensorinf = await self._do_web_request(sensors)
+            for sensor in sensorinf.get('Members', []):
+                sensedata = await self._do_web_request(sensor['@odata.id'])
+                if 'Name' in sensedata:
+                    sensetype = sensedata.get('ReadingType', 'Unknown')
+                    self._varsensormap[sensedata['Name']] = {
+                        'name': sensedata['Name'], 'type': sensetype,
+                        'url': sensor['@odata.id'], 'generic': True}
+        else:
+            powurl = chassisinfo.get('Power', {}).get('@odata.id', '')
+            if powurl:
+                powinf = await self._do_web_request(powurl)
+                for voltage in powinf.get('Voltages', []):
+                    if 'Name' in voltage:
+                        self._varsensormap[voltage['Name']] = {
+                            'name': voltage['Name'], 'url': powurl,
+                            'type': 'Voltage'}
+            thermurl = chassisinfo.get('Thermal', {}).get('@odata.id', '')
+            if thermurl:
+                therminf = await self._do_web_request(thermurl)
+                for fan in therminf.get('Fans', []):
+                    if 'Name' in fan:
+                        self._varsensormap[fan['Name']] = {
+                            'name': fan['Name'], 'type': 'Fan',
+                            'url': thermurl}
+                for temp in therminf.get('Temperatures', []):
+                    if 'Name' in temp:
+                        self._varsensormap[temp['Name']] = {
+                            'name': temp['Name'], 'type': 'Temperature',
+                            'url': thermurl}      
         for subchassis in chassisinfo.get('Links', {}).get('Contains', []):
-            self._mapchassissensors(subchassis)
+            await self._mapchassissensors(subchassis)
 
     def _get_thermals(self, chassis):
         chassisurl = chassis['@odata.id']
@@ -795,9 +846,21 @@ class Command(object):
             raise Exception('BMC does not accept a recognized reset type')
         self._do_web_request(url, {'ResetType': action})
 
-    def set_identify(self, on=True, blink=None):
-        self._do_web_request(
-            self.sysurl,
+    async def set_identify(self, on=True, blink=None):
+        if hasattr(self.oem, 'set_identify'):
+            return self.oem.set_identify(on, blink)    
+        targurl = self.sysurl
+        if not targurl:
+            root = await self._do_web_request('/redfish/v1')
+            systemsurl = root.get('Systems', {}).get('@odata.id', None)
+            if systemsurl:
+                targurl = await self._do_web_request(systemsurl)
+                if len(targurl.get('Members', [])) == 1:
+                    targurl = targurl['Members'][0]['@odata.id']
+        if not targurl:
+            raise Exception("Unable to identify system url")        
+        await self._do_web_request(
+            targurl,
             {'IndicatorLED': 'Blinking' if blink else 'Lit' if on else 'Off'},
             method='PATCH', etag='*')
 
@@ -844,15 +907,70 @@ class Command(object):
     def set_system_configuration(self, changeset):
         return self.oem.set_system_configuration(changeset, self)
 
-    def clear_bmc_configuration(self):
+    async def get_ntp_enabled(self):
+        bmcinfo = await self._do_web_request(self._bmcurl)
+        netprotocols = bmcinfo.get('NetworkProtocol', {}).get('@odata.id', None)
+        if netprotocols:
+            netprotoinfo = await self._do_web_request(netprotocols)
+            enabled = netprotoinfo.get('NTP', {}).get('ProtocolEnabled', False)
+            return enabled
+        return False
+
+    async def set_ntp_enabled(self, enable):
+        bmcinfo = await self._do_web_request(self._bmcurl)
+        netprotocols = bmcinfo.get('NetworkProtocol', {}).get('@odata.id', None)
+        if netprotocols:
+            request = {'NTP':{'ProtocolEnabled': enable}}
+            await self._do_web_request(netprotocols, request, method='PATCH')
+            await self._do_web_request(netprotocols, cache=0)
+
+    async def get_ntp_servers(self):
+        bmcinfo = await self._do_web_request(self._bmcurl)
+        netprotocols = bmcinfo.get('NetworkProtocol', {}).get('@odata.id', None)
+        if not netprotocols:
+            return []
+        netprotoinfo = await self._do_web_request(netprotocols)
+        return netprotoinfo.get('NTP', {}).get('NTPServers', [])
+
+    async def set_ntp_server(self, server, index=None):
+        bmcinfo = await self._do_web_request(self._bmcurl)
+        netprotocols = bmcinfo.get('NetworkProtocol', {}).get('@odata.id', None)
+        currntpservers = await self.get_ntp_servers()
+        if index is None:
+            if server in currntpservers:
+                return
+            currntpservers = [server] + currntpservers
+        else:
+            if (index + 1) > len(currntpservers):
+                if not server:
+                    return
+                currntpservers.append(server)
+            else:
+                if not server:
+                    del currntpservers[index]
+                else:
+                    currntpservers[index] = server
+        request = {'NTP':{'NTPServers': currntpservers}}
+        await self._do_web_request(netprotocols, request, method='PATCH')
+        await self._do_web_request(netprotocols, cache=0)
+
+    async def clear_bmc_configuration(self):
         """Reset BMC to factory default
 
         Call appropriate function to clear BMC to factory default settings.
         In many cases, this may render remote network access impracticle or
         impossible."
         """
+        bmcinfo = await self._do_web_request(self._bmcurl)
+        rc = bmcinfo.get('Actions', {}).get('#Manager.ResetToDefaults', {})
+        actinf = rc.get('ResetType@Redfish.AllowableValues', [])
+        if 'ResetAll' in actinf: 
+            acturl = rc.get('target', None)
+            if acturl:
+                self._do_web_request(acturl, {'ResetType': 'ResetAll'})
+                return
         raise exc.UnsupportedFunctionality(
-            'Clear BMC configuration not supported in redfish yet')
+            'Clear BMC configuration not supported on this platform')
 
     async def get_system_configuration(self, hideadvanced=True):
         oem = await self.oem()
@@ -1009,7 +1127,7 @@ class Command(object):
             yield res
 
     def _extract_fwinfo(self, inf):
-        currinf = {}
+        currinf = self._oem._extract_fwinfo(inf)
         fwi, url = inf
         fwname = fwi.get('Name', 'Unknown')
         if fwname in self._fwnamemap:
@@ -1023,6 +1141,7 @@ class Command(object):
         currinf['id'] = fwi.get('Id', None)
         currinf['version'] = fwi.get('Version', 'Unknown')
         currinf['date'] = parse_time(fwi.get('ReleaseDate', ''))
+        currinf['software_id'] = fwi.get('SoftwareId', '')
         if not (currinf['version'] or currinf['date']):
             return None, None
         # TODO(Jarrod Johnson): OEM extended data with buildid
@@ -1035,6 +1154,7 @@ class Command(object):
             currinf['state'] = 'backup'
         return fwname, currinf
 
+    
     def get_inventory_descriptions(self, withids=False):
         return self.oem.get_inventory_descriptions(withids)
 
@@ -1103,7 +1223,10 @@ class Command(object):
 
     async def oem(self):
         if not self._oem:
-            await self._do_web_request(self.sysurl, cache=False)  # This is to trigger token validation and renewel
+            if self.sysurl:
+                await self._do_web_request(self.sysurl, cache=False)  # This is to trigger token validation and renewel
+            elif self._varbmcurl:
+                await self._do_web_request(self._varbmcurl, cache=False)  # This is to trigger token validation and renewel
             sysinfo = await self.sysinfo()
             self._oem = oem.get_oem_handler(
                 sysinfo, self.sysurl, self.wc, self._urlcache, self)
@@ -1113,71 +1236,8 @@ class Command(object):
     def get_description(self):
         return self.oem.get_description(self)
 
-    def get_event_log(self, clear=False):
-        bmcinfo = self._do_web_request(self._bmcurl)
-        lsurl = bmcinfo.get('LogServices', {}).get('@odata.id', None)
-        if not lsurl:
-            return
-        currtime = bmcinfo.get('DateTime', None)
-        correction = timedelta(0)
-        utz = tz.tzoffset('', 0)
-        ltz = tz.gettz()
-        if currtime:
-            currtime = parse_time(currtime)
-        if currtime:
-            now = datetime.now(utz)
-            try:
-                correction = now - currtime
-            except TypeError:
-                correction = now - currtime.replace(tzinfo=utz)
-        lurls = self._do_web_request(lsurl).get('Members', [])
-        for lurl in lurls:
-            lurl = lurl['@odata.id']
-            loginfo = self._do_web_request(lurl, cache=(not clear))
-            entriesurl = loginfo.get('Entries', {}).get('@odata.id', None)
-            if not entriesurl:
-                continue
-            logid = loginfo.get('Id', '')
-            entries = self._do_web_request(entriesurl, cache=False)
-            if clear:
-                # The clear is against the log service etag, not entries
-                # so we have to fetch service etag after we fetch entries
-                # until we can verify that the etag is consistent to prove
-                # that the clear is atomic
-                newloginfo = self._do_web_request(lurl, cache=False)
-                clearurl = newloginfo.get('Actions', {}).get(
-                    '#LogService.ClearLog', {}).get('target', '')
-                while clearurl:
-                    try:
-                        self._do_web_request(clearurl, method='POST',
-                                             payload={})
-                        clearurl = False
-                    except exc.PyghmiException as e:
-                        if 'EtagPreconditionalFailed' not in str(e):
-                            raise
-                        # This doesn't guarantee atomicity, but it mitigates
-                        # greatly.  Unfortunately some implementations
-                        # mutate the tag endlessly and we have no hope
-                        entries = self._do_web_request(entriesurl, cache=False)
-                        newloginfo = self._do_web_request(lurl, cache=False)
-            for log in entries.get('Members', []):
-                if ('Created' not in log and 'Message' not in log
-                        and 'Severity' not in log):
-                    # without any data, this log entry isn't actionable
-                    continue
-                record = {}
-                record['log_id'] = logid
-                parsedtime = parse_time(log.get('Created', ''))
-                if parsedtime:
-                    entime = parsedtime + correction
-                    entime = entime.astimezone(ltz)
-                    record['timestamp'] = entime.strftime('%Y-%m-%dT%H:%M:%S')
-                else:
-                    record['timestamp'] = log.get('Created', '')
-                record['message'] = log.get('Message', None)
-                record['severity'] = _healthmap.get(
-                    log.get('Severity', 'Warning'), const.Health.Ok)
-                yield record
+    async def get_event_log(self, clear=False):
+        return self.oem.get_event_log(clear, self)
 
     def _get_chassis_env(self, chassis):
         chassisurl = chassis['@odata.id']
@@ -1215,22 +1275,33 @@ class Command(object):
         return SensorReading(
                         None, {'name': 'Inlet Temperature'}, value=val, units='°C',
                         unavailable=unavail)
-    def get_sensor_descriptions(self):
-        for sensor in natural_sort(self._sensormap):
-            yield self._sensormap[sensor]
+    async def get_sensor_descriptions(self):
+        for sensor in natural_sort(await self._sensormap()):
+            yield (await self._sensormap())[sensor]
 
-    def get_sensor_reading(self, sensorname):
-        if sensorname not in self._sensormap:
+    async def get_sensor_reading(self, sensorname):
+        sensormap = await self._sensormap()
+        if sensorname not in sensormap:
             raise Exception('Sensor not found')
-        sensor = self._sensormap[sensorname]
-        reading = self._do_web_request(sensor['url'], cache=1)
+        sensor = sensormap[sensorname]
+        reading = await self._do_web_request(sensor['url'], cache=1)
         return self._extract_reading(sensor, reading)
 
-    def get_sensor_data(self):
-        for sensor in natural_sort(self._sensormap):
-            yield self.get_sensor_reading(sensor)
+    async def get_sensor_data(self):
+        for sensor in natural_sort(await self._sensormap()):
+            yield await self.get_sensor_reading(sensor)
 
     def _extract_reading(self, sensor, reading):
+        if sensor.get('generic', False):  # generic sensor
+            val = reading.get('Reading', None)
+            unavail = val is None
+            units = reading.get('ReadingUnits', None)
+            if units == 'Cel':
+                units = '°C'
+            if units == 'cft_i/min':
+                units = 'CFM'
+            return SensorReading(reading, None, value=val, units=units,
+                          unavailable=unavail)
         if sensor['type'] == 'Fan':
             for fan in reading['Fans']:
                 if fan['Name'] == sensor['name']:
@@ -1257,10 +1328,10 @@ class Command(object):
                         None, sensor, value=val, units='V',
                         unavailable=unavail)
 
-    def list_media(self):
-        return self.oem.list_media(self)
+    async def list_media(self):
+        return await self.oem.list_media(self)
 
-    def get_storage_configuration(self):
+    async def get_storage_configuration(self):
         """"Get storage configuration data
 
         Retrieves the storage configuration from the target.  Data is given
@@ -1271,7 +1342,7 @@ class Command(object):
 
         :return: A aiohmi.storage.ConfigSpec object describing current config
         """
-        return self.oem.get_storage_configuration()
+        return await self.oem.get_storage_configuration()
 
     def remove_storage_configuration(self, cfgspec):
         """Remove specified storage configuration from controller.
@@ -1279,7 +1350,7 @@ class Command(object):
         :param cfgspec: A aiohmi.storage.ConfigSpec describing what to remove
         :return:
         """
-        return self.oem.remove_storage_configuration(cfgspec)
+        return await self.oem.remove_storage_configuration(cfgspec)
 
     def apply_storage_configuration(self, cfgspec=None):
         """Evaluate a configuration for validity
@@ -1326,9 +1397,18 @@ class Command(object):
         if vmcoll:
             vmlist = self._do_web_request(vmcoll)
             vmurls = [x['@odata.id'] for x in vmlist.get('Members', [])]
+        suspendedxauth = False  # Don't trigger token expiry linked unmount
+        if 'X-Auth-Token' in self.wc.stdheaders:
+            suspendedxauth = True
+            del self.wc.stdheaders['X-Auth-Token']
+            self.wc.set_basic_credentials(self.username, self.password)        
         try:
             self.oem.attach_remote_media(url, username, password, vmurls)
         except exc.BypassGenericBehavior:
+            if suspendedxauth:
+                self.wc.stdheaders['X-Auth-Token'] = self.xauthtoken
+                if 'Authorization' in self.wc.stdheaders:
+                    del self.wc.stdheaders['Authorization']            
             return
         for vmurl in vmurls:
             vminfo = self._do_web_request(vmurl, cache=False)
@@ -1350,6 +1430,12 @@ class Command(object):
                     else:
                         raise
             break
+        if suspendedxauth:
+                self.wc.stdheaders['X-Auth-Token'] = self.xauthtoken
+                if 'Authorization' in self.wc.stdheaders:
+                    del self.wc.stdheaders['Authorization']    
+        for res in self.oem.list_media(self, cache=False):
+            pass          
 
     def detach_remote_media(self):
         try:
@@ -1383,6 +1469,8 @@ class Command(object):
                                                      method='PATCH')
                             else:
                                 raise
+        for res in self.oem.list_media(self, cache=False):
+            pass        
 
     def upload_media(self, filename, progress=None, data=None):
         """Upload a file to be hosted on the target BMC
@@ -1396,6 +1484,9 @@ class Command(object):
         :param progress: Optional callback for progress updates
         """
         return self.oem.upload_media(filename, progress, data)
+
+    def get_update_status(self):
+        return self.oem.get_update_status()   
 
     def update_firmware(self, file, data=None, progress=None, bank=None):
         """Send file to BMC to perform firmware update

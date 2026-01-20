@@ -119,6 +119,7 @@ def str_to_size(sizestr):
 
 
 class OEMHandler(generic.OEMHandler):
+    usegenericsensors = False
     logouturl = '/api/providers/logout'
     bmcname = 'XCC'
     ADP_URL = '/api/dataset/imm_adapters?params=pci_GetAdapters'
@@ -149,12 +150,30 @@ class OEMHandler(generic.OEMHandler):
         self.fwc = None
         self.fwo = None
 
+    async def get_screenshot(self, outfile):
+        await self.wc.grab_json_response('/api/providers/rp_screenshot')
+        url = '/download/HostScreenShot.png'
+        fd = webclient.FileDownloader(self.wc, url, outfile)
+        fd.start()
+        fd.join()
+
     def get_extended_bmc_configuration(self, fishclient, hideadvanced=True):
         immsettings = self.get_system_configuration(fetchimm=True, hideadvanced=hideadvanced)
         for setting in list(immsettings):
             if not setting.startswith('IMM.'):
                 del immsettings[setting]
         return immsettings
+
+    async def get_ikvm_methods(self):
+        return ['url']
+
+    async def get_ikvm_launchdata(self):
+        access = await self._do_web_request('/redfish/v1/Managers/1/Oem/Lenovo/RemoteControl/Actions/LenovoRemoteControlService.GetRemoteConsoleToken', {})
+        if access.get('Token', None):
+            accessinfo = {
+                'url': '/#/login?{}&context=remote&mode=multi'.format(access['Token'])
+                }
+            return accessinfo
 
     async def get_system_configuration(self, hideadvanced=True, fishclient=None,
                                  fetchimm=False):
@@ -287,13 +306,17 @@ class OEMHandler(generic.OEMHandler):
             else:
                 self.fwo[key]['new_value'] = newnewvalues
 
-    def reseat_bay(self, bay):
+    async def reseat_bay(self, bay):
         if bay != -1:
             raise pygexc.UnsupportedFunctionality(
                 'This is not an enclosure manager')
         wc = self.wc.dupe(timeout=5)
-        rsp = wc.grab_json_response_with_status(
-            '/api/providers/virt_reseat', '{}')
+        try:
+            rsp = await wc.grab_json_response_with_status(
+                '/api/providers/virt_reseat', '{}')
+        except socket.timeout:
+            # Can't be certain, but most likely a timeout'
+            return
         if rsp[1] == 500 and rsp[0] == 'Target Unavailable':
             return
         if rsp[1] != 200 or rsp[0].get('return', 1) != 0:
@@ -637,7 +660,9 @@ class OEMHandler(generic.OEMHandler):
                     skipkeys.add(fwi['key'])
                     if fwi.get('fw_status', 0) == 2:
                         bdata = {}
-                        if 'fw_version_pend' in fwi:
+                        if 'fw_pkg_version' in fwi and fwi['fw_pkg_version']:
+                            bdata['version'] = fwi['fw_pkg_version']
+                        elif 'fw_version_pend' in fwi:                       
                             bdata['version'] = fwi['fw_version_pend']
                         yield '{0} Pending Update'.format(aname), bdata
         for fwi in fdata.get('items', []):
@@ -1289,11 +1314,15 @@ class OEMHandler(generic.OEMHandler):
             # the validating phase; add a retry here so we don't exit the loop in this case
             retry = 3
             while not complete and retry > 0:
-                pgress = self._do_web_request(monitorurl, cache=False)
+                try:
+                    pgress = self._do_web_request(monitorurl, cache=False)
+                except socket.socket:
+                    pgress = None
                 if not pgress:
                     retry -= 1
                     time.sleep(3)
                     continue
+                retry = 3
                 for msg in pgress.get('Messages', []):
                     if 'Verify failed' in msg.get('Message', ''):
                         raise Exception(msg['Message'])
@@ -1315,6 +1344,8 @@ class OEMHandler(generic.OEMHandler):
                         time.sleep(3)
                 else:
                     time.sleep(3)
+            if not retry:
+                raise Exception('Falied to monitor update progress due to excessive timeouts')
             if bank == 'backup':
                 return 'complete'
             return 'pending'
@@ -1529,8 +1560,12 @@ class OEMHandler(generic.OEMHandler):
         return 'pending'
 
     def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
-        self.wc.grab_json_response('/api/providers/ffdc',
-                                   {'Generate_FFDC': 1})
+        rsp = self.wc.grab_json_response('/api/providers/ffdc',
+                                         {'Generate_FFDC': 1})
+        if rsp.get('return', 0) == 4:
+            rsp = self.wc.grab_json_response('/api/providers/ffdc',
+                                             {'Generate_FFDC': 1,
+                                              'thermal_log': 0})
         percent = 0
         while percent != 100:
             time.sleep(3)

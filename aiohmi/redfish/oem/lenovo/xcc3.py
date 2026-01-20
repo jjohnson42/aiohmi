@@ -1,5 +1,19 @@
+# Copyright 2025 Lenovo Corporation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import copy
 import json
+import aiohmi.constants as pygconst
 import aiohmi.redfish.oem.generic as generic
 import aiohmi.exceptions as pygexc
 import aiohmi.util.webclient as webclient
@@ -7,10 +21,33 @@ import os.path
 import zipfile
 
 
+class SensorReading(object):
+    def __init__(self, healthinfo, sensor=None, value=None, units=None,
+                 unavailable=False):
+        if sensor:
+            self.name = sensor['name']
+        else:
+            self.name = healthinfo['name']
+            self.health = healthinfo['health']
+            self.states = healthinfo['states']
+            self.state_ids = healthinfo.get('state_ids', None)
+        self.value = value
+        self.imprecision = None
+        self.units = units
+        self.unavailable = unavailable
+
 class OEMHandler(generic.OEMHandler):
 
     async def supports_expand(self, url):
         return True
+
+    async def get_screenshot(self, outfile):
+        wc = self.webclient.dupe()
+        self._get_session_token(wc)
+        url = '/web_download/Mini_ScreenShot.jpg'
+        fd = webclient.FileDownloader(wc, url, outfile)
+        fd.start()
+        fd.join()
 
     def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
         tsk = self._do_web_request(
@@ -47,9 +84,56 @@ class OEMHandler(generic.OEMHandler):
             progress({'phase': 'complete'})
         return savefile
 
+    async def get_ikvm_methods(self):
+        return ['openbmc', 'url']
+
+    async def get_ikvm_launchdata(self):
+        access = await self._do_web_request('/redfish/v1/Managers/1/Oem/Lenovo/RemoteControl/Actions/LenovoRemoteControlService.GetRemoteConsoleToken', {})
+        if access.get('Token', None):
+            accessinfo = {
+                'url': '/#/login?{}&context=remote&mode=multi'.format(access['Token'])
+                }
+            return accessinfo
+
     def get_system_power_watts(self, fishclient):
         powerinfo = fishclient._do_web_request('/redfish/v1/Chassis/1/Sensors/power_Sys_Power')
         return powerinfo['Reading']
+    
+    async def get_health(self, fishclient, verbose=True):
+        rsp = await self._do_web_request('/api/providers/imm_active_events')
+        summary = {'badreadings': [], 'health': pygconst.Health.Ok}
+        fallbackdata = []
+        hmap = {
+            0 : pygconst.Health.Ok,
+            3: pygconst.Health.Critical,
+            2: pygconst.Health.Warning,
+        }
+        infoevents = False
+        existingevts = set([])
+        for item in rsp.get('items', ()):
+            # while usually the ipmi interrogation shall explain things,
+            # just in case there is a gap, make sure at least the
+            # health field is accurately updated
+            itemseverity = hmap.get(item.get('Severity', 2),
+                                    pygconst.Health.Critical)
+            if itemseverity == pygconst.Health.Ok:
+                infoevents = True
+                continue
+            if (summary['health'] < itemseverity):
+                summary['health'] = itemseverity
+            evtsrc = item.get('Oem', {}).get('Lenovo', {}).get('Source', '')
+            currevt = '{}:{}'.format(evtsrc, item['Message'])
+            if currevt in existingevts:
+                continue
+            existingevts.add(currevt)
+            fallbackdata.append(SensorReading({
+                'name': evtsrc,
+                'states': [item['Message']],
+                'health': itemseverity,
+                'type': evtsrc,
+            }, ''))
+        summary['badreadings'] = fallbackdata
+        return summary   
 
     def _get_cpu_temps(self, fishclient):
         cputemps = []
@@ -205,7 +289,7 @@ class OEMHandler(generic.OEMHandler):
                 acctattribs['Oem']['Lenovo'][
                     self.oemacctmap[key.lower()]] = currval
                 if key.lower() == 'password_expiration':
-                    warntime = str(int(int(currval) * 0.08))
+                    warntime = int(int(currval) * 0.08)
                     acctattribs['Oem']['Lenovo'][
                         'PasswordExpirationWarningPeriod'] = warntime
             elif key.lower() in self.acctmap:
@@ -303,6 +387,25 @@ class OEMHandler(generic.OEMHandler):
             currsettings[setting] = val
         return currsettings, reginfo
 
+    async def get_description(self, fishclient):
+        rsp = await self._get_expanded_data('/redfish/v1/Chassis')
+        for chassis in rsp['Members']:
+            if (chassis['@odata.id'] == '/redfish/v1/Chassis/1'
+                    and chassis['ChassisType'] != 'Blade'):
+                hmm = chassis.get('HeightMm', None)
+                if hmm:
+                    return {'height': hmm/44.45}
+            if (chassis['@odata.id'] == '/redfish/v1/Chassis/Enclosure'
+                    and chassis.get('ChassisType', None) == 'Enclosure'):
+                try:
+                    slot = chassis['Location']['PartLocation']['LocationOrdinalValue']
+                    slotnum = (2 * (slot >> 4) - 1) + ((slot & 15) % 10)
+                    slotcoord = [slot >> 4, (slot & 15) - 9]
+                    return {'slot': slotnum, 'slotlabel': '{:02x}'.format(slot), 'slotcoord': slotcoord}
+                except KeyError:
+                    continue
+        return {}
+
     def upload_media(self, filename, progress=None, data=None):
         wc = self.webclient
         uploadthread = webclient.FileUploader(
@@ -329,7 +432,14 @@ class OEMHandler(generic.OEMHandler):
         if progress:
             progress({'phase': 'complete'})
 
-    def get_firmware_inventory(self, components, fishclient):
+    async def get_firmware_inventory(self, components, fishclient):
+        sfs = await fishclient._do_web_request('/api/providers/system_firmware_status')
+        pendingscm = sfs.get('fpga_scm_pending_build', None)
+        pendinghpm = sfs.get('fpga_hpm_pending_build', None)
+        if pendingscm == '*':
+            pendingscm = None
+        if pendinghpm == '*':
+            pendinghpm = None    
         fwlist = await fishclient._do_web_request(fishclient._fwinventory + '?$expand=.')
         fwlist = copy.deepcopy(fwlist.get('Members', []))
         self._fwnamemap = {}
@@ -349,9 +459,11 @@ class OEMHandler(generic.OEMHandler):
             swid = redres.get('SoftwareId', '')
             buildid = ''
             version = redres.get('Version', None)
-            if swid.startswith('FPGA-') or swid.startswith('UEFI-') or swid.startswith('BMC-'):
-                buildid = swid.split('-')[1] + version.split('-')[0]
-                version = '-'.join(version.split('-')[1:])
+            for prefix in ['FPGA-', 'UEFI-', 'BMC-', 'LXPM-', 'DRVWN-', 'DRVLN-', 'LXUM']:
+                if swid.startswith(prefix):
+                    buildid = swid.split('-')[1] + version.split('-')[0]
+                    version = '-'.join(version.split('-')[1:])
+                    break
             if version:
                 redres['Version'] = version
             cres = fishclient._extract_fwinfo(res)
@@ -360,6 +472,14 @@ class OEMHandler(generic.OEMHandler):
             if buildid:
                 cres[1]['build'] = buildid
             yield cres
+            if cres[0] == 'SCM-FPGA' and pendingscm:
+                yield 'SCM-FPGA Pending', {
+                    'Name': 'SCM-FPGA Pending',
+                    'build': pendingscm}
+            elif cres[0] == 'HPM-FPGA' and pendinghpm:
+                yield 'HPM-FPGA Pending', {
+                    'Name': 'HPM-FPGA Pending',
+                    'build': pendinghpm}
         raise pygexc.BypassGenericBehavior()
 
 

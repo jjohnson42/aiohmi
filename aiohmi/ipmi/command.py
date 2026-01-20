@@ -636,6 +636,14 @@ class Command(object):
         return sel.EventHandler(self.init_sdr(), self).decode_pet(specifictrap,
                                                                   petdata)
 
+    async def get_ikvm_methods(self):
+        await self.oem_init()
+        return await self._oem.get_ikvm_methods()
+
+    async def get_ikvm_launchdata(self):
+        await self.oem_init()
+        return await self._oem.get_ikvm_launchdata()
+
     def get_inventory_descriptions(self):
         """Retrieve list of things that could be inventoried
 
@@ -1631,6 +1639,10 @@ class Command(object):
         r['privilege_level'] = privilege_levels[data[1] & 0b00001111]
         return r
 
+    def get_screenshot(self, outfile):
+        self.oem_init()
+        return self._oem.get_screenshot(outfile)
+
     def get_channel_info(self, channel=None):
         """Get channel info
 
@@ -2190,6 +2202,10 @@ class Command(object):
         """Get graphical console launcher"""
         self.oem_init()
         return self._oem.get_graphical_console()
+ 
+    def get_update_status(self):
+        self.oem_init()
+        return self._oem.get_update_status()
 
     def update_firmware(self, filename, data=None, progress=None, bank=None):
         """Send file to BMC to perform firmware update

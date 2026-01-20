@@ -16,6 +16,7 @@ import aiohmi.redfish.oem.generic as generic
 from aiohmi.redfish.oem.lenovo import tsma
 from aiohmi.redfish.oem.lenovo import xcc
 from aiohmi.redfish.oem.lenovo import xcc3
+from aiohmi.redfish.oem.lenovo import smm3
 
 
 def get_handler(sysinfo, sysurl, webclient, cache, cmd):
@@ -45,5 +46,13 @@ def get_handler(sysinfo, sysurl, webclient, cache, cmd):
         if 'hdd' in leninv and 'hostMAC' in leninv and 'backPlane' in leninv:
             return tsma.TsmHandler(sysinfo, sysurl, webclient, cache,
                                    gpool=cmd._gpool)
-        return generic.OEMHandler(sysinfo, sysurl, webclient, cache,
-                                  gpool=cmd._gpool)
+    try:
+        devdesc = await webclient.grab_json_response_with_status('/DeviceDescription.json')
+        if devdesc[1] == 200:
+            if devdesc[0]['type'].lower() == 'lenovo-smm3':
+                return smm3.OEMHandler(sysinfo, sysurl, webclient, cache,
+                                      gpool=cmd._gpool)
+    except Exception:
+        pass
+            return generic.OEMHandler(sysinfo, sysurl, webclient, cache,
+                                    gpool=cmd._gpool)

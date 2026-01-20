@@ -213,11 +213,25 @@ class OEMHandler(generic.OEMHandler):
             rsp = self.ipmicmd.xraw_command(0x32, command=0x62, data=(chan,))
             self._mrethidx = rsp['data'][0]
         return self._mrethidx
+ 
+    def get_screenshot(self, outfile):
+        if self.has_xcc:
+            return self.immhandler.get_screenshot(outfile)
+        return {}
 
     def remove_storage_configuration(self, cfgspec):
         if self.has_xcc:
             return self.immhandler.remove_storage_configuration(cfgspec)
         return super(OEMHandler, self).remove_storage_configuration()
+
+    async def get_ikvm_methods(self):
+        if self.has_xcc:
+            return ['url']
+
+    async def get_ikvm_launchdata(self):
+        if self.has_xcc:
+            return await self.immhandler.get_ikvm_launchdata()
+        return {}
 
     def clear_storage_arrays(self):
         if self.has_xcc:
@@ -1175,6 +1189,13 @@ class OEMHandler(generic.OEMHandler):
                                                imagename, domain, path, host)
                 else:
                     raise
+
+    def get_update_status(self):
+        if self.is_fpc or self.has_tsma:
+            return "ready"
+        if self.has_xcc:
+            return self.immhandler.get_update_status()
+        return super(OEMHandler, self).get_update_status()
 
     def update_firmware(self, filename, data=None, progress=None, bank=None):
         if self.has_xcc:

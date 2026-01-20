@@ -43,13 +43,23 @@ class OEMHandler(object):
         :return: dictionary with 'height' and 'slot' members
         """
         return {}
+    
+    def get_screenshot(self, outfile):
+        return {}    
 
     def get_system_power_watts(self, ipmicmd):
         # Use DCMI getpower reading command
         rsp = ipmicmd.xraw_command(netfn=0x2c, command=2, data=(0xdc, 1, 0, 0))
         wattage = struct.unpack('<H', rsp['data'][1:3])[0]
-        return wattage
-    
+        return wattage   
+
+    async def get_ikvm_methods(self):
+        return []
+
+    async def get_ikvm_launchdata(self):
+        # no standard ikvm behavior, must be oem defined
+        return {}
+
     def get_average_processor_temperature(self, ipmicmd):
         # DCMI suggests preferrence for 0x37 ('Air inlet')
         # If not that, then 0x40 ('Air inlet')
@@ -334,13 +344,17 @@ class OEMHandler(object):
         raise exc.UnsupportedFunctionality(
             'Remote storage configuration not supported on this platform')
 
+    def get_update_status(self):
+        raise exc.UnsupportedFunctionality(
+            'Firmware update not supported on this platform')
+
     def update_firmware(self, filename, data=None, progress=None, bank=None):
         raise exc.UnsupportedFunctionality(
             'Firmware update not supported on this platform')
 
     def reseat_bay(self, bay):
         raise exc.UnsupportedFunctionality(
-            'Bay reseat not supported on this platform')
+            'Reseat not supported on this platform')
 
     def get_graphical_console(self):
         """Get graphical console launcher"""

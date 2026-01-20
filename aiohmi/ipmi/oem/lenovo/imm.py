@@ -617,7 +617,9 @@ class IMMClient(object):
                         skipkeys.add(fwi['key'])
                         if fwi.get('fw_status', 0) == 2:
                             bdata = {}
-                            if 'fw_version_pend' in fwi:
+                            if 'fw_pkg_version' in fwi and fwi['fw_pkg_version']:
+                                bdata['version'] = fwi['fw_pkg_version']
+                            elif 'fw_version_pend' in fwi:                           
                                 bdata['version'] = fwi['fw_version_pend']
                             yield '{0} Pending Update'.format(aname), bdata
         for fwi in fwu.get('items', []):
@@ -914,6 +916,13 @@ class XCCClient(IMMClient):
         self.ipmicmd.ipmi_session.register_keepalive(self.keepalive, None)
         self.adp_referer = None
 
+    async def get_screenshot(self, outfile):
+        await self.wc.grab_json_response('/api/providers/rp_screenshot')
+        url = '/download/HostScreenShot.png'
+        fd = webclient.FileDownloader(self.wc, url, outfile)
+        fd.start()
+        fd.join()
+
     def get_user_privilege_level(self, uid):
         uid = uid - 1
         accurl = '/redfish/v1/AccountService/Accounts/{0}'.format(uid)
@@ -922,6 +931,18 @@ class XCCClient(IMMClient):
             return accinfo.get('RoleId', None)
         return None
 
+    async def get_ikvm_methods(self):
+        return ['url']
+
+    async def get_ikvm_launchdata(self):
+        access = await self.grab_redfish_response_with_status('/redfish/v1/Managers/1/Oem/Lenovo/RemoteControl/Actions/LenovoRemoteControlService.GetRemoteConsoleToken', {})
+        if access[0].get('Token', None):
+            accessinfo = {
+                'url': '/#/login?{}&context=remote&mode=multi'.format(access[0]['Token'])
+                }
+            return accessinfo
+        return {}
+    
     def set_user_access(self, uid, privilege_level):
         uid = uid - 1
         role = None
@@ -938,10 +959,13 @@ class XCCClient(IMMClient):
                 '/redfish/v1/AccountService/Accounts/{0}'.format(uid),
                 {'RoleId': role}, method='PATCH')
 
-    def reseat(self):
+    async def reseat(self):
         wc = self.wc.dupe(timeout=5)
-        rsp = wc.grab_json_response_with_status(
-            '/api/providers/virt_reseat', '{}')
+        try:
+            rsp = await wc.grab_json_response_with_status(
+                '/api/providers/virt_reseat', '{}')
+        except socket.timeout:
+            return # probably reseated itself and unable to reply        
         if rsp[1] == 500 and rsp[0] == 'Target Unavailable':
             return
         if rsp[1] != 200 or rsp[0].get('return', 1) != 0:
@@ -1277,8 +1301,14 @@ class XCCClient(IMMClient):
         return True
 
     def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
-        self.wc.grab_json_response('/api/providers/ffdc',
-                                   {'Generate_FFDC': 1})
+        result = self.wc.grab_json_response('/api/providers/ffdc',
+                                            {'Generate_FFDC_status': 1})
+        rsp = self.wc.grab_json_response('/api/providers/ffdc',
+                                         {'Generate_FFDC': 1})
+        if rsp.get('return', 0) == 4:
+            rsp = self.wc.grab_json_response('/api/providers/ffdc',
+                                             {'Generate_FFDC': 1,
+                                              'thermal_log': 0})        
         percent = 0
         while percent != 100:
             ipmisession.Session.pause(3)
@@ -2070,14 +2100,18 @@ class XCCClient(IMMClient):
             # the validating phase; add a retry here so we don't exit the loop in this case
             retry = 3
             while not complete and retry > 0:
-                pgress, status = self.grab_redfish_response_with_status(
-                    monitorurl)
+                try:
+                    pgress, status = self.grab_redfish_response_with_status(
+                        monitorurl)
+                except socket.timeout:
+                    pgress = None                
                 if status < 200 or status >= 300:
                     raise Exception(pgress)
                 if not pgress:
                     retry -= 1
                     ipmisession.Session.pause(3)
                     continue
+                retry = 3
                 for msg in pgress.get('Messages', []):
                     if 'Verify failed' in msg.get('Message', ''):
                         raise Exception(msg['Message'])
@@ -2098,6 +2132,8 @@ class XCCClient(IMMClient):
                         ipmisession.Session.pause(3)
                 else:
                     ipmisession.Session.pause(3)
+            if not retry:
+                raise Exception('Falied to monitor update progress due to excessive timeouts')            
             if bank == 'backup':
                 return 'complete'
             return 'pending'
@@ -2111,7 +2147,14 @@ class XCCClient(IMMClient):
 
     def set_custom_user_privilege(self, uid, privilege):
         return self.set_user_access(self, uid, privilege)
-       
+
+    def get_update_status(self):
+        upd = self.grab_redfish_response_emptyonerror('/redfish/v1/UpdateService')
+        health = upd.get('Status', {}).get('Health', 'bod')
+        if health == 'OK':
+            return 'ready'
+        return 'unavailable'       
+
     def update_firmware(self, filename, data=None, progress=None, bank=None):
         usd = self.grab_redfish_response_emptyonerror(
             '/redfish/v1/UpdateService')
