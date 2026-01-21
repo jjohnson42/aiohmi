@@ -556,84 +556,86 @@ class IMMClient(object):
     def fetch_psu_firmware(self):
         return []
 
-    def fetch_agentless_firmware(self):
+    def fetch_agentless_firmware(self, needdisk=True, needadp=True):
         skipkeys = set([])
-        cd = self.get_cached_data('lenovo_cached_adapters_fu')
-        if cd:
-            adapterdata, fwu = cd
-        else:
-            adapterdata = None
-        if not adapterdata:
-            if self.updating:
-                raise pygexc.TemporaryError(
-                    'Cannot read extended inventory during firmware update')
-            if self.wc:
-                adapterdata = self.wc.grab_json_response(
-                    self.ADP_URL, referer=self.adp_referer)
-                if self.ADP_FU_URL:
-                    fwu = self.wc.grab_json_response(
-                        self.ADP_FU_URL, referer=self.adp_referer)
-                else:
-                    fwu = {}
-                if adapterdata:
-                    self.datacache['lenovo_cached_adapters_fu'] = (
-                        (adapterdata, fwu), util._monotonic_time())
-        if adapterdata and 'items' in adapterdata:
-            anames = {}
-            for adata in adapterdata['items']:
-                aname = adata[self.ADP_NAME]
-                if aname in anames:
-                    anames[aname] += 1
-                    aname = '{0} {1}'.format(aname, anames[aname])
-                else:
-                    anames[aname] = 1
-                donenames = set([])
-                for fundata in adata[self.ADP_FUN]:
-                    fdata = fundata.get('firmwares', ())
-                    for firm in fdata:
-                        fname = firm['firmwareName'].rstrip()
-                        if '.' in fname:
-                            fname = firm['description'].rstrip()
-                        if fname in donenames:
-                            # ignore redundant entry
-                            continue
-                        if not fname:
-                            continue
-                        donenames.add(fname)
-                        bdata = {}
-                        if 'versionStr' in firm and firm['versionStr']:
-                            bdata['version'] = firm['versionStr']
-                        if ('releaseDate' in firm
-                                and firm['releaseDate']
-                                and firm['releaseDate'] != 'N/A'):
-                            try:
-                                bdata['date'] = self._parse_builddate(
-                                    firm['releaseDate'])
-                            except ValueError:
-                                pass
-                        yield '{0} {1}'.format(aname, fname), bdata
-                for fwi in fwu.get('items', []):
-                    if fwi.get('key', -1) == adata.get('key', -2):
-                        skipkeys.add(fwi['key'])
-                        if fwi.get('fw_status', 0) == 2:
+        if needadp:
+            cd = self.get_cached_data('lenovo_cached_adapters_fu')
+            if cd:
+                adapterdata, fwu = cd
+            else:
+                adapterdata = None
+            if not adapterdata:
+                if self.updating:
+                    raise pygexc.TemporaryError(
+                        'Cannot read extended inventory during firmware update')
+                if self.wc:
+                    adapterdata = self.wc.grab_json_response(
+                        self.ADP_URL, referer=self.adp_referer)
+                    if self.ADP_FU_URL:
+                        fwu = self.wc.grab_json_response(
+                            self.ADP_FU_URL, referer=self.adp_referer)
+                    else:
+                        fwu = {}
+                    if adapterdata:
+                        self.datacache['lenovo_cached_adapters_fu'] = (
+                            (adapterdata, fwu), util._monotonic_time())
+            if adapterdata and 'items' in adapterdata:
+                anames = {}
+                for adata in adapterdata['items']:
+                    aname = adata[self.ADP_NAME]
+                    if aname in anames:
+                        anames[aname] += 1
+                        aname = '{0} {1}'.format(aname, anames[aname])
+                    else:
+                        anames[aname] = 1
+                    donenames = set([])
+                    for fundata in adata[self.ADP_FUN]:
+                        fdata = fundata.get('firmwares', ())
+                        for firm in fdata:
+                            fname = firm['firmwareName'].rstrip()
+                            if '.' in fname:
+                                fname = firm['description'].rstrip()
+                            if fname in donenames:
+                                # ignore redundant entry
+                                continue
+                            if not fname:
+                                continue
+                            donenames.add(fname)
                             bdata = {}
-                            if 'fw_pkg_version' in fwi and fwi['fw_pkg_version']:
-                                bdata['version'] = fwi['fw_pkg_version']
-                            elif 'fw_version_pend' in fwi:                           
-                                bdata['version'] = fwi['fw_version_pend']
-                            yield '{0} Pending Update'.format(aname), bdata
-        for fwi in fwu.get('items', []):
-            if fwi.get('key', -1) > 0 and fwi['key'] not in skipkeys:
-                bdata = {}
-                bdata['version'] = fwi['fw_version']
-                yield fwi['adapterName'], bdata
-                if fwi.get('fw_status', 0) == 2:
+                            if 'versionStr' in firm and firm['versionStr']:
+                                bdata['version'] = firm['versionStr']
+                            if ('releaseDate' in firm
+                                    and firm['releaseDate']
+                                    and firm['releaseDate'] != 'N/A'):
+                                try:
+                                    bdata['date'] = self._parse_builddate(
+                                        firm['releaseDate'])
+                                except ValueError:
+                                    pass
+                            yield '{0} {1}'.format(aname, fname), bdata
+                    for fwi in fwu.get('items', []):
+                        if fwi.get('key', -1) == adata.get('key', -2):
+                            skipkeys.add(fwi['key'])
+                            if fwi.get('fw_status', 0) == 2:
+                                bdata = {}
+                                if 'fw_pkg_version' in fwi and fwi['fw_pkg_version']:
+                                    bdata['version'] = fwi['fw_pkg_version']
+                                elif 'fw_version_pend' in fwi:
+                                    bdata['version'] = fwi['fw_version_pend']
+                                yield '{0} Pending Update'.format(aname), bdata
+            for fwi in fwu.get('items', []):
+                if fwi.get('key', -1) > 0 and fwi['key'] not in skipkeys:
                     bdata = {}
-                    if 'fw_version_pend' in fwi:
-                        bdata['version'] = fwi['fw_version_pend']
-                    yield '{0} Pending Update'.format(fwi['adapterName']), bdata
-        for disk in self.disk_inventory():
-            yield disk
+                    bdata['version'] = fwi['fw_version']
+                    yield fwi['adapterName'], bdata
+                    if fwi.get('fw_status', 0) == 2:
+                        bdata = {}
+                        if 'fw_version_pend' in fwi:
+                            bdata['version'] = fwi['fw_version_pend']
+                        yield '{0} Pending Update'.format(fwi['adapterName']), bdata
+        if needdisk:
+            for disk in self.disk_inventory():
+                yield disk
         self.weblogout()
 
     def disk_inventory(self, mode=0):
@@ -829,11 +831,13 @@ class IMMClient(object):
         self.weblogout()
         return hwmap
 
-    def get_firmware_inventory(self, bmcver, components):
+    def get_firmware_inventory(self, bmcver, components, category):
         # First we fetch the system firmware found in imm properties
         # then check for agentless, if agentless, get adapter info using
         # https, using the caller TLS verification scheme
         components = set(components)
+        if 'core' in components:
+            category = 'core'        
         if not components or set(('imm', 'xcc', 'bmc', 'core')) & components:
             rsp = self.ipmicmd.xraw_command(netfn=0x3a, command=0x50)
             immverdata = self.parse_imm_buildinfo(rsp['data'])
@@ -1808,8 +1812,12 @@ class XCCClient(IMMClient):
         # First we fetch the system firmware found in imm properties
         # then check for agentless, if agentless, get adapter info using
         # https, using the caller TLS verification scheme
+        if 'core' in components:
+            category = 'core'
+        if not category:
+            category = 'all'        
         components = set(components)
-        if (not components
+        if category in ('all', 'core') and (not components
                 or set(('core', 'imm', 'bmc', 'xcc')) & components):
             rsp = self.ipmicmd.xraw_command(netfn=0x3a, command=0x50)
             immverdata = self.parse_imm_buildinfo(rsp['data'])
@@ -1847,7 +1855,7 @@ class XCCClient(IMMClient):
                 'date': '/v2/ibmc/dm/fw/imm3/primary_pending_build_date'})
             if bdata:
                 yield '{0} Pending Update'.format(self.bmcname), bdata
-        if not components or set(('core', 'uefi', 'bios')) & components:
+         if category in ('all', 'core') and not components or set(('core', 'uefi', 'bios')) & components:
             bdata = self.fetch_grouped_properties({
                 'build': '/v2/bios/build_id',
                 'version': '/v2/bios/build_version',
@@ -1860,7 +1868,7 @@ class XCCClient(IMMClient):
                 'build': '/v2/bios/pending_build_id'})
             if bdata:
                 yield 'UEFI Pending Update', bdata
-        if not components or set(('lxpm', 'core')) & components:
+        if category in ('all', 'core') and not components or set(('lxpm', 'core')) & components:
             bdata = self.fetch_grouped_properties({
                 'build': '/v2/tdm/build_id',
                 'version': '/v2/tdm/build_version',
@@ -1881,7 +1889,7 @@ class XCCClient(IMMClient):
             })
             if bdata:
                 yield 'LXPM Linux Driver Bundle', bdata
-        if not components or set(('lxum', 'core')):
+        if category in ('all', 'core') and not components or set(('lxpm', 'core')) & components:
             sysinf = self.wc.grab_json_response('/api/dataset/sys_info')
             for item in sysinf.get('items', {}):
                 for firm in item.get('firmware', []):
@@ -1892,7 +1900,7 @@ class XCCClient(IMMClient):
                     }
                     if firm['type'] == 10:
                         yield ('LXUM', firminfo)
-        if not components or set(('core', 'fpga')) in components:
+        if category in ('all', 'core') and (not components or set(('core', 'fpga')) in components):
             try:
                 fpga = self.ipmicmd.xraw_command(netfn=0x3a, command=0x6b,
                                                  data=(0,))
@@ -1902,11 +1910,12 @@ class XCCClient(IMMClient):
             except pygexc.IpmiException as ie:
                 if ie.ipmicode != 193:
                     raise
-        if (not components or components - set((
-                'core', 'uefi', 'bios', 'xcc', 'bmc', 'imm', 'fpga',
-                'lxpm'))):
-            for firm in self.fetch_agentless_firmware():
-                yield firm
+        needdiskfirmware = category in ('all', 'disks')
+        needadapterfirmware = category in ('all', 'adapters')
+        needpsufirmware = category in ('all', 'misc')
+        for firm in self.fetch_agentless_firmware(needdisk=needdiskfirmware, needadp=needadapterfirmware):
+            yield firm
+        if needpsufirmware:        
             for firm in self.fetch_psu_firmware():
                 yield firm
 
@@ -2083,13 +2092,14 @@ class XCCClient(IMMClient):
                               'progress': 100 * wc.get_upload_progress()})
             if uploadthread.rspstatus >= 300 or uploadthread.rspstatus < 200:
                 rsp = uploadthread.rsp
-                errmsg = ''
+                errmsg = f'Upload failed with HTTP status {uploadthread.rspstatus}'
                 try:
                     rsp = json.loads(rsp)
                     errmsg = (
                         rsp['error']['@Message.ExtendedInfo'][0]['Message'])
-                except Exception:
-                    raise Exception(uploadthread.rsp)
+                except Exception:                    
+                    errmsg = errmsg + ': ' + str(rsp)
+                    raise Exception(errmsg)                
                 raise Exception(errmsg)
             rsp = json.loads(uploadthread.rsp)
             monitorurl = rsp['@odata.id']

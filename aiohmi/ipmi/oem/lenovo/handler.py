@@ -843,7 +843,7 @@ class OEMHandler(generic.OEMHandler):
                 return False
         return False
 
-    async def get_oem_firmware(self, bmcver, components):
+    async def get_oem_firmware(self, bmcver, components, category):
         if self.has_tsm or self.has_ami or self.has_asrock:
             command = firmware.get_categories()["firmware"]
             fw_cmd = self.get_cmd_type("firmware", command)
@@ -866,7 +866,7 @@ class OEMHandler(generic.OEMHandler):
                                      bios_versions,
                                      self.has_asrock)
         elif await self.has_imm():
-            return self.immhandler.get_firmware_inventory(bmcver, components)
+            return self.immhandler.get_firmware_inventory(bmcver, components, category)
         elif await self.is_fpc():
             return nextscale.get_fpc_firmware(bmcver, self.ipmicmd,
                                               self._fpc_variant)

@@ -821,6 +821,12 @@ class Command(object):
         fetchdata = fetched['data']
         if bytearray(fetchdata)[0] != 17:
             return None
+        if param == 0x14:
+            vlaninfo = struct.unpack('<H', fetchdata[1:])[0]
+            if vlaninfo & 0x8000 == 0x8000:
+                return vlaninfo & 0xfff
+            else:
+                return 'off'      
         if len(fetchdata) == 5:  # IPv4 address
             if prefixlen:
                 return _mask_to_cidr(fetchdata[1:])
@@ -915,7 +921,7 @@ class Command(object):
         return retdata
 
     async def set_net_configuration(self, ipv4_address=None, ipv4_configuration=None,
-                              ipv4_gateway=None, channel=None):
+                              ipv4_gateway=None, vlan_id=None, channel=None):
         """Set network configuration data.
 
         Apply desired network configuration data, leaving unspecified
@@ -929,7 +935,7 @@ class Command(object):
         :param channel:  LAN channel to configure, defaults to autodetect
         """
         if (ipv4_address is None and ipv4_configuration is None
-                and ipv4_gateway is None):
+                and ipv4_gateway is None and vlan_id is None):
             return
         if channel is None:
             channel = self.get_network_channel()
@@ -956,6 +962,12 @@ class Command(object):
         if ipv4_gateway is not None:
             cmddata = bytearray((channel, 12)) + socket.inet_aton(ipv4_gateway)
             self.xraw_command(netfn=0xc, command=1, data=cmddata)
+        if vlan_id in ('off', 0, '0'):
+            cmddata = bytearray((channel, 0x14, 0, 0))
+            self.xraw_command(netfn=0xc, command=1, data=cmddata)
+        elif vlan_id is not None:
+            cmddata = bytearray((channel, 0x14)) + struct.pack('<H', int(vlan_id) | 0x8000)
+            self.xraw_command(netfn=0xc, command=1, data=cmddata)        
 
     def get_storage_configuration(self):
         """"Get storage configuration data
@@ -1050,6 +1062,7 @@ class Command(object):
             retdata['ipv4_gateway_mac'] = self._fetch_lancfg_param(channel, 13)
             retdata['ipv4_backup_gateway_mac'] = self._fetch_lancfg_param(
                 channel, 15)
+        retdata['vlan_id'] = self._fetch_lancfg_param(channel, 0x14)
         self.oem_init()
         self._oem.add_extra_net_configuration(retdata, channel)
         return retdata
@@ -2145,14 +2158,14 @@ class Command(object):
 
         return True
 
-    def get_firmware(self, components=()):
+    def get_firmware(self, components=(), category=None):
         """Retrieve OEM Firmware information"""
 
         self.oem_init()
         mcinfo = self.xraw_command(netfn=6, command=1)
         major, minor = struct.unpack('BB', mcinfo['data'][2:4])
         bmcver = '{0}.{1}'.format(major, hex(minor)[2:])
-        return self._oem.get_oem_firmware(bmcver, components)
+        return self._oem.get_oem_firmware(bmcver, components, category)
 
     def get_capping_enabled(self):
         """Get PSU based power capping status

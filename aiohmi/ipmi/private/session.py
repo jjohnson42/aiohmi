@@ -388,6 +388,10 @@ class Session(object):
                 tmpsocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         else:
             tmpsocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            tmpsocket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 16777216)
+        except Exception:
+            pass        
         if server is None:
             # Rather than wait until send() to bind, bind now so that we have
             # a port number allocated no matter what

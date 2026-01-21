@@ -281,7 +281,7 @@ class OEMHandler(object):
         fru['oem_parser'] = None
         return fru
 
-    def get_oem_firmware(self, bmcver, components):
+    def get_oem_firmware(self, bmcver, components, category):
         """Get Firmware information."""
 
         # Here the bmc version is passed into the OEM handler, to allow

@@ -21,6 +21,7 @@ import copy
 import gzip
 import io
 import json
+import os
 import socket
 import ssl
 import threading
@@ -107,7 +108,9 @@ class FileDownloader(threading.Thread):
             self.exc = e
 
 
-def get_upload_form(filename, data, formname, otherfields):
+def get_upload_form(filename, data, formname, otherfields, boundary=BND):
+    if not boundary:
+        boundary = base64.b64encode(os.urandom(54))[:70]    
     ffilename = filename.split('/')[-1]
     if not formname:
         formname = ffilename
@@ -125,18 +128,18 @@ def get_upload_form(filename, data, formname, otherfields):
             if isinstance(tfield, dict):
                 tfield = json.dumps(tfield)
                 xtra = '\r\nContent-Type: application/json'
-            form += (b'--' + BND
+            form += (b'--' + boundary
                      + '\r\nContent-Disposition: form-data; '
                        'name="{0}"{1}\r\n\r\n{2}\r\n'.format(
                            ofield, xtra, tfield).encode('utf-8'))
-        form += (b'--' + BND
+        form += (b'--' + boundary
                 + '\r\nContent-Disposition: form-data; '
                   'name="{0}"; filename="{1}"\r\n'.format(
                       formname, ffilename).encode('utf-8'))
         form += b'Content-Type: application/octet-stream\r\n\r\n' + data
-        form += b'\r\n--' + BND + b'--\r\n'
-        uploadforms[filename] = form
-        return form
+        form += b'\r\n--' + boundary + b'--\r\n'
+        uploadforms[filename] = form, boundary
+        return uploadforms[filename]
 
 
 class WebConnection:
@@ -293,6 +296,7 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         self.broken = False
         self.thehost = host
         self.theport = port
+        self._upbuffer = None
         try:
             httplib.HTTPConnection.__init__(self, host, port, strict=strict,
                                             **kwargs)
@@ -471,11 +475,12 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
             data = open(filename, 'rb')
         ulhdrs = self.stdheaders.copy()
         if formwrap:
-            self._upbuffer = io.BytesIO(get_upload_form(
-                filename, data, formname, otherfields))
-            ulhdrs['Content-Type'] = b'multipart/form-data; boundary=' + BND
-            ulhdrs['Content-Length'] = len(uploadforms[filename])
-            self.ulsize = len(uploadforms[filename])
+            guf = get_upload_form(
+                filename, data, formname, otherfields, boundary=None)
+            self._upbuffer = io.BytesIO(guf[0])
+            ulhdrs['Content-Type'] = b'multipart/form-data; boundary=' + guf[1]
+            ulhdrs['Content-Length'] = len(uploadforms[filename][0])
+            self.ulsize = len(uploadforms[filename][0])
         else:
             canseek = True
             try:
@@ -518,6 +523,8 @@ class SecureHTTPConnection(httplib.HTTPConnection, object):
         return body
 
     def get_upload_progress(self):
+        if self._upbuffer is None:
+            return 0.0
         return float(self._upbuffer.tell()) / float(self.ulsize)
 
     def request(self, method, url, body=None, headers=None, referer=None):

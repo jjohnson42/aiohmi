@@ -28,7 +28,7 @@ from aiohmi.util.parse import parse_time
 from datetime import datetime
 from datetime import timedelta
 from dateutil import tz
-
+import socket
 
 class SensorReading(object):
     def __init__(self, healthinfo, sensor=None, value=None, units=None,
@@ -383,13 +383,19 @@ class OEMHandler(object):
             summary['badreadings'].append(unkinf)
         return summary
 
-    def user_delete(self, uid):
+    def user_delete(self, uid, fishclient):
         # Redfish doesn't do so well with Deleting users either...
         # Blanking the username seems to be the convention
         # First, set a bogus password in case the implementation does honor
         # blank user, at least render such an account harmless
-        self.set_user_password(uid, base64.b64encode(os.urandom(15)))
-        self.set_user_name(uid, '')
+        try:
+            accinfo = fishclient._account_url_info_by_id(uid)
+            if not accinfo:
+                raise Exception("No such account found")
+            self._do_web_request(accinfo[0], method='DELETE')
+        except Exception: # fall back to old ipmi-like behavior for such implementations
+            fishclient.set_user_password(uid, base64.b64encode(os.urandom(15)))
+            fishclient.set_user_name(uid, '')        
         return True
 
     def set_bootdev(self, bootdev, persist=False, uefiboot=None,
@@ -662,7 +668,7 @@ class OEMHandler(object):
     def _extract_fwinfo(self, inf):
         return {}
 
-    def get_firmware_inventory(self, components, fishclient):
+    def get_firmware_inventory(self, components, fishclient, category=None):
         return []
 
     def set_credentials(self, username, password):
@@ -1068,23 +1074,7 @@ class OEMHandler(object):
 
     def update_firmware(self, filename, data=None, progress=None, bank=None, otherfields=()):
         # disable cache to make sure we trigger the token renewal logic if needed
-        usd = self._do_web_request('/redfish/v1/UpdateService', cache=False)
-
-        upurl = usd.get('MultipartHttpPushUri', None)
-        ismultipart = True
-        if not upurl:
-            ismultipart = False
-            if usd.get('HttpPushUriTargetsBusy', False):
-                raise exc.TemporaryError('Cannot run multtiple updates to '
-                                            'same target concurrently')
-            try:
-                upurl = usd['HttpPushUri']
-            except KeyError:
-                raise exc.UnsupportedFunctionality('Redfish firmware update only supported for implementations with push update upport')
-            if 'HttpPushUriTargetsBusy' in usd:
-                self._do_web_request(
-                    '/redfish/v1/UpdateService',
-                    {'HttpPushUriTargetsBusy': True}, method='PATCH')
+        usd, upurl, ismultipart = self.retrieve_firmware_upload_url()
         try:
             uploadthread = webclient.FileUploader(
                 self.webclient, upurl, filename, data, formwrap=ismultipart,
@@ -1100,17 +1090,29 @@ class OEMHandler(object):
             if (uploadthread.rspstatus >= 300
                     or uploadthread.rspstatus < 200):
                 rsp = uploadthread.rsp
-                errmsg = ''
+                errmsg = f'Update attempt resulted in response status {uploadthread.rspstatus}'
                 try:
                     rsp = json.loads(rsp)
                     errmsg = (
                         rsp['error'][
                             '@Message.ExtendedInfo'][0]['Message'])
                 except Exception:
-                    raise Exception(uploadthread.rsp)
+                    errmsg = errmsg + ': ' + repr(rsp)
+                    raise Exception(errmsg)
                 raise Exception(errmsg)
+            return self.continue_update(uploadthread, progress)
+        finally:
+            if 'HttpPushUriTargetsBusy' in usd:
+                self._do_web_request(
+                    '/redfish/v1/UpdateService',
+                    {'HttpPushUriTargetsBusy': False}, method='PATCH')
+
+    def continue_update(self, uploadthread, progress):
             rsp = json.loads(uploadthread.rsp)
             monitorurl = rsp['@odata.id']
+            return self.monitor_update_progress(monitorurl, progress)
+
+    def monitor_update_progress(self, monitorurl, progress):
             complete = False
             phase = "apply"
             statetype = 'TaskState'
@@ -1155,11 +1157,26 @@ class OEMHandler(object):
             if not retry:
                 raise Exception('Falied to monitor update progress due to excessive timeouts')
             return 'pending'
-        finally:
+
+
+    def retrieve_firmware_upload_url(self):
+        usd = self._do_web_request('/redfish/v1/UpdateService', cache=False)
+        upurl = usd.get('MultipartHttpPushUri', None)
+        ismultipart = True
+        if not upurl:
+            ismultipart = False
+            if usd.get('HttpPushUriTargetsBusy', False):
+                raise exc.TemporaryError('Cannot run multtiple updates to '
+                                            'same target concurrently')
+            try:
+                upurl = usd['HttpPushUri']
+            except KeyError:
+                raise exc.UnsupportedFunctionality('Redfish firmware update only supported for implementations with push update support')
             if 'HttpPushUriTargetsBusy' in usd:
-                self._do_web_request(
-                    '/redfish/v1/UpdateService',
-                    {'HttpPushUriTargetsBusy': False}, method='PATCH')
+                self._do_web_request('/redfish/v1/UpdateService',
+                    {'HttpPushUriTargetsBusy': True}, method='PATCH')
+                    
+        return usd,upurl,ismultipart
 
 
     def _do_bulk_requests(self, urls, cache=True):
@@ -1196,17 +1213,21 @@ class OEMHandler(object):
             self.webclient.stdheaders['X-Auth-Token'] = self.xauthtoken
 
 
-    async def _do_web_request(self, url, payload=None, method=None, cache=True):
+    async def _do_web_request(self, url, payload=None, method=None, cache=True, etag=None):
         res = None
         if cache and payload is None and method is None:
             res = self._get_cache(url)
         if res:
             return res
         wc = self.webclient.dupe()
+        if etag:
+            wc.stdheaders['If-Match'] = etag
         res = await wc.grab_json_response_with_status(url, payload, method=method)
         if res[1] == 401 and 'X-Auth-Token' in self.webclient.stdheaders:
             wc.set_basic_credentials(self.username, self.password)
             await self._get_session_token(wc)
+            if etag:
+                wc.stdheaders['If-Match'] = etag
             res = wc.grab_json_response_with_status(url, payload,
                                                     method=method)
         if res[1] < 200 or res[1] >= 300:
