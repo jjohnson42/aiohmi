@@ -894,8 +894,8 @@ class Command(object):
         # For now, this is a stub, no implementation for redfish currently
         return self.oem.set_bmc_configuration(changeset)
 
-    def set_system_configuration(self, changeset):
-        return self.oem.set_system_configuration(changeset, self)
+    async def set_system_configuration(self, changeset):
+        return await self.oem.set_system_configuration(changeset, self)
 
     async def get_ntp_enabled(self):
         bmcinfo = await self._do_web_request(self._bmcurl)
@@ -1348,7 +1348,7 @@ class Command(object):
         """
         return await self.oem.get_storage_configuration()
 
-    def remove_storage_configuration(self, cfgspec):
+    async def remove_storage_configuration(self, cfgspec):
         """Remove specified storage configuration from controller.
 
         :param cfgspec: A aiohmi.storage.ConfigSpec describing what to remove

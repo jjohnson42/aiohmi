@@ -114,8 +114,7 @@ class OEMHandler(generic.OEMHandler):
             #     raise pygexc.TemporaryError(
             #         'Cannot read extended inventory during firmware update')
             if self.webclient:
-                adapterdata = list(self._do_bulk_requests([i['@odata.id'] for i in self.webclient.grab_js
-on_response(
+                adapterdata = list(self._do_bulk_requests([i['@odata.id'] for i in self.webclient.grab_json_response(
                         '/redfish/v1/Chassis/1')['Links']['PCIeDevices']]))               
                 if adapterdata:
                     self.datacache['lenovo_cached_adapters'] = (

@@ -1857,7 +1857,7 @@ class XCCClient(IMMClient):
                 'date': '/v2/ibmc/dm/fw/imm3/primary_pending_build_date'})
             if bdata:
                 yield '{0} Pending Update'.format(self.bmcname), bdata
-         if category in ('all', 'core') and not components or set(('core', 'uefi', 'bios')) & components:
+        if category in ('all', 'core') and not components or set(('core', 'uefi', 'bios')) & components:
             bdata = self.fetch_grouped_properties({
                 'build': '/v2/bios/build_id',
                 'version': '/v2/bios/build_version',

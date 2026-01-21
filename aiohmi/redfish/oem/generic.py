@@ -630,7 +630,7 @@ class OEMHandler(object):
             None, {'name': 'Average Processor Temperature'}, value=avgtemp, units='°C')
 
 
-    def get_health(self, fishclient, verbose=True):
+    async def get_health(self, fishclient, verbose=True):
         health = fishclient.sysinfo.get('Status', {})
         health = health.get('HealthRollup', health.get('Health', 'Unknown'))
         warnunknown = health == 'Unknown'
@@ -649,9 +649,9 @@ class OEMHandler(object):
                 procurl = fishclient.sysinfo.get('Processors', {}).get('@odata.id',
                                                                  None)
                 if procurl:
-                    for cpu in fishclient._do_web_request(procurl).get(
+                    for cpu in await fishclient._do_web_request(procurl).get(
                             'Members', []):
-                        cinfo = fishclient._do_web_request(cpu['@odata.id'])
+                        cinfo = await fishclient._do_web_request(cpu['@odata.id'])
                         if cinfo.get('Status', {}).get(
                                 'State', None) == 'Absent':
                             continue
@@ -683,11 +683,11 @@ class OEMHandler(object):
                     meminfo['Name'] = 'Memory'
                     summary['badreadings'].append(SensorReading(meminfo))
             for adapter in fishclient.sysinfo['PCIeDevices']:
-                adpinfo = fishclient._do_web_request(adapter['@odata.id'])
+                adpinfo = await fishclient._do_web_request(adapter['@odata.id'])
                 if adpinfo['Status']['Health'] not in ('OK', None):
                     summary['badreadings'].append(SensorReading(adpinfo))
             for fun in fishclient.sysinfo['PCIeFunctions']:
-                funinfo = fishclient._do_web_request(fun['@odata.id'])
+                funinfo = await fishclient._do_web_request(fun['@odata.id'])
                 if funinfo['Status']['Health'] not in ('OK', None):
                     summary['badreadings'].append(SensorReading(funinfo))
         if warnunknown and not summary['badreadings']:
@@ -875,19 +875,19 @@ class OEMHandler(object):
             currsettings[setting] = val
         return currsettings, reginfo
 
-    def set_system_configuration(self, changeset, fishclient):
+    async def set_system_configuration(self, changeset, fishclient):
         while True:
             try:
-                self._set_system_configuration(changeset, fishclient)
+                await self._set_system_configuration(changeset, fishclient)
                 return
             except exc.RedfishError as re:
                 if ('etag' not in re.msgid.lower()
                         and 'PreconditionFailed' not in re.msgid):
                     raise
 
-    def _set_system_configuration(self, changeset, fishclient):
-        currsettings, reginfo = self._getsyscfg(fishclient)
-        rawsettings = fishclient._do_web_request(fishclient._biosurl,
+    async def _set_system_configuration(self, changeset, fishclient):
+        currsettings, reginfo = await self._getsyscfg(fishclient)
+        rawsettings = await fishclient._do_web_request(fishclient._biosurl,
                                                  cache=False)
         rawsettings = rawsettings.get('Attributes', {})
         pendingsettings = await fishclient._do_web_request(
