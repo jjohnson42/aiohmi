@@ -19,19 +19,27 @@ from aiohmi.redfish.oem.lenovo import xcc3
 from aiohmi.redfish.oem.lenovo import smm3
 
 
-def get_handler(sysinfo, sysurl, webclient, cache, cmd):
+def get_handler(sysinfo, sysurl, webclient, cache, cmd, rootinfo={}):
+    if not sysinfo:  # we are before establishing there is one system, and one manager...
+        systems, status = webclient.grab_json_response_with_status('/redfish/v1/Systems')
+        if status == 200:
+            for system in systems.get('Members', []):
+                if system.get('@odata.id', '').endswith('/1'):
+                    sysurl = system['@odata.id']
+                    sysinfo, status = webclient.grab_json_response_with_status(sysurl)
+                    break
     leninf = sysinfo.get('Oem', {}).get('Lenovo', {})
     mgrinfo = {}
     if leninf:
-        mgrinf, status = webclient.grab_json_response_with_status('/redfish/v1/Managers/1')
+        mgrinfo, status = webclient.grab_json_response_with_status('/redfish/v1/Managers/1')
         if status != 200:
             mgrinfo = {}
     if not leninf:
         bmcinfo = cmd.bmcinfo
         if 'Ami' in bmcinfo.get('Oem', {}):
             return tsma.TsmHandler(sysinfo, sysurl, webclient, cache)
-    elif 'xclarity controller' in mgrinf.get('Model', '').lower():
-        if mgrinf['Model'].endswith('3'):
+    elif 'xclarity controller' in mgrinfo.get('Model', '').lower():
+        if mgrinfo['Model'].endswith('3'):
             return xcc3.OEMHandler(sysinfo, sysurl, webclient, cache,
                                    gpool=cmd._gpool)
         else:

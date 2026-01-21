@@ -191,43 +191,11 @@ class Command(object):
         self._varsensormap = {}
         self.powerurl = None
         self.sysurl = None
-        if 'Managers' in overview:
-            bmcoll = systems = overview['Managers']['@odata.id']
-            res = await self.wc.grab_json_response_with_status(bmcoll)
-            if res[1] == 401:
-                raise exc.PyghmiException('Access Denied')
-            elif res[1] < 200 or res[1] >= 300:
-                raise exc.PyghmiException(repr(res[0]))
-            bmcs = res[0]['Members']
-            if len(bmcs) == 1:
-                self._varbmcurl = bmcs[0]['@odata.id']
+        tmpoem = oem.get_oem_handler({}, sysurl, self.wc, self._urlcache, self,
+                                    rootinfo=overview)
+        self._varbmcurl = tmpoem.get_default_mgrurl()        
         if 'Systems' in overview:
-            systems = overview['Systems']['@odata.id']
-            res = await self.wc.grab_json_response_with_status(systems)
-            if res[1] == 401:
-                raise exc.PyghmiException('Access Denied')
-            elif res[1] < 200 or res[1] >= 300:
-                raise exc.PyghmiException(repr(res[0]))
-            members = res[0]
-            systems = members['Members']
-            if sysurl:
-                for system in systems:
-                    if system['@odata.id'] == sysurl or system['@odata.id'].split('/')[-1] == sysurl:
-                        self.sysurl = system['@odata.id']
-                        break
-                else:
-                    raise exc.PyghmiException(
-                        'Specified sysurl not found: {0}'.format(sysurl))
-            else:
-                if len(systems) > 1:
-                    systems = [x for x in systems if 'DPU' not in x['@odata.id']]
-                if len(systems) > 1:
-                    raise exc.PyghmiException(
-                        'Multi system manager, sysurl is required parameter')
-                if len(systems):
-                    self.sysurl = systems[0]['@odata.id']
-                else:
-                    self.sysurl = None
+            self.sysurl = tmpoem.get_default_sysurl()
             self.powerurl = self.sysinfo.get('Actions', {}).get(
                 '#ComputerSystem.Reset', {}).get('target', None)               
         return self
@@ -274,6 +242,16 @@ class Command(object):
             okroles.add('Operator')
             okroles.add('ReadOnly')
         return okroles
+
+    def get_trusted_cas(self):
+        for ca in self.oem.get_trusted_cas():
+            yield ca
+    
+    def add_trusted_ca(self, pemdata):
+        return self.oem.add_trusted_ca(pemdata)
+    
+    def del_trusted_ca(self, certid):
+        return self.oem.del_trusted_ca(certid)
 
     def get_users(self):
         """get list of users and channel access information (helper)

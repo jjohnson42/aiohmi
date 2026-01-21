@@ -17,6 +17,7 @@ import json
 import os
 import re
 import time
+import uuid
 
 import base64
 import copy
@@ -29,6 +30,28 @@ from datetime import datetime
 from datetime import timedelta
 from dateutil import tz
 import socket
+
+def _pem_to_dict(pemdata, uefi=False):
+    """Pull PEM into a dict
+
+    Accepts a file-like or a string or bytes.
+
+    A dict with the PEM as a value for CertificateString is created.
+    If uefi, then "UefiSignatureOwner" is also created with a random GUID.
+    This is how redfish expects certificate information for CAs to be provided for
+    UEFI and for itself.
+    """
+    if hasattr(pemdata, 'read'):
+        pemdata = pemdata.read()
+    if isinstance(pemdata, bytes):
+        pemdata = pemdata.decode('utf-8')
+    cert_dict = {
+        'CertificateString': pemdata,
+        'CertificateType': 'PEM',
+        }
+    if uefi:
+        cert_dict['UefiSignatureOwner'] = str(uuid.uuid4())
+    return cert_dict
 
 class SensorReading(object):
     def __init__(self, healthinfo, sensor=None, value=None, units=None,
@@ -186,17 +209,68 @@ class OEMHandler(object):
     hostnic = None
     usegenericsensors = True
 
-    def __init__(self, sysinfo, sysurl, webclient, cache, gpool=None):
+    def __init__(self, sysinfo, sysurl, webclient, cache, gpool=None, rootinfo={}):
         self._gpool = gpool
         self._varsysinfo = sysinfo
         self._varsysurl = sysurl
+        self._varbmcurl = None
         self._urlcache = cache
         self.webclient = webclient
         self._hwnamemap = {}
+        self._rootinfo = rootinfo
+        if not self._rootinfo:
+            self._rootinfo = self.webclient.grab_json_response(
+                '/redfish/v1/')
+        self._varbmcurl = None
+        self._varsysurl = sysurl        
 
     async def get_screenshot(self, outfile):
         raise exc.UnsupportedFunctionality(
             'Retrieving screenshot is not implemented for this platform')
+
+    def get_default_mgrurl(self):
+        if not self._varbmcurl and 'Managers' in self._rootinfo:
+            bmcoll = self._rootinfo['Managers']['@odata.id']
+            res = self.webclient.grab_json_response_with_status(bmcoll)
+            if res[1] == 401:
+                raise exc.PyghmiException('Access Denied')
+            elif res[1] < 200 or res[1] >= 300:
+                raise exc.PyghmiException(repr(res[0]))
+            bmcs = res[0]['Members']
+            if len(bmcs) == 1:
+                self._varbmcurl = bmcs[0]['@odata.id']
+        return self._varbmcurl
+    
+    def get_default_sysurl(self):
+        if not self._varsysurl and 'Systems' in self._rootinfo:
+            systems = self._rootinfo['Systems']['@odata.id']
+            res = self.webclient.grab_json_response_with_status(systems)
+            if res[1] == 401:
+                raise exc.PyghmiException('Access Denied')
+            elif res[1] < 200 or res[1] >= 300:
+                raise exc.PyghmiException(repr(res[0]))
+            members = res[0]
+            systems = members['Members']
+            if self._varsysurl:
+                for system in systems:
+                    if system['@odata.id'] == self._varsysurl or system['@odata.id'].split('/')[-1] == self._varsysurl:
+                        self._varsysurl = system['@odata.id']
+                        break
+                else:
+                    raise exc.PyghmiException(
+                        'Specified sysurl not found: {0}'.format(self._varsysurl))
+            else:
+                if len(systems) > 1:
+                    systems = [x for x in systems if 'DPU' not in x['@odata.id']]
+                if len(systems) > 1:
+                    raise exc.PyghmiException(
+                        'Multi system manager, sysurl is required parameter')
+                if len(systems):
+                    self._varsysurl = systems[0]['@odata.id']
+                else:
+                    self._varsysurl = None
+        return self._varsysurl
+
 
     async def supports_expand(self, url):
         # Unfortunately, the state of expand in redfish is pretty dicey,
@@ -234,6 +308,66 @@ class OEMHandler(object):
                 cputemps.append(temp)
         return cputemps
 
+    @property
+    def _bmcurl(self):
+        if not self._varbmcurl:
+            self._varbmcurl = self.sysinfo.get('Links', {}).get(
+                'ManagedBy', [{}])[0].get('@odata.id', None)
+        return self._varbmcurl
+
+    @property
+    def sysinfo(self):
+        return self._do_web_request(self._varsysurl)
+
+    def add_trusted_ca(self, pemdata):
+        mgrinfo = self._do_web_request(self._bmcurl)
+        secpolicy = mgrinfo.get('SecurityPolicy', {}).get('@odata.id', None)
+        if secpolicy:
+            secinfo = self._do_web_request(secpolicy)
+            certcoll = secinfo.get('TLS', {}).get('Client', {}).get('TrustedCertificates', {}).get('@odata.id', None)
+            if certcoll:
+                certpayload = _pem_to_dict(pemdata)
+                self._do_web_request(certcoll, certpayload)
+                return True
+        raise exc.PyghmiException('Platform does not support adding trusted CAs')
+
+    def del_trusted_ca(self, certid):
+        mgrinfo = self._do_web_request(self._bmcurl)
+        secpolicy = mgrinfo.get('SecurityPolicy', {}).get('@odata.id', None)
+        if secpolicy:
+            secinfo = self._do_web_request(secpolicy)
+            certcoll = secinfo.get('TLS', {}).get('Client', {}).get('TrustedCertificates', {}).get('@odata.id', None)
+            if certcoll:
+                certs = self._get_expanded_data(certcoll)
+                certs = certs.get('Members', [])
+                for cert in certs:
+                    if cert.get('Id', '') == certid:
+                        self._do_web_request(cert['@odata.id'], method='DELETE')
+                        return True
+        raise exc.PyghmiException(f'No such certificate found: {certid}')
+
+    def get_trusted_cas(self):
+        mgrinfo = self._do_web_request(self._bmcurl)
+        secpolicy = mgrinfo.get('SecurityPolicy', {}).get('@odata.id', None)
+        if secpolicy:
+            secinfo = self._do_web_request(secpolicy)
+            certcoll = secinfo.get('TLS', {}).get('Client', {}).get('TrustedCertificates', {}).get('@odata.id', None)
+            if certcoll:
+                certs = self._get_expanded_data(certcoll)
+                certs = certs.get('Members', [])
+                for cert in certs:
+                    certdesc = {
+                        'id': cert.get('Id', ''),
+                        'name': cert.get('Name', ''),
+                        'pem': cert.get('CertificateString', None),
+                        'subject': cert.get('Subject', {}).get('CommonName', ''),
+                        'sans': cert.get('Subject', {}).get('AlternativeNames', []),
+                        'issuer': cert.get('Issuer', {}).get('CommonName', ''),
+                        'validfrom': cert.get('ValidNotBefore', ''),
+                        'validto': cert.get('ValidNotAfter', ''),
+                    }
+                    yield certdesc
+
     async def get_event_log(self, clear=False, fishclient=None, extraurls=[]):
         bmcinfo = await self._do_web_request(fishclient._bmcurl)
         lsurl = bmcinfo.get('LogServices', {}).get('@odata.id', None)
@@ -255,6 +389,16 @@ class OEMHandler(object):
         lurls.extend(extraurls)
         for lurl in lurls:
             lurl = lurl['@odata.id']
+            try:
+                loginfo = await self._do_web_request(lurl, cache=(not clear))
+            except Exception:
+                record = {}
+                record['log_id'] = os.path.basename(lurl)
+                record['message'] = 'Could not retrieve log at {0}'.format(lurl)
+                record['severity'] = const.Health.Ok
+                record['timestamp'] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+                yield record
+                continue
             loginfo = await self._do_web_request(lurl, cache=(not clear))
             entriesurl = loginfo.get('Entries', {}).get('@odata.id', None)
             if not entriesurl:
