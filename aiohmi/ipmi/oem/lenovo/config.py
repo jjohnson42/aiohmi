@@ -22,7 +22,6 @@ import base64
 import random
 import struct
 
-import six
 import time
 
 import aiohmi.exceptions as pygexc
@@ -562,7 +561,7 @@ class LenovoFirmwareConfig(object):
                 continue
             if options[option]['pending'] == options[option]['new_value']:
                 continue
-            if isinstance(options[option]['new_value'], six.string_types):
+            if isinstance(options[option]['new_value'], str):
                 # Coerce a simple string parameter to the expected list format
                 options[option]['new_value'] = [options[option]['new_value']]
             options[option]['pending'] = options[option]['new_value']

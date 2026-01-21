@@ -18,7 +18,6 @@ import weakref
 from xml.etree.ElementTree import fromstring as rfromstring
 import zipfile
 
-import six
 
 import aiohmi.constants as pygconst
 import aiohmi.exceptions as pygexc
@@ -641,7 +640,7 @@ class SMMClient(object):
         for key in changeset:
             if not key:
                 raise pygexc.InvalidParameterValue('Empty key is invalid')
-            if isinstance(changeset[key], six.string_types):
+            if isinstance(changeset[key], str):
                 changeset[key] = {'value': changeset[key]}
             for rule in self.rulemap:
                 if fnmatch.fnmatch(rule, key.lower()):

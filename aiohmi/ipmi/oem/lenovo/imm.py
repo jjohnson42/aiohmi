@@ -45,13 +45,15 @@ import aiohmi.util.webclient as webclient
 try:
     from urllib import urlencode
 except ImportError:
-    from urllib.parse import urlencode+    def set_identify(self, on, duration, blink):
-+        if blink:
-+            self.grab_redfish_response_with_status(
-+                '/redfish/v1/Systems/1',
-+                {'IndicatorLED': 'Blinking'},
-+                method='PATCH')
-+            raise pygexc.BypassGenericBehavior()
+    from urllib.parse import urlencode
+
+    def set_identify(self, on, duration, blink):
+        if blink:
+            self.grab_redfish_response_with_status(
+                '/redfish/v1/Systems/1',
+                {'IndicatorLED': 'Blinking'},
+                method='PATCH')
+            raise pygexc.BypassGenericBehavior()
 
 
 
@@ -288,7 +290,7 @@ class IMMClient(object):
 
     def merge_changeset(self, changeset):
         for key in changeset:
-            if isinstance(changeset[key], six.string_types):
+            if isinstance(changeset[key], str):
                 changeset[key] = {'value': changeset[key]}
             newvalue = changeset[key]['value']
             if self.fwo[key]['is_list'] and not isinstance(newvalue, list):
@@ -1123,7 +1125,7 @@ class XCCClient(IMMClient):
         ruleset = {}
         usbsettings = {}
         for key in changeset:
-            if isinstance(changeset[key], six.string_types):
+            if isinstance(changeset[key], str):
                 changeset[key] = {'value': changeset[key]}
             currval = changeset[key].get('value', None)
             if 'smm'.startswith(key.lower()):
@@ -1959,15 +1961,29 @@ class XCCClient(IMMClient):
                     url = url.replace(':', '')
                     url = 'nfs://' + url
                 yield media.Media(mt['filename'], url)
+        for rdoc in self._list_rdoc():
+            yield rdoc
+        self.weblogout()
+
+    
+    def _list_rdoc(self):
         rt = self.wc.grab_json_response('/api/providers/rp_rdoc_imagelist')
         if 'items' in rt:
             for mt in rt['items']:
                 yield media.Media(mt['filename'])
-        self.weblogout()
 
     def upload_media(self, filename, progress=None, data=None):
         wc = self.wc
         self._refresh_token()
+        numrdocs = 0
+        for rdoc in self._list_rdoc():
+            numrdocs += 1
+            if rdoc.name == os.path.basename(filename):
+                raise pygexc.InvalidParameterValue(
+                    'An image with that name already exists')
+        if numrdocs >= 2:
+            raise pygexc.InvalidParameterValue(
+                'Maximum number of uploaded media reached')        
         rsp, statu = wc.grab_json_response_with_status('/rdocupload')
         newmode = False
         if statu == 404:
@@ -1992,10 +2008,16 @@ class XCCClient(IMMClient):
                     progress({'phase': 'upload',
                             'progress': 100.0 * rsp['received'] / rsp['size']})
             self._refresh_token()
-        rsp = json.loads(uploadthread.rsp)
+        if uploadthread.rsp:
+            rsp = json.loads(uploadthread.rsp)
+        else:
+            rsp = {}
         if progress:
             progress({'phase': 'upload',
                       'progress': 100.0})
+        if 'items' not in rsp or len(rsp['items']) == 0:
+            errmsg = repr(rsp) if rsp else self.wc.lastjsonerror if self.wc.lastjsonerror else repr(uploadthread.rspstatus)
+            raise pygexc.PyghmiException('Failed to upload image: ' + errmsg)
         thepath = rsp['items'][0]['path']
         thename = rsp['items'][0]['name']
         writeable = 1 if filename.lower().endswith('.img') else 0

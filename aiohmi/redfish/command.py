@@ -191,6 +191,7 @@ class Command(object):
         self._varsensormap = {}
         self.powerurl = None
         self.sysurl = None
+        self._initsysurl = sysurl
         tmpoem = oem.get_oem_handler({}, sysurl, self.wc, self._urlcache, self,
                                     rootinfo=overview)
         self._varbmcurl = tmpoem.get_default_mgrurl()        
@@ -247,6 +248,14 @@ class Command(object):
         for ca in self.oem.get_trusted_cas():
             yield ca
     
+    def get_bmc_csr(self, keytype=None, keylength=None, cn=None, city=None,
+                    state=None, country=None, org=None, orgunit=None):
+        return self.oem.get_bmc_csr(
+            keytype=keytype, keylength=keylength, cn=cn)
+
+    def install_bmc_certificate(self, certdata):
+        return self.oem.install_bmc_certificate(certdata)
+
     def add_trusted_ca(self, pemdata):
         return self.oem.add_trusted_ca(pemdata)
     
@@ -1224,7 +1233,7 @@ class Command(object):
                 await self._do_web_request(self._varbmcurl, cache=False)  # This is to trigger token validation and renewel
             sysinfo = await self.sysinfo()
             self._oem = oem.get_oem_handler(
-                sysinfo, self.sysurl, self.wc, self._urlcache, self)
+                self.sysinfo, self._initsysurl, self.wc, self._urlcache, self)
             self._oem.set_credentials(self.username, self.password)
         return self._oem
 
