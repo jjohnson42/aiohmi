@@ -15,7 +15,7 @@
 import aiohmi.redfish.oem.dell.main as dell
 import aiohmi.redfish.oem.generic as generic
 import aiohmi.redfish.oem.lenovo.main as lenovo
-import pyghmi.redfish.oem.ami.main as ami
+import aiohmi.redfish.oem.ami.main as ami
 
 OEMMAP = {
     'Lenovo': lenovo,

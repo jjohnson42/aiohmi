@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pyghmi.redfish.oem.ami.megarac as megarac
+import aiohmi.redfish.oem.ami.megarac as megarac
 
 
 def get_handler(sysinfo, sysurl, webclient, cache, cmd, rootinfo={}):

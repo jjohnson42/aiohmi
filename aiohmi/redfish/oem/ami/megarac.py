@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pyghmi.redfish.oem.generic as generic
+import aiohmi.redfish.oem.generic as generic
 
 
 class OEMHandler(generic.OEMHandler):
