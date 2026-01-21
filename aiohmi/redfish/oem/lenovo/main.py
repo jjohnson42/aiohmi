@@ -19,19 +19,19 @@ from aiohmi.redfish.oem.lenovo import xcc3
 from aiohmi.redfish.oem.lenovo import smm3
 
 
-def get_handler(sysinfo, sysurl, webclient, cache, cmd, rootinfo={}):
+async def get_handler(sysinfo, sysurl, webclient, cache, cmd, rootinfo={}):
     if not sysinfo:  # we are before establishing there is one system, and one manager...
-        systems, status = webclient.grab_json_response_with_status('/redfish/v1/Systems')
+        systems, status = await webclient.grab_json_response_with_status('/redfish/v1/Systems')
         if status == 200:
             for system in systems.get('Members', []):
                 if system.get('@odata.id', '').endswith('/1'):
                     sysurl = system['@odata.id']
-                    sysinfo, status = webclient.grab_json_response_with_status(sysurl)
+                    sysinfo, status = await webclient.grab_json_response_with_status(sysurl)
                     break
     leninf = sysinfo.get('Oem', {}).get('Lenovo', {})
     mgrinfo = {}
     if leninf:
-        mgrinfo, status = webclient.grab_json_response_with_status('/redfish/v1/Managers/1')
+        mgrinfo, status = await webclient.grab_json_response_with_status('/redfish/v1/Managers/1')
         if status != 200:
             mgrinfo = {}
     if not leninf:
@@ -62,5 +62,5 @@ def get_handler(sysinfo, sysurl, webclient, cache, cmd, rootinfo={}):
                                       gpool=cmd._gpool)
     except Exception:
         pass
-            return generic.OEMHandler(sysinfo, sysurl, webclient, cache,
-                                    gpool=cmd._gpool)
+    return generic.OEMHandler(sysinfo, sysurl, webclient, cache,
+                            gpool=cmd._gpool)

@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import asyncio
 import copy
 import json
 import re
@@ -738,8 +739,8 @@ class OEMHandler(generic.OEMHandler):
         fd.start()
         fd.join()
 
-    def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
-        tsk = self._do_web_request(
+    async def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
+        tsk = await self._do_web_request(
             '/redfish/v1/Systems/1/LogServices/DiagnosticLog/Actions/LogService.CollectDiagnosticData',
             {"DiagnosticDataType": "Manager", "SelectDataTypes": []})
         taskrunning = True
@@ -747,7 +748,7 @@ class OEMHandler(generic.OEMHandler):
         pct = 0 if taskurl else 100
         durl = None
         while pct < 100 and taskrunning:
-            status = self._do_web_request(taskurl)
+            status = await self._do_web_request(taskurl)
             durl = status.get('AdditionalDataURI', '')
             pct = status.get('PercentComplete', 0)
             taskrunning = status.get('TaskState', 'Complete') == 'Running'
