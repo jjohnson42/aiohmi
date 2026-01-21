@@ -192,6 +192,7 @@ class OEMHandler(object):
         self._varsysurl = sysurl
         self._urlcache = cache
         self.webclient = webclient
+        self._hwnamemap = {}
 
     async def get_screenshot(self, outfile):
         raise exc.UnsupportedFunctionality(
@@ -716,9 +717,9 @@ class OEMHandler(object):
 
     async def get_inventory_of_component(self, component):
         if component.lower() == 'system':
-            nodeinfo = self._get_node_info()
+            nodeinfo = await self._get_node_info()
             sysinfo = {
-                'UUID': nodeinfo.get('UUID', ''),
+                'UUID': nodeinfo.get('UUID', '').lower(),
                 'Serial Number': nodeinfo.get('SerialNumber', ''),
                 'Manufacturer': nodeinfo.get('Manufacturer', ''),
                 'Product name': nodeinfo.get('Model', ''),

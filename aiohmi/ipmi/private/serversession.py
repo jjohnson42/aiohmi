@@ -108,7 +108,8 @@ class ServerSession(ipmisession.Session):
             # ignore null username for now
             return
         self.username = bytes(data[28:])
-        if self.username.decode('utf-8') not in self.authdata:
+        password = self.authdata.get(self.username.decode('utf-8'))
+        if password is None:
             # don't think about invalid usernames for now
             return
         uuidbytes = self.uuid.bytes
@@ -118,8 +119,7 @@ class ServerSession(ipmisession.Session):
                     + self.Rm + self.Rc + uuidbytes
                     + bytearray([self.rolem, len(self.username)]))
         hmacdata += self.username
-        self.kuid = self.authdata[self.username.decode('utf-8')].encode(
-            'utf-8')
+        self.kuid = password.encode('utf-8')
         if self.kg is None:
             self.kg = self.kuid
         authcode = hmac.new(

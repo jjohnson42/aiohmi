@@ -13,13 +13,38 @@
 # limitations under the License.
 import copy
 import json
+import re
 import aiohmi.constants as pygconst
 import aiohmi.redfish.oem.generic as generic
 import aiohmi.exceptions as pygexc
 import aiohmi.util.webclient as webclient
+import aiohmi.storage as storage
+import aiohmi.ipmi.private.util as util
 import os.path
 import zipfile
 
+numregex = re.compile('([0-9]+)')
+
+def naturalize_string(key):
+    """Analyzes string in a human way to enable natural sort
+
+    :param key: string for the split
+    :returns: A structure that can be consumed by 'sorted'
+    """
+    return [int(text) if text.isdigit() else text.lower()
+            for text in re.split(numregex, key)]
+
+def natural_sort(iterable):
+    """Return a sort using natural sort if possible
+
+    :param iterable:
+    :return:
+    """
+    try:
+        return sorted(iterable, key=naturalize_string)
+    except TypeError:
+        # The natural sort attempt failed, fallback to ascii sort
+        return sorted(iterable)
 
 class SensorReading(object):
     def __init__(self, healthinfo, sensor=None, value=None, units=None,
@@ -37,6 +62,644 @@ class SensorReading(object):
         self.unavailable = unavailable
 
 class OEMHandler(generic.OEMHandler):
+
+    datacache = {}
+    def weblogout(self):
+        if self.webclient:
+            try:
+                self.webclient.grab_json_response('/logout')
+            except Exception:
+                pass
+    
+    def get_cached_data(self, attribute, age=30):
+        try:
+            kv = self.datacache[attribute]
+            if kv[1] > util._monotonic_time() - age:
+                return kv[0]
+        except KeyError:
+            return None
+    
+    def get_inventory(self, withids=False):
+        sysinfo = {
+            'UUID': self._varsysinfo.get('UUID', '').lower(),
+            'Serial Number': self._varsysinfo.get('SerialNumber', ''),
+            'Manufacturer': self._varsysinfo.get('Manufacturer', ''),
+            'Product name': self._varsysinfo.get('Model', ''),
+            'Model': self._varsysinfo.get(
+                'SKU', self._varsysinfo.get('PartNumber', '')),
+        }
+        yield ('System', sysinfo)
+        for cpuinv in self._get_cpu_inventory():
+            yield cpuinv
+        for meminv in self._get_mem_inventory():
+            yield meminv
+        hwmap = self.hardware_inventory_map()
+        for key in natural_sort(hwmap):
+            yield (key, hwmap[key])
+    
+    def hardware_inventory_map(self):
+        hwmap = self.get_cached_data('lenovo_cached_hwmap')
+        if hwmap:
+            return hwmap
+        hwmap = {}
+        for disk in self.disk_inventory(mode=1):  # hardware mode
+            hwmap[disk[0]] = disk[1]
+        adapterdata = self.get_cached_data('lenovo_cached_adapters')
+        if not adapterdata:
+            # if self.updating:
+            #     raise pygexc.TemporaryError(
+            #         'Cannot read extended inventory during firmware update')
+            if self.webclient:
+                adapterdata = self._do_bulk_requests([i['@odata.id'] for i in self.webclient.grab_json_response(
+                        '/redfish/v1/Chassis/1')['Links']['PCIeDevices']])
+                if adapterdata:
+                    self.datacache['lenovo_cached_adapters'] = (
+                        adapterdata, util._monotonic_time())
+        if adapterdata:
+            anames = {}
+            for adata, _ in adapterdata:
+                skipadapter = False
+                clabel = adata['Slot']['Location']['PartLocation']['LocationType']
+                if clabel != 'Embedded':
+                    aslot = adata['Slot']['Location']['PartLocation']['LocationOrdinalValue']
+                    clabel = 'Slot {0}'.format(aslot)
+                aname = adata['Name']
+                bdata = {'location': clabel, 'name': aname}
+                if aname in anames:
+                    anames[aname] += 1
+                    aname = '{0} {1}'.format(aname, anames[aname])
+                else:
+                    anames[aname] = 1
+                pcislot = adata['Id'].split('_')[1]
+                bdata['pcislot'] = '{0}:{1}.{2}'.format(
+                    pcislot[:4].replace('0x',''), pcislot[4:6], pcislot[6:8]
+                )
+                serialdata = adata.get('SerialNumber', '')
+                if (serialdata and serialdata != 'N/A'
+                        and '---' not in serialdata):
+                    bdata['serial'] = serialdata
+                partnum = adata.get('PartNumber', '')
+                if partnum and partnum != 'N/A':
+                    bdata['Part Number'] = partnum
+                fundata = self._get_expanded_data(adata['PCIeFunctions']['@odata.id'])
+                venid = fundata['Members'][0].get('VendorId', None)
+                if venid is not None:
+                    bdata['PCI Vendor ID'] = venid.lower().split('0x')[-1]
+                devid = fundata['Members'][0].get('DeviceId', None)
+                if devid is not None and 'PCIE Device ID' not in bdata:
+                    bdata['PCI Device ID'] = devid.lower().split('0x')[-1]
+                subvenid = fundata['Members'][0].get('SubsystemVendorId', None)
+                if subvenid is not None:
+                    bdata['PCI Subsystem Vendor ID'] = subvenid.lower().split('0x')[-1]
+                subdevid = fundata['Members'][0].get('SubsystemId', None)
+                if subdevid is not None:
+                    bdata['PCI Subsystem Device ID'] = subdevid.lower().split('0x')[-1]
+                bdata['FRU Number'] = adata.get('SKU', '')
+
+                # Could be identified also through Oem->Lenovo->FunctionClass
+                if fundata['Members'][0]['DeviceClass'] == 'NetworkController':
+                    ports_data = self._get_expanded_data('{0}/Ports'.format(adata['@odata.id'].replace('PCIeDevices','NetworkAdapters')))
+                    for port in ports_data['Members']:
+                        bdata['MAC Address {0}'.format(port['Id'])] = port['Ethernet']['AssociatedMACAddresses'][0].lower()
+                hwmap[aname] = bdata
+            self.datacache['lenovo_cached_hwmap'] = (hwmap,
+                                                     util._monotonic_time())
+        # self.weblogout()
+        return hwmap
+
+    def get_disk_firmware(self, diskent, prefix=''):
+        bdata = {}
+        if not prefix:
+            location = diskent.get('Name', '')
+            if location.startswith('M.2'):
+                prefix = 'M.2-'
+            elif location.startswith('7MM'):
+                prefix = '7MM-'
+        diskname = 'Disk {0}{1}'.format(prefix, diskent['PhysicalLocation']['PartLocation']['LocationOrdinalValue'])
+        bdata['model'] = '{0}_{1}'.format(diskent['Manufacturer'].rstrip(), diskent['Model'].rstrip())
+        bdata['version'] = diskent.get('FirmwareVersion','')
+        return (diskname, bdata)
+
+    def get_disk_hardware(self, diskent, prefix=''):
+        bdata = {}
+        if not prefix:
+            location = diskent.get('Name', '')
+            if location.startswith('M.2'):
+                prefix = 'M.2-'
+            elif location.startswith('7MM'):
+                prefix = '7MM-'
+        diskname = 'Disk {0}{1}'.format(prefix, diskent['PhysicalLocation']['PartLocation']['LocationOrdinalValue'])
+        bdata['Model'] = '{0}_{1}'.format(diskent['Manufacturer'].rstrip(), diskent['Model'].rstrip())
+        bdata['Serial Number'] = diskent['SerialNumber'].rstrip()
+        bdata['FRU Number'] = diskent['SKU'].rstrip()
+        bdata['Description'] = diskent['Oem']['Lenovo']['TypeString'].rstrip()
+        return (diskname, bdata)
+
+    def disk_inventory(self, mode=0):
+        # mode 0 is firmware, 1 is hardware
+        storagedata = self.get_cached_data('lenovo_cached_storage')
+        if not storagedata:
+                if self.webclient:
+                    storagedata = self._do_bulk_requests([i['@odata.id'] for i in self.webclient.grab_json_response(
+                        '/redfish/v1/Chassis/1')['Links']['Drives']])
+                    if storagedata:
+                        self.datacache['lenovo_cached_storage'] = (
+                            storagedata, util._monotonic_time())
+        # Unmanaged disks cannot be retrieved through Redfish API
+        if storagedata:
+            for diskent, _ in storagedata:
+                if mode == 0:
+                    yield self.get_disk_firmware(diskent)
+                elif mode == 1:
+                    yield self.get_disk_hardware(diskent)
+
+    def get_storage_configuration(self, logout=True):
+        rsp = self._get_expanded_data("/redfish/v1/Systems/1/Storage")
+        standalonedisks = []
+        pools = []
+        for item in rsp.get('Members',[]):
+            cdisks = [item['Drives'][i]['@odata.id'] for i in range(len(item['Drives']))]
+            cid = '{0},{1}'.format(
+                        item['Id'],
+                        item['StorageControllers'][0]['Location']['PartLocation'].get('LocationOrdinalValue', -1))
+            storage_pools = self._get_expanded_data(item['StoragePools']['@odata.id'])
+            for p in storage_pools['Members']:
+                vols = self._get_expanded_data(p['AllocatedVolumes']['@odata.id'])
+                for vol in vols['Members']:
+                    volumes=[]
+                    disks=[]
+                    spares=[]
+                    volumes.append(
+                        storage.Volume(name=vol['DisplayName'],
+                                    size=int(vol['CapacityBytes'])/1024//1024,
+                                    status=vol['Status']['Health'],
+                                    id=(cid,vol['Id'])))
+                    for item_key, disk_ids in vol['Links'].items():
+                        if isinstance(disk_ids, list) and 'drives' in item_key.lower():
+                            for disk in disk_ids:
+                                if disk['@odata.id'] in cdisks:
+                                    cdisks.remove(disk['@odata.id'])
+                                disk_data = self.webclient.grab_json_response(disk['@odata.id'])
+                                (spares if disk_data['Oem']['Lenovo']['DriveStatus']=="DedicatedHotspare" else disks).append(
+                                    storage.Disk(
+                                        name=disk_data['Name'], description=disk_data['Oem']['Lenovo']['TypeString'],
+                                        id=(cid, disk_data['Id']), status=disk_data['Oem']['Lenovo']['DriveStatus'],
+                                        serial=disk_data['SerialNumber'], fru=disk_data['SKU']))
+                    raid=vol['RAIDType']
+                totalsize = int(p['Capacity']['Data']['AllocatedBytes'])/1024//1024
+                freesize = totalsize - int(p['Capacity']['Data']['ConsumedBytes'])/1024//1024
+                pools.append(storage.Array(
+                    disks=disks, raid=raid, volumes=volumes,
+                    id=(cid, p['Id']), hotspares=spares,
+                    capacity=totalsize, available_capacity=freesize))
+            for d in cdisks:
+                disk_data = self.webclient.grab_json_response(d)
+                standalonedisks.append(
+                    storage.Disk(
+                        name=disk_data['Name'], description=disk_data['Oem']['Lenovo']['TypeString'],
+                        id=(cid, disk_data['Id']), status=disk_data['Oem']['Lenovo']['DriveStatus'],
+                        serial=disk_data['SerialNumber'], fru=disk_data['SKU']))
+        return storage.ConfigSpec(disks=standalonedisks, arrays=pools)
+
+    def check_storage_configuration(self, cfgspec=None):
+        rsp = self.webclient.grab_json_response(
+            '/api/providers/raidlink_GetStatus')
+        if rsp['return'] != 0 or rsp['status'] != 1:
+            raise pygexc.TemporaryError('Storage configuration unavailable in '
+                                        'current state (try boot to setup or '
+                                        'an OS)')
+        return True
+
+    def apply_storage_configuration(self, cfgspec):
+        realcfg = self.get_storage_configuration(False)
+        for disk in cfgspec.disks:
+            if disk.status.lower() == 'jbod':
+                self._make_jbod(disk, realcfg)
+            elif disk.status.lower() == 'hotspare':
+                self._make_global_hotspare(disk, realcfg)
+            elif disk.status.lower() in ('unconfigured', 'available', 'ugood',
+                                         'unconfigured good'):
+                self._make_available(disk, realcfg)
+        for pool in cfgspec.arrays:
+            if pool.disks:
+                self._create_array(pool)
+
+    def _make_available(self, disk, realcfg):
+        currstatus = self._get_status(disk, realcfg)
+        newstate = None
+        if currstatus.lower() == 'unconfiguredgood':
+            return
+        elif currstatus.lower() == 'globalhotspare':
+            newstate = "None"
+        elif currstatus.lower() == 'jbod':
+            newstate = "MakeUnconfiguredGood"
+        self._set_drive_state(disk, newstate)
+
+    def _make_jbod(self, disk, realcfg):
+        currstatus = self._get_status(disk, realcfg)
+        if currstatus.lower() == 'jbod':
+            return
+        self._make_available(disk, realcfg)
+        self._set_drive_state(disk, "MakeJBOD")
+
+    def _make_global_hotspare(self, disk, realcfg):
+        currstatus = self._get_status(disk, realcfg)
+        if currstatus.lower() == 'globalhotspare':
+            return
+        self._make_available(disk, realcfg)
+        self._set_drive_state(disk, "Global")
+    
+    def _set_drive_state(self, disk, state):
+        raid_alldevices = self.webclient.grab_json_response(
+            '/api/providers/raid_alldevices')
+        if raid_alldevices.get('return', -1) != 0:
+            raise Exception(
+                'Unexpected return to get all RAID devices information')
+        for c in raid_alldevices.get('StorageComplexes',[]):
+            cslot = str(c.get('SlotNumber'))
+            if cslot == disk.id[0].split(',')[1]:
+                c_pciaddr = c.get('PCIeAddress',-1)
+                cdrives = c.get('Drives',[])
+                for d in cdrives:
+                    if disk.id[1] == d.get('Id',''):
+                        currstatus = d['Oem']['Lenovo']['DriveStatus']
+                        d_resid = d['Internal']['ResourceId']
+                        if state in ("Global", "None"):
+                            data = {
+                                "controller_address": c_pciaddr,
+                                "drive_resource_id": d_resid,
+                                "hotspare_type": state,
+                                "pool_resource_ids": []}
+                            raidlink_url = '/api/providers/raidlink_AssignHotSpare'
+                        else:
+                            data = {
+                                "controller_address": c_pciaddr,
+                                "drive_operation": state,
+                                "drive_resource_ids": [d_resid]}
+                            raidlink_url = '/api/providers/raidlink_DiskStateAction'
+                        msg = self._do_web_request(raidlink_url, method='POST', 
+                                                   payload=data, cache=False)
+                        if msg.get('return', -1) != 0:
+                            raise Exception(
+                                'Unexpected return to set disk state: {0}'.format(
+                                msg.get('return', -1)))
+                        set_state_token = msg.get('token', '')
+                        msg = self._do_web_request(
+                            '/api/providers/raidlink_QueryAsyncStatus',
+                            method='POST',
+                            payload={"token": set_state_token},
+                            cache=False)
+                        while msg['status'] == 2:
+                            time.sleep(1)
+                            msg = self._do_web_request(
+                            '/api/providers/raidlink_QueryAsyncStatus',
+                            method='POST',
+                            payload={"token": set_state_token},
+                            cache=False)
+                        if msg.get('return',-1) != 0 or msg.get('status',-1) != 0:
+                            raise Exception(
+                                'Unexpected return to set disk state: {0}'.format(
+                                msg.get('return', -1)))
+                        disk_url=f"/redfish/v1/Systems/1/Storage/{disk.id[0].split(',')[0]}/Drives/{disk.id[1]}"
+                        newstatus = self.webclient.grab_json_response(disk_url)
+                        disk_converted = False
+                        for _ in range(60):
+                            if currstatus == newstatus['Oem']['Lenovo']['DriveStatus']:
+                                time.sleep(1)
+                                newstatus = self.webclient.grab_json_response(disk_url)
+                            else:
+                                disk_converted = True
+                                break
+                        if not disk_converted:
+                            raise Exception(
+                                'Disk set command was successful, but the disk state is unchanged')
+
+    def _get_status(self, disk, realcfg):
+        for cfgdisk in realcfg.disks:
+            if disk.id == cfgdisk.id:
+                currstatus = cfgdisk.status
+                break
+        else:
+            raise pygexc.InvalidParameterValue('Requested disk not found')
+        return currstatus
+    
+    def remove_storage_configuration(self, cfgspec):
+        realcfg = self.get_storage_configuration(False)
+        for pool in cfgspec.arrays:
+            for volume in pool.volumes:
+                cid = volume.id[0].split(',')[0]
+                vid = volume.id[1]
+                msg, code = self.webclient.grab_json_response_with_status(
+                    f'/redfish/v1/Systems/1/Storage/{cid}/Volumes/{vid}',
+                    method='DELETE')
+                if code == 500:
+                    raise Exception(
+                        'Unexpected return to volume deletion: ' + repr(msg))
+        for disk in cfgspec.disks:
+            self._make_available(disk, realcfg)
+
+    def _parse_array_spec(self, arrayspec):
+        controller = None
+        if arrayspec.disks:
+            for disk in list(arrayspec.disks) + list(arrayspec.hotspares):
+                if controller is None:
+                    controller = disk.id[0]
+                if controller != disk.id[0]:
+                    raise pygexc.UnsupportedFunctionality(
+                        'Cannot span arrays across controllers')
+            raidmap = self._raid_number_map(controller)
+            if not raidmap:
+                raise pygexc.InvalidParameterValue(
+                    'No RAID Type supported on this controller')
+            requestedlevel = str(arrayspec.raid)
+            if requestedlevel not in raidmap:
+                raise pygexc.InvalidParameterValue(
+                    'Requested RAID Type "{0}" not available on this '
+                    'controller. Allowed values are: {1}'.format(
+                        requestedlevel, [k for k in raidmap]))
+            rdinfo = raidmap[str(arrayspec.raid).lower()]
+            rdlvl = str(rdinfo[0])
+            defspan = 1 if rdinfo[1] == 1 else 2
+            spancount = defspan if arrayspec.spans is None else arrayspec.spans
+            drivesperspan = str(len(arrayspec.disks) // int(spancount))
+            hotspares = arrayspec.hotspares
+            drives = arrayspec.disks
+            minimal_conditions = {
+                "RAID0": (1,128,1),
+                "RAID1": (2,2,1),
+                "RAID1Triple": (3,3,1),
+                "RAID10": (4,128,2),
+                "RAID10Triple": (6,128,3),
+                "RAID5": (3,128,1),
+                "RAID50": (6,128,2),
+                "RAID6": (4,128,1),
+                "RAID60": (8, 128, 2)
+            }
+            raid_level = rdinfo[0]
+            min_pd = minimal_conditions[raid_level][0]
+            max_pd = minimal_conditions[raid_level][1]
+            disk_multiplier = minimal_conditions[raid_level][2]
+            if len(drives) < min_pd or \
+            len(drives) > max_pd or \
+            len(drives) % disk_multiplier != 0:
+                raise pygexc.InvalidParameterValue(
+                    f'Number of disks for {rdinfo} must be between {min_pd} and {max_pd} and be a multiple of {disk_multiplier}')
+            if hotspares:
+                hstr = '|'.join([str(x.id[1]) for x in hotspares]) + '|'
+            else:
+                hstr = ''
+            drvstr = '|'.join([str(x.id[1]) for x in drives]) + '|'
+            return {
+                'controller': controller,
+                'drives': drvstr,
+                'hotspares': hstr,
+                'raidlevel': rdlvl,
+                'spans': spancount,
+                'perspan': drivesperspan,
+            }
+        else:
+            # TODO(Jarrod Johnson): adding new volume to
+            #  existing array would be here
+            pass
+    
+    def _raid_number_map(self, controller):
+        themap = {}
+        cid = controller.split(',')
+        rsp = self.webclient.grab_json_response(
+            '/redfish/v1/Systems/1/Storage/{0}'.format(cid[0]))
+        for rt in rsp['StorageControllers'][0]['SupportedRAIDTypes']:
+            rt_lower = rt.lower()
+            mapdata = (rt, 1)
+            themap[rt]=mapdata
+            themap[rt_lower] = mapdata
+            themap[rt_lower.replace('raid','r')] = mapdata
+            themap[rt_lower.replace('raid','')] = mapdata
+        return themap
+
+    def _create_array(self, pool):
+        params = self._parse_array_spec(pool)
+        cid = params['controller'].split(',')[0]
+        c_capabilities, code = self.webclient.grab_json_response_with_status(
+            f'/redfish/v1/Systems/1/Storage/{cid}/Volumes/Capabilities')
+        if code == 404:
+            c_capabilities, code = self.webclient.grab_json_response_with_status(
+            f'/redfish/v1/Systems/1/Storage/{cid}/Volumes/Oem/Lenovo/Capabilities')
+            if code == 404:
+                # If none of the endpoints exist, maybe it should be printed that
+                # no capabilities found, therefore default values will be used
+                # whatever they are
+                pass
+        volumes = pool.volumes
+        drives = [d for d in params['drives'].split("|") if d != '']
+        hotspares = [h for h in params['hotspares'].split("|") if h != '']
+        raidlevel = params['raidlevel']
+        nameappend = 1
+        currvolnames = None
+        currcfg = self.get_storage_configuration(False)
+        for vol in volumes:
+            if vol.name is None:
+                # need to iterate while there exists a volume of that name
+                if currvolnames is None:
+                    currvolnames = set([])
+                    for pool in currcfg.arrays:
+                        for volume in pool.volumes:
+                            currvolnames.add(volume.name)
+                name = 'Volume_{0}'.format(nameappend)
+                nameappend += 1
+                while name in currvolnames:
+                    name = 'Volume_{0}'.format(nameappend)
+                    nameappend += 1
+            else:
+                name = vol.name
+
+            # Won't check against Redfish allowable values as they not trustworthy yet
+            # Some values show in Redfish, but may not be accepted by UEFI/controller or vice versa 
+            stripsize_map = {
+                '4': 4096, '4096': 4096,
+                '16': 16384, '16384': 16384,
+                '32': 32768, '32768': 32768,
+                '64': 65536, '65536': 65536,
+                '128': 131072, '131072': 131072,
+                '256': 262144, '262144': 262144,
+                '512': 524288, '524288': 524288,
+                '1024': 1048576, '1048576': 1048576
+            }
+            stripsize = stripsize_map[str(vol.stripsize).lower().replace('k','')] if vol.stripsize is not None else None
+
+            readpolicy_map = {'0': 'Off', '1': 'ReadAhead'}
+            read_policy = None
+            read_cache_possible = c_capabilities.get("ReadCachePolicy@Redfish.AllowableValues",[])
+            if read_cache_possible:
+                if vol.read_policy is not None:
+                    if str(vol.read_policy) in readpolicy_map:
+                        vol.read_policy = readpolicy_map[str(vol.read_policy)]                    
+                    if vol.read_policy in read_cache_possible:
+                        read_policy = vol.read_policy
+                    else:
+                        raise pygexc.InvalidParameterValue(
+                        f'{vol.read_policy} Read Cache Policy is not supported. Allowed values are: {read_cache_possible}')
+            
+            writepolicy_map = {'0': 'WriteThrough', '1': 'UnprotectedWriteBack',
+                               '2': 'ProtectedWriteBack', '3': 'Off'}
+            write_policy = None
+            write_cache_possible = c_capabilities.get("WriteCachePolicy@Redfish.AllowableValues",[])
+            if write_cache_possible:
+                if vol.write_policy is not None:
+                    if str(vol.write_policy) in writepolicy_map:
+                        vol.write_policy = writepolicy_map[str(vol.write_policy)]                    
+                    if vol.write_policy in write_cache_possible:
+                        write_policy = vol.write_policy
+                    else:
+                        raise pygexc.InvalidParameterValue(
+                        f'{vol.write_policy} Write Cache Policy is not supported. Allowed values are: {write_cache_possible}')
+
+            defaultinit_map = {'0': 'No', '1': 'Fast', '2': 'Full'}
+            default_init = None
+            default_init_possible = c_capabilities.get("InitializationType@Redfish.AllowableValues",[])
+            if default_init_possible:
+                if vol.default_init is not None:
+                    if str(vol.default_init) in defaultinit_map:
+                        vol.default_init = defaultinit_map[str(vol.default_init)]
+                    if vol.default_init in default_init_possible:
+                        default_init = vol.default_init
+                    else:
+                        raise pygexc.InvalidParameterValue(
+                        f'{vol.default_init} Initialization Type is not supported. Allowed values are: {default_init_possible}')
+
+            volsize = None
+            spec_disks = sorted(drives)
+            spec_hotspares = hotspares
+            for array in currcfg.arrays:
+                in_use_disks = sorted([d.id[1] for d in array.disks])
+                in_use_hotspares = [h.id[1] for h in array.hotspares]
+                if spec_disks == in_use_disks:
+                    if vol.size is None:
+                        volsize = array.available_capacity
+                        array.available_capacity = 0
+                        break
+                    else:
+                        strsize = str(vol.size)
+                        if strsize in ('all','100%'):
+                            raise pygexc.InvalidParameterValue(
+                                f'Requested size for volume {name} exceeds available capacity. Available capacity is {array.available_capacity} MiB')
+                        elif strsize.endswith('%'):
+                            volsize = int(array.capacity
+                                        * float(strsize.replace('%', ''))
+                                        / 100.0)
+                            if volsize > array.available_capacity:
+                                raise pygexc.InvalidParameterValue(
+                                f'Requested size for volume {name} exceeds available capacity. Available capacity is {array.available_capacity} MiB')
+                            else:
+                                array.available_capacity-=volsize
+                        else:
+                            try:
+                                volsize = int(strsize)
+                                if volsize > array.available_capacity:
+                                    raise pygexc.InvalidParameterValue(
+                                        f'Requested size for volume {name} exceeds available capacity. Available capacity is {array.available_capacity} MiB')
+                                else:
+                                    array.available_capacity-=volsize
+                            except ValueError:
+                                raise pygexc.InvalidParameterValue(
+                                    'Unrecognized size ' + strsize)
+                elif any(d in in_use_disks for d in spec_disks):
+                    raise pygexc.InvalidParameterValue(
+                        f'At least one disk from provided config is in use by another volume. To create a volume using the remaining capacity, configure the new volume to use all the following disks: {in_use_disks}')
+                else:
+                    disks_capacities = {}
+                    for d in spec_disks:
+                        disks_capacities[d] = self.webclient.grab_json_response(
+                            f'/redfish/v1/Systems/1/Storage/{cid}/Drives/{d}')["CapacityBytes"]
+                    max_capacity = sum(v for k,v in disks_capacities.items())
+                    min_disk = min([v for k,v in disks_capacities.items()])
+                    disk_count = len(disks_capacities)
+                    max_capacity_per_raid = {
+                        "RAID0": max_capacity,
+                        "RAID1": min_disk,
+                        "RAID1Triple": min_disk,
+                        "RAID10": (disk_count//2)*min_disk,
+                        "RAID10Triple": (disk_count//3)*min_disk,
+                        "RAID5": (disk_count-1)*min_disk,
+                        "RAID50": (disk_count-2)*min_disk,
+                        "RAID6": (disk_count-2)*min_disk,
+                        "RAID60": (disk_count-4)*min_disk
+                        }
+                    if vol.size is not None:
+                        strsize = str(vol.size)
+                        if strsize.endswith('%'):
+                            volsize = int(max_capacity_per_raid[raidlevel]
+                                        * float(strsize.replace('%', ''))
+                                        / 100.0)
+                        else:
+                            try:
+                                volsize = int(strsize)
+                                if volsize > max_capacity_per_raid[raidlevel]:
+                                    raise pygexc.InvalidParameterValue(
+                                        f'Requested size for volume {name} exceeds available capacity. Available capacity is {max_capacity_per_raid[raidlevel]} bytes')
+                            except ValueError:
+                                raise pygexc.InvalidParameterValue(
+                                    'Unrecognized size ' + strsize)
+                for h in spec_hotspares:
+                    if h in in_use_hotspares:
+                        raise pygexc.InvalidParameterValue(
+                            f'Hotspare {h} from provided config is in use by another volume.')
+            
+            request_data = {
+                "Name":name,
+                "RAIDType":raidlevel,
+                "Links":{
+                    "Drives":[
+                        {'@odata.id': f'/redfish/v1/Systems/1/Storage/{cid}/Drives/{did}'} for did in spec_disks]}}
+            if spec_hotspares:
+                request_data["Links"]["DedicatedSpareDrives"] = {[
+                    {'@odata.id': f'/redfish/v1/Systems/1/Storage/{cid}/Drives/{hid}' for hid in spec_hotspares}]}
+            if volsize:
+                request_data["CapacityBytes"] = volsize
+            if stripsize:
+                request_data["StripSizeBytes"] = stripsize
+            if read_policy:
+                request_data["ReadCachePolicy"] = read_policy
+            if write_policy:
+                request_data["WriteCachePolicy"] = write_policy
+            
+            msg, code=self.webclient.grab_json_response_with_status(
+                f'/redfish/v1/Systems/1/Storage/{cid}/Volumes',
+                method='POST',
+                data=request_data)
+            if code == 500:
+                raise Exception("Unexpected response to volume creation: " + repr(msg))
+            time.sleep(60)
+            #Even if in web the volume appears immediately, get_storage_configuration does not see it that fast
+            newcfg = self.get_storage_configuration(False)
+            newvols = [v.id for p in newcfg.arrays for v in p.volumes]
+            currvols = [v.id for p in currcfg.arrays for v in p.volumes]
+            newvol = list(set(newvols) - set(currvols))[0]
+            if default_init:
+                msg, code = self.webclient.grab_json_response_with_status(
+                    f'/redfish/v1/Systems/1/Storage/{cid}/Volumes/{newvol[1]}/Actions/Volume.Initialize',
+                    method='POST',
+                    data = {"InitializeType": default_init})
+                if code == 500:
+                    raise Exception("Unexpected response to volume initialization: " + repr(msg))
+
+    def attach_remote_media(self, url, user, password, vmurls):
+        for vmurl in vmurls:
+            if 'EXT' not in vmurl:
+                continue
+            vminfo = self._do_web_request(vmurl, cache=False)
+            if vminfo['ConnectedVia'] != 'NotConnected':
+                continue
+            msg,code = self.webclient.grab_json_response_with_status(
+                vmurl,
+                data={'Image': url, 'Inserted': True},
+                method='PATCH')
+            if code == 500:
+                raise Exception("Unexpected response when attaching remote media: " + repr(msg))
+            raise pygexc.BypassGenericBehavior()
+            break
+        else:
+            raise pygexc.InvalidParameterValue(
+                'XCC does not have required license for operation')
 
     async def supports_expand(self, url):
         return True
