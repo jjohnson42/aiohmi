@@ -211,7 +211,7 @@ class WebConnection:
         return await self.grab_response_with_status(url, data, referer, headers, method, expect_type='json')
 
     async def grab_response_with_status(self, url, data=None, referer=None,
-                                        headers=None, method=None, expect_type):
+                                        headers=None, method=None, expect_type=None):
         if not headers:
             headers = copy.deepcopy(self.stdheaders)
         else:
