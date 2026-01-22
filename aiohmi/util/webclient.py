@@ -223,7 +223,7 @@ class WebConnection:
         method = method.lower()
         if 'Content-Type' in headers and method.lower() in ('get', 'delete'):
             del headers['Content-Type']
-        async with aiohttp.ClientSession(f'https://{self.host}', cookie_jar=self.cookies) as session:
+        async with aiohttp.ClientSession(f'https://{self.host}:{self.port}', cookie_jar=self.cookies) as session:
             thefunc = getattr(session, method)
             kwargs = {}
             if isinstance(data, dict):
@@ -269,7 +269,7 @@ class WebConnection:
             del dlheaders['Accept-Encoding']
         webclient.request('GET', url, headers=dlheaders)
         rsp = webclient.getresponse()
-        async with aiohttp.ClientSession(f'https://{self.host}', cookie_jar=self.cookies) as session:
+        async with aiohttp.ClientSession(f'https://{self.host}:{self.port}', cookie_jar=self.cookies) as session:
             async with session.get(url, headers=self.stdheaders) as rsp:
                 self._currdl = rsp
                 self._dlfile = file
