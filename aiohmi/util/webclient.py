@@ -208,7 +208,8 @@ class WebConnection:
 
     async def grab_json_response_with_status(self, url, data=None, referer=None,
                                         headers=None, method=None):
-        return await self.grab_response_with_status(url, data, referer, headers, method, expect_type='json')
+        rsp, status, hdrs = await self.grab_response_with_status(url, data, referer, headers, method, expect_type='json')
+        return rsp, status
 
     async def grab_response_with_status(self, url, data=None, referer=None,
                                         headers=None, method=None, expect_type=None):
