@@ -236,7 +236,7 @@ class WebConnection:
             async with thefunc(url, headers=headers, ssl=self.ssl, **kwargs) as rsp:
                 if rsp.status >= 200 and rsp.status < 300:
                     if expect_type == 'json':
-                        return await rsp.json(content_type=''), rsp.status
+                        return await rsp.json(content_type=''), rsp.status, rsp.headers
                     elif expect_type == 'text':
                         return await rsp.text(), rsp.status, rsp.headers
                     else:
