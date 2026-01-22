@@ -174,7 +174,7 @@ class WebConnection:
             headers['referer'] = referer
         method = method.lower()
         async with aiohttp.ClientSession(
-                f'https://{self.host}', cookie_jar=self.cookies) as session:
+                f'https://{self.host}:{self.port}', cookie_jar=self.cookies) as session:
             thefunc = getattr(session, method)
             kwargs = {}
             if isinstance(body, dict):
