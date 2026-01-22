@@ -1521,10 +1521,11 @@ class OEMHandler(object):
         if not isinstance(password, str):
             password = password.decode()
         # specification actually indicates we can skip straight to this url
-        rsp = await wc.grab_rsp('/redfish/v1/SessionService/Sessions',
+        _, status, headers = await wc.grab_response_with_status('/redfish/v1/SessionService/Sessions',
                           {'UserName': username, 'Password': password})
-        await rsp.read()
-        self.xauthtoken = rsp.getheader('X-Auth-Token')
+        if status < 200 or status >= 300:
+            return
+        self.xauthtoken = headers.get('X-Auth-Token')
         if self.xauthtoken:
             if 'Authorization' in wc.stdheaders:
                 del wc.stdheaders['Authorization']

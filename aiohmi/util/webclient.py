@@ -208,6 +208,10 @@ class WebConnection:
 
     async def grab_json_response_with_status(self, url, data=None, referer=None,
                                         headers=None, method=None):
+        return await self.grab_response_with_status(url, data, referer, headers, method, expect_type='json')
+
+    async def grab_response_with_status(self, url, data=None, referer=None,
+                                        headers=None, method=None, expect_type):
         if not headers:
             headers = copy.deepcopy(self.stdheaders)
         else:
@@ -228,9 +232,14 @@ class WebConnection:
                 kwargs['data'] = data
             async with thefunc(url, headers=headers, ssl=self.ssl, **kwargs) as rsp:
                 if rsp.status >= 200 and rsp.status < 300:
-                    return await rsp.json(content_type=''), rsp.status
+                    if expect_type == 'json':
+                        return await rsp.json(content_type=''), rsp.status
+                    elif expect_type == 'text':
+                        return await rsp.text(), rsp.status, rsp.headers
+                    else:
+                        return await rsp.read(), rsp.status, rsp.headers
                 else:
-                    return await rsp.read(), rsp.status
+                    return await rsp.read(), rsp.status, rsp.headers
 
     async def grab_rsp(self, url, data=None, referer=None, headers=None, method=None):
         webclient = self.dupe()

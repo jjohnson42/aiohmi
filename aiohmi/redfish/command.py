@@ -209,10 +209,11 @@ class Command(object):
             username = username.decode()
         if not isinstance(password, str):
             password = password.decode()
-        rsp = await wc.grab_rsp('/redfish/v1/SessionService/Sessions',
+        _, status, headers = await wc.grab_response_with_status('/redfish/v1/SessionService/Sessions',
                           {'UserName': username, 'Password': password})
-        rsp.read()
-        self.xauthtoken = rsp.getheader('X-Auth-Token')
+        if status > 299 or status < 200:
+            return
+        self.xauthtoken = headers.get('X-Auth-Token')
         if self.xauthtoken:
             if 'Authorization' in wc.stdheaders:
                 del wc.stdheaders['Authorization']
