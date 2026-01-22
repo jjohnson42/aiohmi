@@ -229,6 +229,8 @@ class WebConnection:
             kwargs = {}
             if isinstance(data, dict):
                 kwargs['json'] = data
+                if 'Content-Type' not in headers:
+                    headers['Content-Type'] = 'application/json'
             elif data is not None:
                 kwargs['data'] = data
             async with thefunc(url, headers=headers, ssl=self.ssl, **kwargs) as rsp:
