@@ -153,7 +153,7 @@ class WebConnection:
             self.ssl = None
         self.verifycallback = verifycallback
         self.stdheaders = {}
-        self.cookies = CookieJar()
+        self.cookies = CookieJar(quote_cookie=False)
 
     def set_header(self, key, value):
         self.stdheaders[key] = value
