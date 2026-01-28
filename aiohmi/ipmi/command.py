@@ -576,7 +576,7 @@ class Command(object):
             identifydata = [0, forceon]
         response = self.raw_command(netfn=0, command=4, data=identifydata)
 
-    def init_sdr(self):
+    async def init_sdr(self):
         """Initialize SDR
 
         Do the appropriate action to have a relevant sensor description
@@ -588,19 +588,19 @@ class Command(object):
         # to store cached copies for given device id, product id, mfg id,
         # sdr timestamp, our data version revision, aux firmware revision,
         # and oem defined field
-        self.oem_init()
+        await self.oem_init()
         if self._sdr is None:
             if hasattr(self._oem, 'init_sdr'):
-                self._sdr = self._oem.init_sdr()
+                self._sdr = await self._oem.init_sdr()
             else:
                 self._sdr = sdr.SDR(self, self._sdrcachedir)
         return self._sdr
 
-    def get_event_constants(self):
-        self.oem_init()
+    async def get_event_constants(self):
+        await self.oem_init()
         return self._oem.get_oem_event_const()
 
-    def get_event_log(self, clear=False):
+    async def get_event_log(self, clear=False):
         """Retrieve the log of events, optionally clearing
 
         The contents of the SEL are returned as an iterable.  Timestamps
@@ -615,10 +615,10 @@ class Command(object):
 
         :param clear:  Whether to remove the SEL entries from the target BMC
         """
-        self.oem_init()
-        return sel.EventHandler(self.init_sdr(), self).fetch_sel(self, clear)
+        await self.oem_init()
+        return await sel.EventHandler(await self.init_sdr(), self).fetch_sel(self, clear)
 
-    def decode_pet(self, specifictrap, petdata):
+    async def decode_pet(self, specifictrap, petdata):
         """Decode PET to an event
 
         In IPMI, the alert format are PET alerts.  It is a particular set of
@@ -632,8 +632,8 @@ class Command(object):
                         1.3.6.1.4.1.3183.1.1.1
         :returns: A dict event similar to one iteration of get_event_log
         """
-        self.oem_init()
-        return sel.EventHandler(self.init_sdr(), self).decode_pet(specifictrap,
+        await self.oem_init()
+        return await sel.EventHandler(await self.init_sdr(), self).decode_pet(specifictrap,
                                                                   petdata)
 
     async def get_ikvm_methods(self):

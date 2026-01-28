@@ -698,7 +698,7 @@ class OEMHandler(generic.OEMHandler):
     async def process_fru(self, fru, name=None):
         if fru is None:
             return fru
-        if await self.has_tsm:
+        if await self.has_tsm():
             fru['oem_parser'] = 'lenovo'
             # Thinkserver lays out specific interpretation of the
             # board extra fields

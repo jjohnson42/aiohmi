@@ -661,9 +661,9 @@ class SDR(object):
         self.cachedir = cachedir
         self.read_info()
 
-    def read_info(self):
+    async def read_info(self):
         # first, we want to know the device id
-        rsp = self.ipmicmd.xraw_command(netfn=6, command=1)
+        rsp = await self.ipmicmd.xraw_command(netfn=6, command=1)
         rsp['data'] = bytearray(rsp['data'])
         self.device_id = rsp['data'][0]
         self.device_rev = rsp['data'][1] & 0b111
@@ -690,16 +690,16 @@ class SDR(object):
             # We have Device SDR, without SDR Repository device, but
             # also without sensor device support, no idea how to
             # continue
-        self.get_sdr()
+        await self.get_sdr()
 
-    def get_sdr_reservation(self):
-        rsp = self.ipmicmd.raw_command(netfn=0x0a, command=0x22)
+    async def get_sdr_reservation(self):
+        rsp = await self.ipmicmd.raw_command(netfn=0x0a, command=0x22)
         if rsp['code'] != 0:
             raise exc.IpmiException(rsp['error'])
         return rsp['data'][0] + (rsp['data'][1] << 8)
 
-    def get_sdr(self):
-        repinfo = self.ipmicmd.xraw_command(netfn=0x0a, command=0x20)
+    async def get_sdr(self):
+        repinfo = await self.ipmicmd.xraw_command(netfn=0x0a, command=0x20)
         repinfo['data'] = bytearray(repinfo['data'])
         if (repinfo['data'][0] != 0x51):
             # we only understand SDR version 51h, the only version defined
