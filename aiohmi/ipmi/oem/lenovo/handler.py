@@ -342,73 +342,73 @@ class OEMHandler(generic.OEMHandler):
             return self.immhandler.reseat()
         return super(OEMHandler, self).reseat_bay(bay)
 
-    def get_ntp_enabled(self):
-        if self.has_tsm or self.has_ami or self.has_asrock:
-            ntpres = self.ipmicmd.xraw_command(netfn=0x32, command=0xa7)
+    async def get_ntp_enabled(self):
+        if await self.has_tsm() or await self.has_ami() or await self.has_asrock():
+            ntpres = await self.ipmicmd.xraw_command(netfn=0x32, command=0xa7)
             return ntpres['data'][0] == '\x01'
-        elif self.is_fpc:
-            return self.smmhandler.get_ntp_enabled(self._fpc_variant)
+        elif await self.is_fpc():
+            return await self.smmhandler.get_ntp_enabled(self._fpc_variant)
         elif self.has_tsma:
             return self.tsmahandler.get_ntp_enabled()
         return None
 
-    def get_ntp_servers(self):
-        if self.has_tsm or self.has_ami or self.has_asrock:
+    async def get_ntp_servers(self):
+        if self.has_tsm or self.has_ami or await self.has_asrock():
             srvs = []
-            ntpres = self.ipmicmd.xraw_command(netfn=0x32, command=0xa7)
+            ntpres = await self.ipmicmd.xraw_command(netfn=0x32, command=0xa7)
             srvs.append(ntpres['data'][1:129].rstrip('\x00'))
             srvs.append(ntpres['data'][129:257].rstrip('\x00'))
             return srvs
-        if self.is_fpc:
-            return self.smmhandler.get_ntp_servers()
+        if await self.is_fpc():
+            return await self.smmhandler.get_ntp_servers()
         if self.has_tsma:
             return self.tsmahandler.get_ntp_servers()
         return ()
 
-    def set_ntp_enabled(self, enabled):
-        if self.has_tsm or self.has_ami or self.has_asrock:
+    async def set_ntp_enabled(self, enabled):
+        if await self.has_tsm() or await self.has_ami() or await self.has_asrock():
             if enabled:
-                self.ipmicmd.xraw_command(
+                await self.ipmicmd.xraw_command(
                     netfn=0x32, command=0xa8, data=(3, 1), timeout=15)
             else:
-                self.ipmicmd.xraw_command(
+                await self.ipmicmd.xraw_command(
                     netfn=0x32, command=0xa8, data=(3, 0), timeout=15)
             return True
-        if self.is_fpc:
-            self.smmhandler.set_ntp_enabled(enabled)
+        if await self.is_fpc():
+            await self.smmhandler.set_ntp_enabled(enabled)
             return True
-        if self.has_tsma:
-            self.tsmahandler.set_ntp_enabled(enabled)
+        if await self.has_tsma():
+            await self.tsmahandler.set_ntp_enabled(enabled)
         return None
 
-    def set_ntp_server(self, server, index=0):
-        if self.has_tsm or self.has_ami or self.has_asrock:
+    async def set_ntp_server(self, server, index=0):
+        if await self.has_tsm() or await self.has_ami() or await self.has_asrock():
             if not (0 <= index <= 1):
                 raise pygexc.InvalidParameterValue("Index must be 0 or 1")
             cmddata = bytearray((1 + index, ))
             cmddata += server.ljust(128, '\x00')
-            self.ipmicmd.xraw_command(netfn=0x32, command=0xa8, data=cmddata)
+            await self.ipmicmd.xraw_command(netfn=0x32, command=0xa8, data=cmddata)
             return True
-        elif self.is_fpc:
+        elif await self.is_fpc():
             if not 0 <= index <= 2:
                 raise pygexc.InvalidParameterValue(
                     'SMM supports indexes 0 through 2')
-            self.smmhandler.set_ntp_server(server, index)
+            await self.smmhandler.set_ntp_server(server, index)
             return True
-        elif self.has_tsma:
+        elif await self.has_tsma():
             if not (0 <= index <= 1):
                 raise pygexc.InvalidParameterValue("Index must be 0 or 1")
-            return self.tsmahandler.set_ntp_server(server, index)
+            return await self.tsmahandler.set_ntp_server(server, index)
         return None
     
     def user_delete(self, uid, channel):
         if self.has_xcc:
             return self.immhandler.user_delete(uid)
 
-    def set_user_access(self, uid, channel, callback, link_auth, ipmi_msg,
+    async def set_user_access(self, uid, channel, callback, link_auth, ipmi_msg,
                         privilege_level):
-        if self.is_fpc and self._fpc_variant != 6:
-            self.smmhandler.set_user_priv(uid, privilege_level)
+        if await self.is_fpc() and self._fpc_variant != 6:
+            await self.smmhandler.set_user_priv(uid, privilege_level)
 
     async def is_fpc(self):
         """True if the target is a Lenovo nextscale fan power controller"""
@@ -449,14 +449,13 @@ class OEMHandler(generic.OEMHandler):
                   self.oemid['product_id'])
         return currid in self.tsma_ids
 
-    @property
-    def has_tsm(self):
+    async def has_tsm(self):
         """True if this particular server have a TSM based service processor"""
 
         if (self.oemid['manufacturer_id'] == 19046
                 and self.oemid['device_id'] == 32):
             try:
-                self.ipmicmd.xraw_command(netfn=0x3a, command=0xf)
+                await self.ipmicmd.xraw_command(netfn=0x3a, command=0xf)
             except pygexc.IpmiException as ie:
                 if ie.ipmicode == 193:
                     return False
@@ -464,8 +463,7 @@ class OEMHandler(generic.OEMHandler):
             return True
         return False
 
-    @property
-    def has_asrock(self):
+    async def has_asrock(self):
         # True if this particular server have a ASROCKRACK
         # based service processor (RS160 or TS460)
         # RS160 (Riddler) product id is 1182 (049Eh)
@@ -475,7 +473,7 @@ class OEMHandler(generic.OEMHandler):
                 and (self.oemid['product_id'] == 1182
                      or self.oemid['product_id'] == 1184)):
             try:
-                self.ipmicmd.xraw_command(netfn=0x3a,
+                await self.ipmicmd.xraw_command(netfn=0x3a,
                                           command=0x50,
                                           data=(0x00, 0x00, 0x00))
             except pygexc.IpmiException as ie:
@@ -492,21 +490,21 @@ class OEMHandler(generic.OEMHandler):
         return False
 
     async def get_oem_inventory_descriptions(self):
-        if self.has_tsm or self.has_ami or self.has_asrock:
+        if await self.has_tsm() or self.has_ami or await self.has_asrock():
             # Thinkserver with TSM
             if not self.oem_inventory_info:
-                self._collect_tsm_inventory()
+                await self._collect_tsm_inventory()
             return iter(self.oem_inventory_info)
         elif self.has_imm:
-            return self.immhandler.get_hw_descriptions()
+            return await self.immhandler.get_hw_descriptions()
         elif await self.is_fpc():
-            return self.smmhandler.get_inventory_descriptions(self.ipmicmd,
-                                                              await self.is_fpc())
+            return await self.smmhandler.get_inventory_descriptions(self.ipmicmd,
+                                                                     await self.is_fpc())
         return ()
 
     async def get_oem_inventory(self):
-        if self.has_tsm or self.has_ami or self.has_asrock:
-            self._collect_tsm_inventory()
+        if await self.has_tsm() or self.has_ami or await self.has_asrock():
+            await self._collect_tsm_inventory()
             for compname in self.oem_inventory_info:
                 yield (compname, self.oem_inventory_info[compname])
         elif self.has_imm:
@@ -553,7 +551,7 @@ class OEMHandler(generic.OEMHandler):
         return ()
 
     async def get_inventory_of_component(self, component):
-        if self.has_tsm or self.has_ami or self.has_asrock:
+        if await self.has_tsm() or self.has_ami or await self.has_asrock():
             await self._collect_tsm_inventory()
             return await self.oem_inventory_info.get(component, None)
         if self.has_imm:
@@ -700,7 +698,7 @@ class OEMHandler(generic.OEMHandler):
     async def process_fru(self, fru, name=None):
         if fru is None:
             return fru
-        if self.has_tsm:
+        if await self.has_tsm:
             fru['oem_parser'] = 'lenovo'
             # Thinkserver lays out specific interpretation of the
             # board extra fields
@@ -844,19 +842,19 @@ class OEMHandler(generic.OEMHandler):
         return False
 
     async def get_oem_firmware(self, bmcver, components, category):
-        if self.has_tsm or self.has_ami or self.has_asrock:
+        if await self.has_tsm() or await self.has_ami() or await self.has_asrock():
             command = firmware.get_categories()["firmware"]
             fw_cmd = self.get_cmd_type("firmware", command)
-            rsp = self.ipmicmd.xraw_command(**fw_cmd)
+            rsp = await self.ipmicmd.xraw_command(**fw_cmd)
 
             # the newest Lenovo ThinkServer versions are returning Bios version
             # numbers through another command
             bios_versions = None
-            if self.has_tsm or self.has_asrock:
+            if await self.has_tsm() or await self.has_asrock():
                 bios_command = firmware.get_categories()["bios_version"]
                 bios_cmd = self.get_cmd_type("bios_version", bios_command)
-                bios_rsp = self.ipmicmd.xraw_command(**bios_cmd)
-                if self.has_asrock:
+                bios_rsp = await self.ipmicmd.xraw_command(**bios_cmd)
+                if await self.has_asrock():
                     bios_versions = bios_rsp['data']
                 else:
                     bios_versions = bios_command["parser"](bios_rsp['data'])
@@ -864,12 +862,12 @@ class OEMHandler(generic.OEMHandler):
             # pass bios versions to firmware parser
             return command["parser"](rsp["data"],
                                      bios_versions,
-                                     self.has_asrock)
+                                     await self.has_asrock())
         elif await self.has_imm():
-            return self.immhandler.get_firmware_inventory(bmcver, components, category)
+            return await self.immhandler.get_firmware_inventory(bmcver, components, category)
         elif await self.is_fpc():
-            return nextscale.get_fpc_firmware(bmcver, self.ipmicmd,
-                                              self._fpc_variant)
+            return await nextscale.get_fpc_firmware(bmcver, self.ipmicmd,
+                                                     self._fpc_variant)
         elif self.has_tsma:
             return self.tsmahandler.get_firmware_inventory(
                 components, raisebypass=False, ipmicmd=self.ipmicmd)
@@ -887,9 +885,9 @@ class OEMHandler(generic.OEMHandler):
             return self.tsmahandler.get_diagnostic_data(savefile, progress,
                                                         autosuffix)
 
-    def get_oem_capping_enabled(self):
-        if self.has_tsm:
-            rsp = self.ipmicmd.xraw_command(netfn=0x3a, command=0x1b,
+    async def get_oem_capping_enabled(self):
+        if await self.has_tsm():
+            rsp = await self.ipmicmd.xraw_command(netfn=0x3a, command=0x1b,
                                             data=(3,))
             # disabled
             if rsp['data'][0] == '\x00':
@@ -1357,7 +1355,7 @@ class OEMHandler(generic.OEMHandler):
             # Need to change to System UUID in future.
             # Since the IPMI get device uuid matches SMBIOS,
             # no need to decode it.
-            guiddata = self.ipmicmd.raw_command(netfn=6, command=0x8)
+            guiddata = await self.ipmicmd.raw_command(netfn=6, command=0x8)
             if 'error' not in guiddata:
                 zerofru['UUID'] = util.decode_wireformat_uuid(
                     guiddata['data'], True)
@@ -1368,7 +1366,7 @@ class OEMHandler(generic.OEMHandler):
             # OEM processing pass.  Code optimistically assumes that if
             # data is returned, than the vendor is properly using it.
 
-            guiddata = self.ipmicmd.raw_command(netfn=6, command=0x37)
+            guiddata = await self.ipmicmd.raw_command(netfn=6, command=0x37)
             if 'error' not in guiddata:
                 if (self.oemid['manufacturer_id'] == 19046
                         and (self.oemid['product_id'] == 1182
@@ -1383,8 +1381,8 @@ class OEMHandler(generic.OEMHandler):
                     zerofru['UUID'] = util.decode_wireformat_uuid(
                         guiddata['data'])
         if await self.is_fpc():
-            self.smmhandler.augment_zerofru(zerofru, self._fpc_variant)
-        return self.process_fru(zerofru)
+            await self.smmhandler.augment_zerofru(zerofru, self._fpc_variant)
+        return await self.process_fru(zerofru)
 
     def get_ami_sensor_reading(self, sensorname):
         """Get an OEM sensor
@@ -1397,27 +1395,27 @@ class OEMHandler(generic.OEMHandler):
             if sensor.name == sensorname:
                 return sensor
 
-    def get_ami_sensor_descriptions(self):
+    async def get_ami_sensor_descriptions(self):
         """Get list of OEM sensor names and types
 
         Iterate over dicts describing a label and type for OEM 'sensors'.  This
         should mimic the behavior of the get_sensor_descriptions function
         in command.py.
         """
-        if self.has_ami:
+        if await self.has_ami():
             energy_sensor = energy.Energy(self.ipmicmd)
             for sensor in energy_sensor.get_energy_sensor():
                 yield {'name': sensor.name,
                        'type': sensor.type}
 
-    def get_ami_sensor_data(self):
+    async def get_ami_sensor_data(self):
         """Get OEM sensor data
 
         Iterate through all OEM 'sensors' and return data as if they were
         normal sensors.  This should mimic the behavior of the get_sensor_data
         function in command.py.
         """
-        if self.has_ami:
+        if await self.has_ami():
             energy_sensor = energy.Energy(self.ipmicmd)
-            for sensor in energy_sensor.get_energy_sensor():
+            async for sensor in energy_sensor.get_energy_sensor():
                 yield sensor

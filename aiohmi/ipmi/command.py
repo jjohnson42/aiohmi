@@ -691,7 +691,7 @@ class Command(object):
         if zerofru is None:
             zerofru = {}
         zerofru.update(device_id)
-        zerofru = self._oem.process_zero_fru(zerofru)
+        zerofru = await self._oem.process_zero_fru(zerofru)
         # If uuid is not returned in OEM processing,
         # then it is expected that a manufacturer matches SMBIOS to IPMI
         # get system uuid return data.
@@ -711,9 +711,9 @@ class Command(object):
         of a name for the inventoried item and dictionary of descriptions
         or None for items not present.
         """
-        self.oem_init()
+        await self.oem_init()
         yield ("System", await self._get_zero_fru())
-        self.init_sdr()
+        await self.init_sdr()
         for fruid in sorted(self._sdr.fru):
             tfru = fru.FRU(ipmicmd=self, fruid=fruid,
                             sdr=self._sdr.fru[fruid])
@@ -728,12 +728,12 @@ class Command(object):
         async for componentpair in self._oem.get_oem_inventory():
             yield componentpair
 
-    def get_leds(self):
+    async def get_leds(self):
         """Get LED status information
 
         This provides a detailed view of the LEDs of the managed system.
         """
-        self.oem_init()
+        await self.oem_init()
         return self._oem.get_leds()
 
     def get_ntp_enabled(self):
