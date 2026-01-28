@@ -659,7 +659,9 @@ class SDR(object):
         self.sensors = {}
         self.fru = {}
         self.cachedir = cachedir
-        self.read_info()
+    
+    async def initialize(self):
+        await self.read_info()
 
     async def read_info(self):
         # first, we want to know the device id

@@ -594,6 +594,7 @@ class Command(object):
                 self._sdr = await self._oem.init_sdr()
             else:
                 self._sdr = sdr.SDR(self, self._sdrcachedir)
+                await self._sdr.initialize()
         return self._sdr
 
     async def get_event_constants(self):
@@ -644,7 +645,7 @@ class Command(object):
         await self.oem_init()
         return await self._oem.get_ikvm_launchdata()
 
-    def get_inventory_descriptions(self):
+    async def get_inventory_descriptions(self):
         """Retrieve list of things that could be inventoried
 
         This permits a caller to examine the available items
@@ -655,26 +656,26 @@ class Command(object):
         self.init_sdr()
         for fruid in sorted(self._sdr.fru):
             yield self._sdr.fru[fruid].fru_name
-        self.oem_init()
-        for compname in self._oem.get_oem_inventory_descriptions():
+        await self.oem_init()
+        async for compname in self._oem.get_oem_inventory_descriptions():
             yield compname
 
-    def get_inventory_of_component(self, component):
+    async def get_inventory_of_component(self, component):
         """Retrieve inventory of a component
 
         Retrieve detailed inventory information for only the requested
         component.
         """
-        self.oem_init()
+        await self.oem_init()
         if component == 'System':
-            return self._get_zero_fru()
-        self.init_sdr()
+            return await self._get_zero_fru()
+        await self.init_sdr()
         for fruid in self._sdr.fru:
             if self._sdr.fru[fruid].fru_name == component:
                 return self._oem.process_fru(fru.FRU(
                     ipmicmd=self, fruid=fruid,
                     sdr=self._sdr.fru[fruid]).info, component)
-        return self._oem.get_inventory_of_component(component)
+        return await self._oem.get_inventory_of_component(component)
 
     async def _get_zero_fru(self):
         # Add some fields returned by get device ID command to FRU 0
