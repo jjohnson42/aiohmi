@@ -1274,8 +1274,8 @@ class OEMHandler(generic.OEMHandler):
         if await self.has_imm():
             await self.immhandler.detach_remote_media()
         elif self.has_tsma:
-            await await self.tsmahandler.detach_remote_media()
-        elif self.has_megarac:
+            await self.tsmahandler.detach_remote_media()
+        elif await self.has_megarac():
             await self.ipmicmd.xraw_command(
                 netfn=0x32, command=0x9f, data=(8, 10, 0, 0))
             await self.ipmicmd.xraw_command(netfn=0x32, command=0x9f, data=(8, 11))
