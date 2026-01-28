@@ -554,12 +554,12 @@ class OEMHandler(generic.OEMHandler):
 
     async def get_inventory_of_component(self, component):
         if self.has_tsm or self.has_ami or self.has_asrock:
-            self._collect_tsm_inventory()
-            return self.oem_inventory_info.get(component, None)
+            await self._collect_tsm_inventory()
+            return await self.oem_inventory_info.get(component, None)
         if self.has_imm:
-            return self.immhandler.get_component_inventory(component)
+            return await self.immhandler.get_component_inventory(component)
         if await self.is_fpc():
-            return self.smmhandler.get_inventory_of_component(component)
+            return await self.smmhandler.get_inventory_of_component(component)
 
     def get_cmd_type(self, categorie_item, catspec):
         if self.has_asrock:
@@ -571,7 +571,7 @@ class OEMHandler(generic.OEMHandler):
 
         return cmd_type
 
-    def _collect_tsm_inventory(self):
+    async def _collect_tsm_inventory(self):
         self.oem_inventory_info = {}
         asrock = False
         if self.has_asrock:
@@ -591,7 +591,7 @@ class OEMHandler(generic.OEMHandler):
                 for i in range(0x01, 0xff):
                     tmp_command["data"][-1] = i
                     try:
-                        partrsp = self.ipmicmd.xraw_command(**tmp_command)
+                        partrsp = await self.ipmicmd.xraw_command(**tmp_command)
                         count += 1
                         if asrock and partrsp["data"][1] == "\xff":
                             continue
@@ -612,7 +612,7 @@ class OEMHandler(generic.OEMHandler):
             else:
                 try:
                     cmd = self.get_cmd_type(catid, catspec)
-                    rsp = self.ipmicmd.xraw_command(**cmd)
+                    rsp = await self.ipmicmd.xraw_command(**cmd)
                 except pygexc.IpmiException:
                     continue
             # Parse the response we got
@@ -651,7 +651,7 @@ class OEMHandler(generic.OEMHandler):
                     print(traceback.print_exc())
                     continue
 
-    def get_leds(self):
+    async def get_leds(self):
         cmd = 0x02
         led_set = leds
         led_set_status = led_status
@@ -673,12 +673,12 @@ class OEMHandler(generic.OEMHandler):
         for (name, id_) in led_set.items():
             try:
                 if asrock:
-                    rsp = self.ipmicmd.xraw_command(netfn=0x3A, command=cmd,
+                    rsp = await self.ipmicmd.xraw_command(netfn=0x3A, command=cmd,
                                                     data=(0x03, id_, 0x00))
                     rdata = bytearray(rsp['data'][:])
                     status = rdata[1]
                 else:
-                    rsp = self.ipmicmd.xraw_command(netfn=0x3A, command=cmd,
+                    rsp = await self.ipmicmd.xraw_command(netfn=0x3A, command=cmd,
                                                     data=(id_,))
                     rdata = bytearray(rsp['data'][:])
                     status = rdata[0]
@@ -689,11 +689,11 @@ class OEMHandler(generic.OEMHandler):
                                         led_status_default)
             yield (name, {'status': status})
 
-    def set_identify(self, on, duration, blink):
+    async def set_identify(self, on, duration, blink):
         if on and not duration and self.is_sd350:
-            self.ipmicmd.xraw_command(netfn=0x3a, command=6, data=(1, 1))
+            await self.ipmicmd.xraw_command(netfn=0x3a, command=6, data=(1, 1))
         elif self.has_xcc:
-            self.immhandler.set_identify(on, duration, blink)
+            await self.immhandler.set_identify(on, duration, blink)
         else:
             raise pygexc.UnsupportedFunctionality()
 
@@ -766,11 +766,11 @@ class OEMHandler(generic.OEMHandler):
                 self.immhandler.augment_psu_info(fru, name)
             if (self.has_xcc and 'memory_type' in fru
                     and fru['memory_type'] == 'Unknown'):
-                self.immhandler.fetch_dimm(name, fru)
+                await self.immhandler.fetch_dimm(name, fru)
             return fru
         elif await self.is_fpc() and await self.is_fpc() != 6:  # SMM variant
             fru['oem_parser'] = 'lenovo'
-            return self.smmhandler.process_fru(fru)
+            return await self.smmhandler.process_fru(fru)
         elif self.has_asrock:
             fru['oem_parser'] = 'lenovo'
             # ASRock RS160 TS460 lays out specific interpretation of the

@@ -818,12 +818,12 @@ class SMMClient(object):
             progress({'phase': 'complete'})
         return savefile
 
-    def process_fru(self, fru):
+    async def process_fru(self, fru):
         smmv1 = self.smm_variant & 0xf0 == 0
         # TODO(jjohnson2): can also get EIOM, SMM, and riser data if warranted
-        snum = bytes(self.ipmicmd.xraw_command(
+        snum = bytes(await self.ipmicmd.xraw_command(
             netfn=0x32, command=0xb0, data=(5, 1))['data'][:])
-        mnum = bytes(self.ipmicmd.xraw_command(
+        mnum = bytes(await self.ipmicmd.xraw_command(
             netfn=0x32, command=0xb0, data=(5, 0))['data'][:])
         if not smmv1:
             snum = snum[2:]

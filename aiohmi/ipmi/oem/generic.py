@@ -197,7 +197,7 @@ class OEMHandler(object):
         raise exc.UnsupportedFunctionality(
             'Do not know how to get diagnostic data for this platform')
 
-    def get_sensor_data(self):
+    async def get_sensor_data(self):
         """Get OEM sensor data
 
         Iterate through all OEM 'sensors' and return data as if they were
@@ -206,7 +206,7 @@ class OEMHandler(object):
         """
         return ()
 
-    def get_oem_inventory(self):
+    async def get_oem_inventory(self):
         """Get tuples of component names and inventory data.
 
         This returns an iterable of tuples.  The first member of each tuple
@@ -214,9 +214,9 @@ class OEMHandler(object):
         is a dict of inventory information about the component.
         """
         for desc in self.get_oem_inventory_descriptions():
-            yield (desc, self.get_inventory_of_component(desc))
+            yield (desc, await self.get_inventory_of_component(desc))
 
-    def get_inventory_of_component(self, component):
+    async def get_inventory_of_component(self, component):
         """Get inventory detail of an OEM defined component
 
         Given a string that may be an OEM component, return the detail of that
@@ -263,7 +263,7 @@ class OEMHandler(object):
         """
         return None
 
-    def process_fru(self, fru, name=None):
+    async def process_fru(self, fru, name=None):
         """Modify a fru entry with OEM understanding.
 
         Given a fru, clarify 'extra' fields according to OEM rules and
@@ -513,8 +513,8 @@ class OEMHandler(object):
         """
         return False
 
-    def process_zero_fru(self, zerofru):
-        return self.process_fru(zerofru)
+    async def process_zero_fru(self, zerofru):
+        return await self.process_fru(zerofru)
 
     def is_valid(self, name):
         return name is not None

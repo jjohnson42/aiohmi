@@ -127,23 +127,28 @@ class FRU(object):
         self.databytes = None
         self.info = None
         self.sdr = sdr
+        self.ipmicmd = None
+        self.fruid = fruid
         if self.rawfru is not None:
             self.parsedata()
         elif ipmicmd is not None:
             self.ipmicmd = weakref.proxy(ipmicmd)
-            # Use the ipmicmd to fetch the data
+        else:
+            raise TypeError('Either rawdata or ipmicmd must be specified')
+        
+    async def initialize(self):
+        if self.ipmicmd is not None:
             try:
-                self.fetch_fru(fruid)
+                await self.fetch_fru(self.fruid)
             except iexc.IpmiException as ie:
                 if ie.ipmicode in (195, 201, 203, 129):
                     return
                 raise
             self.parsedata()
-        else:
-            raise TypeError('Either rawdata or ipmicmd must be specified')
 
-    def fetch_fru(self, fruid):
-        response = self.ipmicmd.raw_command(
+
+    async def fetch_fru(self, fruid):
+        response = await self.ipmicmd.raw_command(
             netfn=0xa, command=0x10, data=[fruid])
         if 'error' in response:
             raise iexc.IpmiException(response['error'], code=response['code'])
@@ -160,7 +165,7 @@ class FRU(object):
         offset = 0
         self.rawfru = bytearray([])
         while chunksize:
-            response = self.ipmicmd.raw_command(
+            response = await self.ipmicmd.raw_command(
                 netfn=0xa, command=0x11, data=[fruid, offset & 0xff,
                                                offset >> 8, chunksize])
             if response['code'] in (201, 202):

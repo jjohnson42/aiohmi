@@ -978,8 +978,8 @@ class XCCClient(IMMClient):
             raise pygexc.UnsupportedFunctionality(
                 'This platform does not support AC reseat.')
 
-    def fetch_dimm(self, name, fru):
-        meminfo = self.grab_cacheable_json('/api/dataset/imm_memory')
+    async def fetch_dimm(self, name, fru):
+        meminfo = await self.grab_cacheable_json('/api/dataset/imm_memory')
         meminfo = meminfo.get('items', [{}])[0].get('memory', [])
         for memi in meminfo:
             if memi.get('memory_description', None) == name:
@@ -998,17 +998,17 @@ class XCCClient(IMMClient):
                 fru['manufacturer'] = memi['memory_manufacturer']
                 break
 
-    def set_identify(self, on, duration, blink):
+    async def set_identify(self, on, duration, blink):
         if blink:
-            self.grab_redfish_response_with_status(
+            await self.grab_redfish_response_with_status(
                 '/redfish/v1/Systems/1',
                 {'IndicatorLED': 'Blinking'},
                 method='PATCH')
             raise pygexc.BypassGenericBehavior()
         raise pygexc.UnsupportedFunctionality()
 
-    def get_description(self):
-        dsc = self.wc.grab_json_response('/DeviceDescription.json')
+    async def get_description(self):
+        dsc = await self.wc.grab_json_response('/DeviceDescription.json')
         dsc = dsc[0]
         if not dsc.get('u-height', None):
             if dsc.get('enclosure-machinetype-model', '').startswith('7Y36'):
@@ -1017,27 +1017,27 @@ class XCCClient(IMMClient):
                 return {}
         return {'height': int(dsc['u-height']), 'slot': int(dsc['slot'])}
 
-    def get_extended_bmc_configuration(self):
-        immsettings = self.get_system_configuration(fetchimm=True)
+    async def get_extended_bmc_configuration(self):
+        immsettings = await self.get_system_configuration(fetchimm=True)
         for setting in list(immsettings):
             if not setting.startswith('IMM.'):
                 del immsettings[setting]
         return immsettings
 
-    def user_delete(self, uid):
+    async def user_delete(self, uid):
         uid = uid - 1
-        userinfo = self.wc.grab_json_response('/api/dataset/imm_users')
+        userinfo = await self.wc.grab_json_response('/api/dataset/imm_users')
         uidtonamemap = {}
         for user in userinfo.get('items', [{'users': []}])[0].get('users', []):
             uidtonamemap[user['users_user_id']] = user['users_user_name']
         if uid in uidtonamemap:
             deltarget = '{0},{1}'.format(uid, uidtonamemap[uid])
-            self.wc.grab_json_response('/api/function', {"USER_UserDelete": deltarget})
+            await self.wc.grab_json_response('/api/function', {"USER_UserDelete": deltarget})
             raise pygexc.BypassGenericBehavior()
 
-    def get_bmc_configuration(self):
+    async def get_bmc_configuration(self):
         settings = {}
-        passrules = self.wc.grab_json_response('/api/dataset/imm_users_global')
+        passrules = await self.wc.grab_json_response('/api/dataset/imm_users_global')
         passrules = passrules.get('items', [{}])[0]
         settings['password_reuse_count'] = {
             'value': passrules.get('pass_min_resuse')}
@@ -1053,13 +1053,13 @@ class XCCClient(IMMClient):
             'value': passrules.get('pass_min_length')}
         settings['password_lockout_period'] = {
             'value': passrules.get('lockout_period')}
-        presassert = self.wc.grab_json_response('/api/dataset/imm_rpp')
+        presassert = await self.wc.grab_json_response('/api/dataset/imm_rpp')
         asserted = presassert.get('items', [{}])[0].get('rpp_Assert', None)
         if asserted is not None:
             settings['presence_assert'] = {
                 'value': 'Enable' if asserted else 'Disable'
             }
-        usbparms = self.wc.grab_json_response('/api/dataset/imm_usb')
+        usbparms = await self.wc.grab_json_response('/api/dataset/imm_usb')
         if usbparms:
             usbparms = usbparms.get('items', [{}])[0]
             if usbparms['usb_eth_over_usb_enabled'] == 1:
@@ -1084,7 +1084,7 @@ class XCCClient(IMMClient):
                     mappings.append('{0}:{1}'.format(src, dst))
             settings['usb_forwarded_ports'] = {'value': ','.join(mappings)}
         try:
-            enclosureinfo = self.ipmicmd.xraw_command(0x3a, 0xf1, data=[0])
+            enclosureinfo = await self.ipmicmd.xraw_command(0x3a, 0xf1, data=[0])
         except pygexc.IpmiException:
             return settings
         settings['smm'] = {
@@ -1102,7 +1102,7 @@ class XCCClient(IMMClient):
             settings['smm']['value'] = 'IPMI'
         else:
             settings['smm']['value'] = None
-        smmip = self.get_property('/v2/ibmc/smm/smm_ip')
+        smmip = await self.get_property('/v2/ibmc/smm/smm_ip')
         if smmip:
             smmip = socket.inet_ntoa(bytes(smmip[-1::-1]))
             settings['smm_ip'] = {
@@ -1121,7 +1121,7 @@ class XCCClient(IMMClient):
         'password_lockout_period': 'USER_GlobalLockoutPeriod',
     }
 
-    def set_bmc_configuration(self, changeset):
+    async def set_bmc_configuration(self, changeset):
         ruleset = {}
         usbsettings = {}
         for key in changeset:
@@ -1130,11 +1130,11 @@ class XCCClient(IMMClient):
             currval = changeset[key].get('value', None)
             if 'smm'.startswith(key.lower()):
                 if 'enabled'.startswith(currval.lower()):
-                    self.ipmicmd.xraw_command(0x3a, 0xf1, data=[1])
+                    await self.ipmicmd.xraw_command(0x3a, 0xf1, data=[1])
                 elif 'disabled'.startswith(currval.lower()):
-                    self.ipmicmd.xraw_command(0x3a, 0xf1, data=[2])
+                    await self.ipmicmd.xraw_command(0x3a, 0xf1, data=[2])
                 elif 'ipmi'.startswith(currval.lower()):
-                    self.ipmicmd.xraw_command(0x3a, 0xf1, data=[4])
+                    await self.ipmicmd.xraw_command(0x3a, 0xf1, data=[4])
             elif key.lower() in self.rulemap:
                 ruleset[self.rulemap[key.lower()]] = changeset[key]['value']
                 if key.lower() == 'password_expiration':
@@ -1143,12 +1143,12 @@ class XCCClient(IMMClient):
             elif 'presence_asserted'.startswith(key.lower()):
                 assertion = changeset[key]['value']
                 if 'enabled'.startswith(assertion.lower()):
-                    self.wc.grab_json_response('/api/dataset',
+                    await self.wc.grab_json_response('/api/dataset',
                                                {'IMM_RPPAssert': '0'})
-                    self.wc.grab_json_response('/api/dataset',
+                    await self.wc.grab_json_response('/api/dataset',
                                                {'IMM_RPPAssert': '1'})
                 elif 'disabled'.startswith(assertion.lower()):
-                    self.wc.grab_json_response('/api/dataset',
+                    await self.wc.grab_json_response('/api/dataset',
                                                {'IMM_RPPAssert': '0'})
                 else:
                     raise pygexc.InvalidParameterValue(
@@ -1162,18 +1162,18 @@ class XCCClient(IMMClient):
                 raise pygexc.InvalidParameterValue(
                     '{0} not a known setting'.format(key))
         if ruleset:
-            self.wc.grab_json_response('/api/dataset', ruleset)
+            await self.wc.grab_json_response('/api/dataset', ruleset)
         if usbsettings:
-            self.apply_usb_configuration(usbsettings)
+            await self.apply_usb_configuration(usbsettings)
 
-    def apply_usb_configuration(self, usbsettings):
+    async def apply_usb_configuration(self, usbsettings):
         def numify(val):
             if 'enabled'.startswith(val.lower()):
                 return '1'
             if 'disabled'.startswith(val.lower()):
                 return '0'
             raise Exception('Usupported value')
-        usbparms = self.wc.grab_json_response('/api/dataset/imm_usb')
+        usbparms = await self.wc.grab_json_response('/api/dataset/imm_usb')
         usbparms = usbparms.get('items', [{}])[0]
         addrmode = '{0}'.format(usbparms['lan_over_usb_addr_mode'])
         ethena = '{0}'.format(usbparms['usb_eth_over_usb_enabled'])
@@ -1194,7 +1194,7 @@ class XCCClient(IMMClient):
             needsettings = True
             newsettings['USB_PortForwardEna'] = numify(newfwd)
         if needsettings:
-            self.wc.grab_json_response('/api/dataset', newsettings)
+            await self.wc.grab_json_response('/api/dataset', newsettings)
         if 'usb_forwarded_ports' in usbsettings:
             oldfwds = {}
             usedids = set([])
@@ -1203,7 +1203,7 @@ class XCCClient(IMMClient):
                 rule = '{0}:{1}'.format(
                     mapping['ext_port'], mapping['eth_port'])
                 if rule not in newfwds:
-                    self.wc.grab_json_response(
+                    await self.wc.grab_json_response(
                         '/api/function', {
                             'USB_RemoveMapping': '{0}'.format(mapping['id'])})
                 else:
@@ -1219,11 +1219,11 @@ class XCCClient(IMMClient):
                     usedids.add(newid)
                     newmapping = '{0},{1}'.format(
                         newid, mapping.replace(':', ','))
-                    self.wc.grab_json_response(
+                    await self.wc.grab_json_response(
                         '/api/function', {'USB_AddMapping': newmapping})
 
-    def clear_system_configuration(self):
-        res = self.wc.grab_json_response_with_status(
+    async def clear_system_configuration(self):
+        res = await self.wc.grab_json_response_with_status(
             '/redfish/v1/Systems/1/Bios/Actions/Bios.ResetBios',
             {'Action': 'Bios.ResetBios'},
             headers={
@@ -1268,10 +1268,10 @@ class XCCClient(IMMClient):
                     break
             return wc
 
-    def _raid_number_map(self, controller):
+    async def _raid_number_map(self, controller):
         themap = {}
         cid = controller.split(',')
-        rsp = self.wc.grab_json_response(
+        rsp = await self.wc.grab_json_response(
             '/api/function/raid_conf?'
             'params=raidlink_GetDisksToConf,{0}'.format(cid[0]))
         if rsp.get('return') == 22:  # New style firmware
@@ -1280,7 +1280,7 @@ class XCCClient(IMMClient):
             else:
                 arg = '{0},{1}'.format(cid[0], cid[2])
             arg = 'params=raidlink_GetDisksToConf,{0}'.format(arg)
-            rsp = self.wc.grab_json_response(
+            rsp = await self.wc.grab_json_response(
                 '/api/function/raid_conf?{0}'.format(arg))
         for lvl in rsp['items'][0]['supported_raidlvl']:
             mapdata = (lvl['rdlvl'], lvl['maxSpan'])
@@ -1292,8 +1292,8 @@ class XCCClient(IMMClient):
             themap[raidname] = mapdata
         return themap
 
-    def check_storage_configuration(self, cfgspec=None):
-        rsp = self.wc.grab_json_response(
+    async def check_storage_configuration(self, cfgspec=None):
+        rsp = await self.wc.grab_json_response(
             '/api/function/raid_conf?params=raidlink_GetStatus')
         if rsp['items'][0]['status'] not in (2, 3):
             raise pygexc.TemporaryError('Storage configuration unavailable in '
@@ -1306,26 +1306,26 @@ class XCCClient(IMMClient):
         self.weblogout()
         return True
 
-    def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
-        result = self.wc.grab_json_response('/api/providers/ffdc',
+    async def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
+        result = await self.wc.grab_json_response('/api/providers/ffdc',
                                             {'Generate_FFDC_status': 1})
-        rsp = self.wc.grab_json_response('/api/providers/ffdc',
+        rsp = await self.wc.grab_json_response('/api/providers/ffdc',
                                          {'Generate_FFDC': 1})
         if rsp.get('return', 0) == 4:
-            rsp = self.wc.grab_json_response('/api/providers/ffdc',
+            rsp = await self.wc.grab_json_response('/api/providers/ffdc',
                                              {'Generate_FFDC': 1,
                                               'thermal_log': 0})        
         percent = 0
         while percent != 100:
             ipmisession.Session.pause(3)
-            result = self.wc.grab_json_response('/api/providers/ffdc',
+            result = await self.wc.grab_json_response('/api/providers/ffdc',
                                                 {'Generate_FFDC_status': 1})
             self._refresh_token()
             if progress:
                 progress({'phase': 'initializing', 'progress': float(percent)})
             percent = result['progress']
         while 'FileName' not in result:
-            result = self.wc.grab_json_response('/api/providers/ffdc',
+            result = await self.wc.grab_json_response('/api/providers/ffdc',
                                                 {'Generate_FFDC_status': 1})
         url = '/ffdc/{0}'.format(result['FileName'])
         if autosuffix and not savefile.endswith('.tzz'):
@@ -1344,12 +1344,12 @@ class XCCClient(IMMClient):
             progress({'phase': 'complete'})
         return savefile
 
-    def disk_inventory(self, mode=0):
+    async def disk_inventory(self, mode=0):
         # mode 0 is firmware, 1 is hardware
         storagedata = self.get_cached_data('lenovo_cached_storage')
         if not storagedata:
             if self.wc:
-                storagedata = self.wc.grab_json_response(
+                storagedata = await self.wc.grab_json_response(
                     '/api/function/raid_alldevices?params=storage_GetAllDisks')
                 if storagedata:
                     self.datacache['lenovo_cached_storage'] = (
@@ -1402,7 +1402,7 @@ class XCCClient(IMMClient):
         bdata['version'] = diskent['fwVersion']
         return (diskname, bdata)
 
-    def _parse_array_spec(self, arrayspec):
+    async def _parse_array_spec(self, arrayspec):
         controller = None
         if arrayspec.disks:
             for disk in list(arrayspec.disks) + list(arrayspec.hotspares):
@@ -1438,13 +1438,13 @@ class XCCClient(IMMClient):
             args = [pth, ctl[0], rdlvl, spancount, drivesperspan, drvstr,
                     hstr]
             url = ','.join([str(x) for x in args])
-            rsp = self.wc.grab_json_response(url)
+            rsp = await self.wc.grab_json_response(url)
             if rsp.get('return', -1) == 22:
                 args.append(ctl[1])
                 args = [pth, ctl[0], rdlvl, spancount, drivesperspan, drvstr,
                         hstr, ctl[1]]
                 url = ','.join([str(x) for x in args])
-                rsp = self.wc.grab_json_response(url)
+                rsp = await self.wc.grab_json_response(url)
             if rsp['items'][0]['errcode'] == 16:
                 raise pygexc.InvalidParameterValue('Incorrect number of disks')
             elif rsp['items'][0]['errcode'] != 0:
@@ -1499,8 +1499,8 @@ class XCCClient(IMMClient):
             raise pygexc.InvalidParameterValue('Requested disk not found')
         return currstatus
 
-    def _set_drive_state(self, disk, state):
-        rsp = self.wc.grab_json_response(
+    async def _set_drive_state(self, disk, state):
+        rsp = await self.wc.grab_json_response(
             '/api/function',
             {'raidlink_DiskStateAction': '{0},{1}'.format(disk.id[1], state)})
         if rsp.get('return', -1) != 0:
@@ -1508,15 +1508,15 @@ class XCCClient(IMMClient):
                 'Unexpected return to set disk state: {0}'.format(
                     rsp.get('return', -1)))
 
-    def clear_storage_arrays(self):
-        rsp = self.wc.grab_json_response(
+    async def clear_storage_arrays(self):
+        rsp = await self.wc.grab_json_response(
             '/api/function', {'raidlink_ClearRaidConf': '1'})
         self.weblogout()
         if rsp['return'] != 0:
             raise Exception('Unexpected return to clear config: ' + repr(rsp))
 
-    def remove_storage_configuration(self, cfgspec):
-        realcfg = self.get_storage_configuration(False)
+    async def remove_storage_configuration(self, cfgspec):
+        realcfg = await self.get_storage_configuration(False)
         for pool in cfgspec.arrays:
             for volume in pool.volumes:
                 cid = volume.id[0].split(',')
@@ -1524,38 +1524,38 @@ class XCCClient(IMMClient):
                     vid = '{0},{1},{2}'.format(volume.id[1], cid[1], cid[2])
                 else:
                     vid = '{0},{1},{2}'.format(volume.id[1], cid[0], cid[2])
-                rsp = self.wc.grab_json_response(
+                rsp = await self.wc.grab_json_response(
                     '/api/function', {'raidlink_RemoveVolumeAsync': vid})
                 if rsp.get('return', -1) == 2:
                     # older firmware
                     vid = '{0},{1}'.format(volume.id[1], cid[0])
-                    rsp = self.wc.grab_json_response(
+                    rsp = await self.wc.grab_json_response(
                         '/api/function', {'raidlink_RemoveVolumeAsync': vid})
                 if rsp.get('return', -1) != 0:
                     raise Exception(
                         'Unexpected return to volume deletion: ' + repr(rsp))
                 self._wait_storage_async()
         for disk in cfgspec.disks:
-            self._make_available(disk, realcfg)
+            await self._make_available(disk, realcfg)
         self.weblogout()
 
-    def apply_storage_configuration(self, cfgspec):
-        realcfg = self.get_storage_configuration(False)
+    async def apply_storage_configuration(self, cfgspec):
+        realcfg = await self.get_storage_configuration(False)
         for disk in cfgspec.disks:
             if disk.status.lower() == 'jbod':
-                self._make_jbod(disk, realcfg)
+                await self._make_jbod(disk, realcfg)
             elif disk.status.lower() == 'hotspare':
-                self._make_global_hotspare(disk, realcfg)
+                await self._make_global_hotspare(disk, realcfg)
             elif disk.status.lower() in ('unconfigured', 'available', 'ugood',
                                          'unconfigured good'):
-                self._make_available(disk, realcfg)
+                await self._make_available(disk, realcfg)
         for pool in cfgspec.arrays:
             if pool.disks:
-                self._create_array(pool)
-        self.weblogout()
+                await self._create_array(pool)
+        await self.weblogout()
 
-    def _create_array(self, pool):
-        params = self._parse_array_spec(pool)
+    async def _create_array(self, pool):
+        params = await self._parse_array_spec(pool)
         cid = params['controller'].split(',')[0]
         cslotno = params['controller'].split(',')[1]
         url = '/api/function/raid_conf?params=raidlink_GetDefaultVolProp'
@@ -1642,7 +1642,7 @@ class XCCClient(IMMClient):
             params['perspan'], params['drives'], params['hotspares'])
         arglist += ''.join(vols)
         parms = {'raidlink_AddNewVolWithNaAsync': arglist}
-        rsp = self.wc.grab_json_response(url, parms)
+        rsp = await self.wc.grab_json_response(url, parms)
         if rsp['return'] == 14:  # newer firmware
             if 'supported_cpwb' in props and not usesctrlslot: # no ctrl_type
                 arglist = '{0},{1},{2},{3},{4},{5},{6},'.format(
@@ -1650,7 +1650,7 @@ class XCCClient(IMMClient):
                     params['perspan'], 0, params['drives'], params['hotspares'])
                 arglist += ''.join(vols)
                 parms = {'raidlink_AddNewVolWithNaAsync': arglist}
-                rsp = self.wc.grab_json_response(url, parms)
+                rsp = await self.wc.grab_json_response(url, parms)
             else: # with ctrl_type
                 if cid[2] == 2:
                     cnum = cid[1]
@@ -1659,17 +1659,17 @@ class XCCClient(IMMClient):
                     params['perspan'], params['drives'], params['hotspares'])
                 arglist += ''.join(vols) + ',{0}'.format(cid[2])
                 parms = {'raidlink_AddNewVolWithNaAsync': arglist}
-                rsp = self.wc.grab_json_response(url, parms)
+                rsp = await self.wc.grab_json_response(url, parms)
         if rsp['return'] != 0:
             raise Exception(
                 'Unexpected response to add volume command: ' + repr(rsp))
-        self._wait_storage_async()
+        await self._wait_storage_async()
 
-    def _wait_storage_async(self):
+    async def _wait_storage_async(self):
         rsp = {'items': [{'status': 0}]}
         while rsp['items'][0]['status'] == 0:
             ipmisession.Session.pause(1)
-            rsp = self.wc.grab_json_response(
+            rsp = await self.wc.grab_json_response(
                 '/api/function/raid_conf?params=raidlink_QueryAsyncStatus')
 
     def extract_drivelist(self, cfgspec, controller, drives):
@@ -1683,8 +1683,8 @@ class XCCClient(IMMClient):
             drives.append(drive)
         return controller
 
-    def get_oem_sensor_names(self, ipmicmd):
-        oemsensornames = super(XCCClient, self).get_oem_sensor_names(ipmicmd)
+    async def get_oem_sensor_names(self, ipmicmd):
+        oemsensornames = await super(XCCClient, self).get_oem_sensor_names(ipmicmd)
         return oemsensornames
         # therminfo = self.grab_cacheable_json(
         #     '/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
@@ -1694,11 +1694,11 @@ class XCCClient(IMMClient):
         #             oemsensornames = oemsensornames + (name,)
         # return oemsensornames
 
-    def get_storage_configuration(self, logout=True):
-        rsp = self.wc.grab_json_response(
+    async def get_storage_configuration(self, logout=True):
+        rsp = await self.wc.grab_json_response(
             '/api/function/raid_alldevices?params=storage_GetAllDevices,0')
         if not rsp:
-            rsp = self.wc.grab_json_response(
+            rsp = await self.wc.grab_json_response(
                 '/api/function/raid_alldevices?params=storage_GetAllDevices')
         standalonedisks = []
         pools = []
@@ -1740,10 +1740,10 @@ class XCCClient(IMMClient):
                             id=(cid, disk['id']), status=disk['RAIDState'],
                             serial=disk['serialNo'], fru=disk['fruPartNo']))
         if logout:
-            self.weblogout()
+            await self.weblogout()
         return storage.ConfigSpec(disks=standalonedisks, arrays=pools)
 
-    def attach_remote_media(self, url, user, password):
+    async def attach_remote_media(self, url, user, password):
         proto, host, path = util.urlsplit(url)
         if proto == 'smb':
             proto = 'cifs'
@@ -1763,7 +1763,7 @@ class XCCClient(IMMClient):
             raise pygexc.UnsupportedFunctionality(
                 '"{0}" scheme is not supported on this system or '
                 'invalid url format'.format(proto))
-        rt = self.wc.grab_json_response('/api/providers/rp_vm_remote_connect',
+        rt = await self.wc.grab_json_response('/api/providers/rp_vm_remote_connect',
                                         json.dumps(rq))
         if 'return' not in rt or rt['return'] != 0:
             if rt['return'] in (657, 659, 656):
@@ -1792,13 +1792,13 @@ class XCCClient(IMMClient):
         if self._keepalivesession:
             await self._refresh_token_wc(self._keepalivesession)
         elif self._wc and self._wc.vintage < util._monotonic_time() - 20:
-            self.weblogout()
+            await self.weblogout()
 
-    def fetch_psu_firmware(self):
+    async def fetch_psu_firmware(self):
         psudata = self.get_cached_data('lenovo_cached_psu')
         if not psudata:
             if self.wc:
-                psudata = self.wc.grab_json_response(
+                psudata = await self.wc.grab_json_response(
                     '/api/function/psu_update?params=GetPsuListAndFW')
                 if psudata:
                     self.datacache['lenovo_cached_psu'] = (
@@ -1810,7 +1810,7 @@ class XCCClient(IMMClient):
                    {'model': psu['model'],
                     'version': psu['version']})
 
-    def get_firmware_inventory(self, bmcver, components):
+    async def get_firmware_inventory(self, bmcver, components):
         # First we fetch the system firmware found in imm properties
         # then check for agentless, if agentless, get adapter info using
         # https, using the caller TLS verification scheme
@@ -1821,7 +1821,7 @@ class XCCClient(IMMClient):
         components = set(components)
         if category in ('all', 'core') and (not components
                 or set(('core', 'imm', 'bmc', 'xcc')) & components):
-            rsp = self.ipmicmd.xraw_command(netfn=0x3a, command=0x50)
+            rsp = await self.ipmicmd.xraw_command(netfn=0x3a, command=0x50)
             immverdata = self.parse_imm_buildinfo(rsp['data'])
             bmcmajor, bmcminor = [int(x) for x in bmcver.split('.')]
             bmcver = '{0}.{1:02d}'.format(bmcmajor, bmcminor)
@@ -1915,42 +1915,42 @@ class XCCClient(IMMClient):
         needdiskfirmware = category in ('all', 'disks')
         needadapterfirmware = category in ('all', 'adapters')
         needpsufirmware = category in ('all', 'misc')
-        for firm in self.fetch_agentless_firmware(needdisk=needdiskfirmware, needadp=needadapterfirmware):
+        async for firm in self.fetch_agentless_firmware(needdisk=needdiskfirmware, needadp=needadapterfirmware):
             yield firm
         if needpsufirmware:        
-            for firm in self.fetch_psu_firmware():
+            async for firm in self.fetch_psu_firmware():
                 yield firm
 
-    def detach_remote_media(self):
+    async def detach_remote_media(self):
         if self._keepalivesession:
             # log out from the extra session
             try:
-                self._keepalivesession.grab_json_response(self.logouturl)
+                await self._keepalivesession.grab_json_response(self.logouturl)
             except Exception:
                 pass
             self._keepalivesession = None
-        rt = self.wc.grab_json_response('/api/providers/rp_vm_remote_getdisk')
+        rt = await self.wc.grab_json_response('/api/providers/rp_vm_remote_getdisk')
         if 'items' in rt:
             slots = []
             for mount in rt['items']:
                 slots.append(mount['slotId'])
             for slot in slots:
-                rt = self.wc.grab_json_response(
+                rt = await self.wc.grab_json_response(
                     '/api/providers/rp_vm_remote_unmount',
                     json.dumps({'Slot': str(slot)}))
                 if 'return' not in rt or rt['return'] != 0:
                     raise Exception("Unrecognized return: " + repr(rt))
-        rdocs = self.wc.grab_json_response('/api/providers/rp_rdoc_imagelist')
+        rdocs = await self.wc.grab_json_response('/api/providers/rp_rdoc_imagelist')
         for rdoc in rdocs['items']:
             filename = rdoc['filename']
-            rt = self.wc.grab_json_response('/api/providers/rp_rdoc_unmount',
+            rt = await self.wc.grab_json_response('/api/providers/rp_rdoc_unmount',
                                             {'ImageName': filename})
             if rt.get('return', 1) != 0:
                 raise Exception("Unrecognized return: " + repr(rt))
-        self.weblogout()
+        await self.weblogout()
 
-    def list_media(self):
-        rt = self.wc.grab_json_response('/api/providers/rp_vm_remote_getdisk')
+    async def list_media(self):
+        rt = await self.wc.grab_json_response('/api/providers/rp_vm_remote_getdisk')
         if 'items' in rt:
             for mt in rt['items']:
                 url = mt['remotepath']
@@ -1961,22 +1961,22 @@ class XCCClient(IMMClient):
                     url = url.replace(':', '')
                     url = 'nfs://' + url
                 yield media.Media(mt['filename'], url)
-        for rdoc in self._list_rdoc():
+        async for rdoc in self._list_rdoc():
             yield rdoc
-        self.weblogout()
+        await self.weblogout()
 
     
-    def _list_rdoc(self):
-        rt = self.wc.grab_json_response('/api/providers/rp_rdoc_imagelist')
+    async def _list_rdoc(self):
+        rt = await self.wc.grab_json_response('/api/providers/rp_rdoc_imagelist')
         if 'items' in rt:
             for mt in rt['items']:
                 yield media.Media(mt['filename'])
 
-    def upload_media(self, filename, progress=None, data=None):
+    async def upload_media(self, filename, progress=None, data=None):
         wc = self.wc
         self._refresh_token()
         numrdocs = 0
-        for rdoc in self._list_rdoc():
+        async for rdoc in self._list_rdoc():
             numrdocs += 1
             if rdoc.name == os.path.basename(filename):
                 raise pygexc.InvalidParameterValue(
@@ -1984,7 +1984,7 @@ class XCCClient(IMMClient):
         if numrdocs >= 2:
             raise pygexc.InvalidParameterValue(
                 'Maximum number of uploaded media reached')        
-        rsp, statu = wc.grab_json_response_with_status('/rdocupload')
+        rsp, statu = await wc.grab_json_response_with_status('/rdocupload')
         newmode = False
         if statu == 404:
             xid = random.randint(0, 1000000000)
@@ -2002,7 +2002,7 @@ class XCCClient(IMMClient):
                     progress({'phase': 'upload',
                           'progress': 100 * wc.get_upload_progress()})
             else:
-                rsp = self.wc.grab_json_response(
+                rsp = await self.wc.grab_json_response(
                     '/upload/progress?X-Progress-ID={0}'.format(xid))
                 if progress and rsp['state'] == 'uploading':
                     progress({'phase': 'upload',
@@ -2024,7 +2024,7 @@ class XCCClient(IMMClient):
         addfile = {"Url": thepath, "Protocol": 6, "Write": writeable,
                    "Credential": ":", "Option": "", "Domain": "",
                    "WebUploadName": thename}
-        rsp = self.wc.grab_json_response('/api/providers/rp_rdoc_addfile',
+        rsp = await self.wc.grab_json_response('/api/providers/rp_rdoc_addfile',
                                          addfile)
         self._refresh_token()
         if rsp.get('return', -1) != 0:
@@ -2033,13 +2033,13 @@ class XCCClient(IMMClient):
         ready = False
         while not ready:
             ipmisession.Session.pause(3)
-            rsp = self.wc.grab_json_response('/api/providers/rp_rdoc_getfiles')
+            rsp = await self.wc.grab_json_response('/api/providers/rp_rdoc_getfiles')
             if 'items' not in rsp or len(rsp['items']) == 0:
                 raise Exception(
                     'Image upload was not accepted, it may be too large')
             ready = rsp['items'][0]['size'] != 0
         self._refresh_token()
-        rsp = self.wc.grab_json_response('/api/providers/rp_rdoc_mountall',
+        rsp = await self.wc.grab_json_response('/api/providers/rp_rdoc_mountall',
                                          {})
         self._refresh_token()
         if rsp.get('return', -1) != 0:
@@ -2047,7 +2047,7 @@ class XCCClient(IMMClient):
             raise Exception('Unrecognized return: ' + errmsg)
         if progress:
             progress({'phase': 'complete'})
-        self.weblogout()
+        await self.weblogout()
 
     async def grab_redfish_response_emptyonerror(self, url, body=None, method=None):
         rsp, status = await self.grab_redfish_response_with_status(url, body, method)
@@ -2063,7 +2063,7 @@ class XCCClient(IMMClient):
             ).decode('utf8'),
             'Content-Type': 'application/json'}, method=method)
 
-    def redfish_update_firmware(self, usd, filename, data, progress, bank):
+    async def redfish_update_firmware(self, usd, filename, data, progress, bank):
         if usd['HttpPushUriTargetsBusy']:
             raise pygexc.TemporaryError('Cannot run multiple updates to same '
                                         'target concurrently')
@@ -2091,12 +2091,12 @@ class XCCClient(IMMClient):
         elif needseek:
             data.seek(0)
         upurl = usd['HttpPushUri']
-        self.grab_redfish_response_with_status(
+        await self.grab_redfish_response_with_status(
             '/redfish/v1/UpdateService',
             {'HttpPushUriTargetsBusy': True}, method='PATCH')
         try:
             if bank == 'backup':
-                self.grab_redfish_response_with_status(
+                await self.grab_redfish_response_with_status(
                     '/redfish/v1/UpdateService',
                     {'HttpPushUriTargets':
                         ['/redfish/v1/UpdateService'
@@ -2187,13 +2187,13 @@ class XCCClient(IMMClient):
             return 'ready'
         return 'unavailable'       
 
-    def update_firmware(self, filename, data=None, progress=None, bank=None):
-        usd = self.grab_redfish_response_emptyonerror(
+    async def update_firmware(self, filename, data=None, progress=None, bank=None):
+        usd = await self.grab_redfish_response_emptyonerror(
             '/redfish/v1/UpdateService')
         rfishurl = usd.get('HttpPushUri', None)
         if rfishurl:
             self.weblogout()
-            return self.redfish_update_firmware(
+            return await self.redfish_update_firmware(
                 usd, filename, data, progress, bank)
         result = None
         if self.updating:
@@ -2201,32 +2201,32 @@ class XCCClient(IMMClient):
                                         'target concurrently')
         self.updating = True
         try:
-            result = self.update_firmware_backend(filename, data, progress,
+            result = await self.update_firmware_backend(filename, data, progress,
                                                   bank)
         except Exception:
             self.updating = False
             self._refresh_token()
-            self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
+            await self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
                 {'UPD_WebCancel': 1}))
-            self.weblogout()
+            await self.weblogout()
             raise
         self.updating = False
-        self.weblogout()
+        await self.weblogout()
         return result
 
-    def _refresh_token(self):
-        self._refresh_token_wc(self.wc)
+    async def _refresh_token(self):
+        await self._refresh_token_wc(self.wc)
 
-    def _refresh_token_wc(self, wc):
-        wc.grab_json_response('/api/providers/identity')
+    async def _refresh_token_wc(self, wc):
+        await wc.grab_json_response('/api/providers/identity')
         if '_csrf_token' in wc.cookies:
             wc.set_header('X-XSRF-TOKEN', self.wc.cookies['_csrf_token'])
             wc.vintage = util._monotonic_time()
 
-    def set_hostname(self, hostname):
-        self.wc.grab_json_response('/api/dataset', {'IMM_HostName': hostname})
-        self.wc.grab_json_response('/api/dataset', {'IMM_DescName': hostname})
-        self.weblogout()
+    async def set_hostname(self, hostname):
+        await self.wc.grab_json_response('/api/dataset', {'IMM_HostName': hostname})
+        await self.wc.grab_json_response('/api/dataset', {'IMM_DescName': hostname})
+        await self.weblogout()
 
     async def get_hostname(self):
         wc = await self.wc()
@@ -2234,11 +2234,11 @@ class XCCClient(IMMClient):
         await self.weblogout()
         return rsp['items'][0]['system_name']
 
-    def update_firmware_backend(self, filename, data=None, progress=None,
+    async def update_firmware_backend(self, filename, data=None, progress=None,
                                 bank=None):
-        self.weblogout()
-        self._refresh_token()
-        rsv = self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
+        await self.weblogout()
+        await self._refresh_token()
+        rsv = await self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
             {'UPD_WebReserve': 1}))
         if rsv['return'] == 103:
             raise Exception('Update already in progress')
@@ -2251,7 +2251,7 @@ class XCCClient(IMMClient):
         uploadstate = None
         while uploadthread.isAlive():
             uploadthread.join(3)
-            rsp = self.wc.grab_json_response(
+            rsp = await self.wc.grab_json_response(
                 '/upload/progress?X-Progress-ID={0}'.format(xid))
             if rsp['state'] == 'uploading':
                 progress({'phase': 'upload',
@@ -2262,12 +2262,12 @@ class XCCClient(IMMClient):
                     raise Exception('File is larger than supported')
                 raise Exception('Unexpected result:' + repr(rsp))
             uploadstate = rsp['state']
-            self._refresh_token()
+            await self._refresh_token()
         while uploadstate != 'done':
-            rsp = self.wc.grab_json_response(
+            rsp = await self.wc.grab_json_response(
                 '/upload/progress?X-Progress-ID={0}'.format(xid))
             uploadstate = rsp['state']
-            self._refresh_token()
+            await self._refresh_token()
         rsp = json.loads(uploadthread.rsp)
         if rsp['items'][0]['name'] != os.path.basename(filename):
             raise Exception('Unexpected response: ' + repr(rsp))
@@ -2276,18 +2276,18 @@ class XCCClient(IMMClient):
         ipmisession.Session.pause(3)
         # aggressive timing can cause the next call to occasionally
         # return 25 and fail
-        self._refresh_token()
-        rsp = self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
+        await self._refresh_token()
+        rsp = await self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
             {'UPD_WebSetFileName': rsp['items'][0]['path']}))
         if rsp.get('return', 0) in (25, 108):
             raise Exception('Temporary error validating update, try again')
         if rsp.get('return', -1) != 0:
             errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
             raise Exception('Unexpected return to set filename: ' + errmsg)
-        self._refresh_token()
+        await self._refresh_token()
         progress({'phase': 'validating',
                   'progress': 25.0})
-        rsp = self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
+        rsp = await self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
             {'UPD_WebVerifyUploadFile': 1}))
         if rsp.get('return', 0) == 115:
             raise Exception('Update image not intended for this system')
@@ -2368,20 +2368,20 @@ class XCCClient(IMMClient):
                     'Unexpected result from PCI select: ' + errmsg)
             self.set_property('/v2/ibmc/uefi/force-inventory', 1)
         else:
-            self._refresh_token()
-            rsp = self.wc.grab_json_response(
+            await self._refresh_token()
+            rsp = await self.wc.grab_json_response(
                 '/api/dataset/imm_firmware_update')
             if rsp['items'][0]['upgrades'][0]['id'] != 1:
                 raise Exception('Unexpected answer: ' + repr(rsp))
-        self._refresh_token()
+        await self._refresh_token()
         progress({'phase': 'apply',
                   'progress': 0.0})
         if bank in ('primary', None):
-            rsp = self.wc.grab_json_response(
+            rsp = await self.wc.grab_json_response(
                 '/api/providers/fwupdate', json.dumps(
                     {'UPD_WebStartDefaultAction': 1}))
         elif bank == 'backup':
-            rsp = self.wc.grab_json_response(
+            rsp = await self.wc.grab_json_response(
                 '/api/providers/fwupdate', json.dumps(
                     {'UPD_WebStartOptionalAction': 2}))
 
@@ -2390,9 +2390,9 @@ class XCCClient(IMMClient):
             raise Exception('Unexpected result starting update: %s' % errmsg)
         complete = False
         while not complete:
-            self._refresh_token()
+            await self._refresh_token()
             ipmisession.Session.pause(3)
-            rsp = self.wc.grab_json_response(
+            rsp = await self.wc.grab_json_response(
                 '/api/dataset/imm_firmware_progress')
             progress({'phase': 'apply',
                       'progress': rsp['items'][0]['action_percent_complete']})
@@ -2415,8 +2415,8 @@ class XCCClient(IMMClient):
             return 'complete'
         return 'pending'
 
-    def add_psu_hwinfo(self, hwmap):
-        psud = self.wc.grab_json_response('/api/dataset/imm_power_supplies')
+    async def add_psu_hwinfo(self, hwmap):
+        psud = await self.wc.grab_json_response('/api/dataset/imm_power_supplies')
         if not psud:
             return
         for psus in psud['items'][0]['power']:
@@ -2425,10 +2425,10 @@ class XCCClient(IMMClient):
                 'FRU Number': psus['fru_number'],
             }
 
-    def augment_psu_info(self, info, psuname):
+    async def augment_psu_info(self, info, psuname):
         psud = self.get_cached_data('lenovo_cached_psuhwinfo')
         if not psud:
-            psud = self.wc.grab_json_response(
+            psud = await self.wc.grab_json_response(
                 '/api/dataset/imm_power_supplies')
             if not psud:
                 return

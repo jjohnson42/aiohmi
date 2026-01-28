@@ -676,17 +676,18 @@ class Command(object):
                     sdr=self._sdr.fru[fruid]).info, component)
         return self._oem.get_inventory_of_component(component)
 
-    def _get_zero_fru(self):
+    async def _get_zero_fru(self):
         # Add some fields returned by get device ID command to FRU 0
         # Also rename them to something more in line with FRU 0 field naming
         # standards
-        device_id = self._get_device_id()
+        device_id = await self._get_device_id()
         device_id['Device ID'] = device_id.pop('device_id')
         device_id['Device Revision'] = device_id.pop('device_revision')
         device_id['Manufacturer ID'] = device_id.pop('manufacturer_id')
         device_id['Product ID'] = device_id.pop('product_id')
-
-        zerofru = fru.FRU(ipmicmd=self).info
+        tfru = fru.FRU(ipmicmd=self, fruid=0)
+        await tfru.initialize()
+        zerofru = tfru.info
         if zerofru is None:
             zerofru = {}
         zerofru.update(device_id)
@@ -700,7 +701,7 @@ class Command(object):
                 decode_wireformat_uuid(guiddata['data'])
         return zerofru
 
-    def get_inventory(self):
+    async def get_inventory(self):
         """Retrieve inventory of system
 
         Retrieve inventory of the targeted system.  This frequently includes
@@ -711,18 +712,20 @@ class Command(object):
         or None for items not present.
         """
         self.oem_init()
-        yield ("System", self._get_zero_fru())
+        yield ("System", await self._get_zero_fru())
         self.init_sdr()
         for fruid in sorted(self._sdr.fru):
-            fruinf = fru.FRU(
-                ipmicmd=self, fruid=fruid, sdr=self._sdr.fru[fruid]).info
+            tfru = fru.FRU(ipmicmd=self, fruid=fruid,
+                            sdr=self._sdr.fru[fruid])
+            await tfru.initialize()
+            fruinf = tfru.info
             if fruinf is not None:
-                fruinf = self._oem.process_fru(fruinf,
+                fruinf = await self._oem.process_fru(fruinf,
                                                self._sdr.fru[fruid].fru_name)
             # check the fruinf again as the oem process may return None
             if fruinf:
                 yield (self._sdr.fru[fruid].fru_name, fruinf)
-        for componentpair in self._oem.get_oem_inventory():
+        async for componentpair in self._oem.get_oem_inventory():
             yield componentpair
 
     def get_leds(self):
