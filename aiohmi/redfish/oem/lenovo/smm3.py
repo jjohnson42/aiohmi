@@ -80,6 +80,70 @@ class OEMHandler(generic.OEMHandler):
     async def get_system_configuration(self, hideadvanced=True, fishclient=None):
         return {}
 
+    async def set_bmc_configuration(self, changeset):
+        chassisparms = {}
+        nodeparms = {}
+        for setting, value in changeset.items():
+            if setting == 'chassis_user_cap':
+                chassisparms.setdefault('Oem', {}).setdefault('Lenovo', {}).setdefault('PowerCap', {})['UserPowerCap'] = int(value)
+            elif setting == 'chassis_user_cap_active':
+                capstate = value.lower().startswith('enable')
+                chassisparms.setdefault('Oem', {}).setdefault('Lenovo', {}).setdefault('PowerCap', {})['UserPowerCapEnabled'] = capstate
+            elif setting.startswith('node_') and setting.endswith('_user_cap'):
+                nodeid = setting[5:-13]
+                nodeparms.setdefault(nodeid, {}).setdefault('PowerCap', {})['UserPowerCap'] = int(value)
+            elif setting.startswith('node_') and setting.endswith('_user_cap_active'):
+                nodeid = setting[5:-20]
+                capstate = value.lower().startswith('enable')
+                nodeparms.setdefault(nodeid, {}).setdefault('PowerCap', {})['UserPowerCapEnabled'] = capstate
+        if chassisparms:
+            await self._do_web_request('/redfish/v1/Chassis/chassis1', chassisparms, method='PATCH')
+        for nodeid, parms in nodeparms.items():
+            url = '/redfish/v1/Chassis/chassis1/Oem/Lenovo/Nodes/{}'.format(nodeid)
+            await self._do_web_request(url, parms, method='PATCH')
+
+
+    async def get_bmc_configuration(self):
+        settings = {}
+        rsp = await self._do_web_request('/redfish/v1/Chassis/chassis1')
+        chassiscap = rsp.get('Oem', {}).get('Lenovo', {}).get('PowerCap', {})
+        usercap = chassiscap.get('UserPowerCap', None)
+        capstate = chassiscap.get('UserPowerCapEnabled', False)
+        mincap = chassiscap.get('MinimumPowerCap', None)
+        maxcap = chassiscap.get('MaximumPowerCap', None)
+        settings['chassis_user_cap'] = {
+            'value': usercap,
+            'help': 'Specify a maximum wattage to consume, this specific '
+                    'system implements a range from {0} to {1}.'.format(
+                        mincap, maxcap)
+        }
+        settings['chassis_user_cap_active'] = {
+            'value': 'Enable' if capstate else 'Disable',
+            'help': 'Specify whether the user capping setting should be '
+                    'used or not at the chassis level.',
+        }
+        rsp = await self._get_expanded_data('/redfish/v1/Chassis/chassis1/Oem/Lenovo/Nodes')
+        for noderesp in rsp.get('Members', []):
+            nodeid = noderesp.get('Id', 'unknown')
+            nodecap = noderesp.get('PowerCap', {})
+            usercap = nodecap.get('UserPowerCap', None)
+            capstate = nodecap.get('UserPowerCapEnabled', False)
+            mincap = nodecap.get('MinimumPowerCap', None)
+            maxcap = nodecap.get('MaximumPowerCap', None)
+            settings['node_{}_user_cap'.format(nodeid)] = {
+                'value': usercap,
+                'help': 'Specify a maximum wattage to consume for node '
+                        '{}, this specific node implements a range from '
+                        '{} to {}.'.format(
+                            nodeid, mincap, maxcap)
+            }
+            settings['node_{}_user_cap_active'.format(nodeid)] = {
+                'value': 'Enable' if capstate else 'Disable',
+                'help': 'Specify whether the user capping setting should be '
+                        'used or not at the node {} level.'.format(nodeid),
+            }
+        return settings
+
     async def retrieve_firmware_upload_url(self):
         # SMMv3 needs to do the non-multipart upload
         usd = await self._do_web_request('/redfish/v1/UpdateService', cache=False)

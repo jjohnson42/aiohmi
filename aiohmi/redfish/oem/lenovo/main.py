@@ -57,7 +57,7 @@ async def get_handler(sysinfo, sysurl, webclient, cache, cmd, rootinfo={}):
     try:
         devdesc = await webclient.grab_json_response_with_status('/DeviceDescription.json')
         if devdesc[1] == 200:
-            if devdesc[0]['type'].lower() == 'lenovo-smm3':
+            if devdesc[0]['type'].lower() in ('lenovo-smm3', 'smm3'):
                 return smm3.OEMHandler(sysinfo, sysurl, webclient, cache,
                                       gpool=cmd._gpool)
     except Exception:
