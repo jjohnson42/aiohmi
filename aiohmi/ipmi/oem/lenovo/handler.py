@@ -511,13 +511,13 @@ class OEMHandler(generic.OEMHandler):
             for inv in self.immhandler.get_hw_inventory():
                 yield inv
         elif await self.is_fpc():
-            for compname in self.smmhandler.get_inventory_descriptions(
+            async for compname in self.smmhandler.get_inventory_descriptions(
                     self.ipmicmd, await self.is_fpc()):
                 yield (compname, self.smmhandler.get_inventory_of_component(
                     self.ipmicmd, compname))
 
     async def get_sensor_data(self):
-        if self.has_imm:
+        if await self.has_imm():
             for name in self.immhandler.get_oem_sensor_names(self.ipmicmd):
                 yield self.immhandler.get_oem_sensor_reading(name,
                                                              self.ipmicmd)
@@ -554,7 +554,7 @@ class OEMHandler(generic.OEMHandler):
         if await self.has_tsm() or self.has_ami or await self.has_asrock():
             await self._collect_tsm_inventory()
             return await self.oem_inventory_info.get(component, None)
-        if self.has_imm:
+        if await self.has_imm():
             return await self.immhandler.get_component_inventory(component)
         if await self.is_fpc():
             return await self.smmhandler.get_inventory_of_component(component)
@@ -1043,8 +1043,7 @@ class OEMHandler(generic.OEMHandler):
             netdata['ipv6_addresses'] = [
                 '{0}/{1}'.format(ipv6str, ipv6_prefix)]
 
-    @property
-    def has_megarac(self):
+    async def has_megarac(self):
         # if there is functionality that is the same for tsm or generic
         # megarac, then this is appropriate.  If there's a TSM specific
         # preferred, use has_tsm first
@@ -1052,7 +1051,7 @@ class OEMHandler(generic.OEMHandler):
             return self._has_megarac
         self._has_megarac = False
         try:
-            rsp = self.ipmicmd.xraw_command(netfn=0x32, command=0x7e)
+            rsp = await self.ipmicmd.xraw_command(netfn=0x32, command=0x7e)
             # We don't have a handy classify-only, so use get sel policy
             # rsp should have a length of one, and be either '\x00' or '\x01'
             if len(rsp['data'][:]) == 1 and rsp['data'][0] in ('\x00', '\x01'):
@@ -1065,14 +1064,14 @@ class OEMHandler(generic.OEMHandler):
                 raise
         return self._has_megarac
 
-    def set_alert_ipv6_destination(self, ip, destination, channel):
-        if self.has_megarac:
+    async def set_alert_ipv6_destination(self, ip, destination, channel):
+        if await self.has_megarac():
             ethidx = self._megarac_eth_index
             reqdata = bytearray([channel, 193, destination, ethidx, 0])
             parsedip = socket.inet_pton(socket.AF_INET6, ip)
             reqdata.extend(parsedip)
             reqdata.extend('\x00\x00\x00\x00\x00\x00')
-            self.ipmicmd.xraw_command(netfn=0xc, command=1, data=reqdata)
+            await self.ipmicmd.xraw_command(netfn=0xc, command=1, data=reqdata)
             return True
         return False
 
@@ -1188,24 +1187,24 @@ class OEMHandler(generic.OEMHandler):
                 else:
                     raise
 
-    def get_update_status(self):
+    async def get_update_status(self):
         if self.is_fpc or self.has_tsma:
             return "ready"
-        if self.has_xcc:
-            return self.immhandler.get_update_status()
-        return super(OEMHandler, self).get_update_status()
+        if await self.has_xcc():
+            return await self.immhandler.get_update_status()
+        return await super(OEMHandler, self).get_update_status()
 
-    def update_firmware(self, filename, data=None, progress=None, bank=None):
-        if self.has_xcc:
-            return self.immhandler.update_firmware(
+    async def update_firmware(self, filename, data=None, progress=None, bank=None):
+        if await self.has_xcc():
+            return await self.immhandler.update_firmware(
                 filename, data=data, progress=progress, bank=bank)
-        if self.is_fpc:
-            return self.smmhandler.update_firmware(
+        if await self.is_fpc():
+            return await self.smmhandler.update_firmware(
                 filename, data=data, progress=progress, bank=bank)
         if self.has_tsma:
-            return self.tsmahandler.update_firmware(
+            return await self.tsmahandler.update_firmware(
                 filename, data=data, progress=progress, bank=bank)
-        return super(OEMHandler, self).update_firmware(filename, data=data,
+        return await super(OEMHandler, self).update_firmware(filename, data=data,
                                                        progress=progress,
                                                        bank=bank)
 
@@ -1221,65 +1220,65 @@ class OEMHandler(generic.OEMHandler):
             return self.immhandler.get_extended_bmc_configuration()
         return super(OEMHandler, self).get_extended_bmc_configuration()
 
-    def get_bmc_configuration(self):
-        if self.has_xcc:
-            return self.immhandler.get_bmc_configuration()
-        if self.is_fpc:
-            return self.smmhandler.get_bmc_configuration(self._fpc_variant)
+    async def get_bmc_configuration(self):
+        if await self.has_xcc():
+            return await self.immhandler.get_bmc_configuration()
+        if await self.is_fpc():
+            return await self.smmhandler.get_bmc_configuration(self._fpc_variant)
         if self.has_tsma:
-            return self.tsmahandler.get_bmc_configuration()
+            return await self.tsmahandler.get_bmc_configuration()
         return super(OEMHandler, self).get_bmc_configuration()
 
-    def set_bmc_configuration(self, changeset):
-        if self.has_xcc:
-            return self.immhandler.set_bmc_configuration(changeset)
-        if self.is_fpc:
-            return self.smmhandler.set_bmc_configuration(
+    async def set_bmc_configuration(self, changeset):
+        if await self.has_xcc():
+            return await self.immhandler.set_bmc_configuration(changeset)
+        if await self.is_fpc():
+            return await self.smmhandler.set_bmc_configuration(
                 changeset, self._fpc_variant)
         if self.has_tsma:
-            return self.tsmahandler.set_bmc_configuration(
+            return await self.tsmahandler.set_bmc_configuration(
                 changeset)
-        return super(OEMHandler, self).set_bmc_configuration(changeset)
+        return await super(OEMHandler, self).set_bmc_configuration(changeset)
 
     async def get_system_configuration(self, hideadvanced):
-        if self.has_imm or self.has_xcc:
+        if await self.has_imm() or await self.has_xcc():
             return await self.immhandler.get_system_configuration(hideadvanced)
         if self.has_tsma:
             return await self.tsmahandler.get_uefi_configuration(hideadvanced)
         return await super(OEMHandler, self).get_system_configuration(hideadvanced)
 
-    def set_system_configuration(self, changeset):
-        if self.has_imm or self.has_xcc:
-            return self.immhandler.set_system_configuration(changeset)
+    async def set_system_configuration(self, changeset):
+        if await self.has_imm() or await self.has_xcc():
+            return await self.immhandler.set_system_configuration(changeset)
         if self.has_tsma:
-            return self.tsmahandler.set_uefi_configuration(changeset)
-        return super(OEMHandler, self).set_system_configuration(changeset)
+            return await self.tsmahandler.set_uefi_configuration(changeset)
+        return await super(OEMHandler, self).set_system_configuration(changeset)
 
-    def clear_bmc_configuration(self):
-        if self.has_xcc:
-            return self.immhandler.clear_bmc_configuration()
-        elif self.is_fpc:
-            return self.smmhandler.clear_bmc_configuration()
+    async def clear_bmc_configuration(self):
+        if await self.has_xcc():
+            return await self.immhandler.clear_bmc_configuration()
+        elif await self.is_fpc():
+            return await self.smmhandler.clear_bmc_configuration()
         elif self.has_tsma:
-            return self.tsmahandler.clear_bmc_configuration()
-        return super(OEMHandler, self).clear_system_configuration()
+            return await self.tsmahandler.clear_bmc_configuration()
+        return await super(OEMHandler, self).clear_system_configuration()
 
-    def clear_system_configuration(self):
-        if self.has_xcc:
-            return self.immhandler.clear_system_configuration()
+    async def clear_system_configuration(self):
+        if await self.has_xcc():
+            return await self.immhandler.clear_system_configuration()
         if self.has_tsma:
-            return self.tsmahandler.clear_uefi_configuration()
-        return super(OEMHandler, self).clear_system_configuration()
+            return await self.tsmahandler.clear_uefi_configuration()
+        return await super(OEMHandler, self).clear_system_configuration()
 
-    def detach_remote_media(self):
-        if self.has_imm:
-            self.immhandler.detach_remote_media()
+    async def detach_remote_media(self):
+        if await self.has_imm():
+            await self.immhandler.detach_remote_media()
         elif self.has_tsma:
-            self.tsmahandler.detach_remote_media()
+            await await self.tsmahandler.detach_remote_media()
         elif self.has_megarac:
-            self.ipmicmd.xraw_command(
+            await self.ipmicmd.xraw_command(
                 netfn=0x32, command=0x9f, data=(8, 10, 0, 0))
-            self.ipmicmd.xraw_command(netfn=0x32, command=0x9f, data=(8, 11))
+            await self.ipmicmd.xraw_command(netfn=0x32, command=0x9f, data=(8, 11))
 
     def upload_media(self, filename, progress, data):
         if self.has_xcc or self.has_imm:
