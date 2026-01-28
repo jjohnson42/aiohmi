@@ -744,7 +744,7 @@ class SDR(object):
                 csdrlen = cfile.read(2)
                 while csdrlen:
                     csdrlen = struct.unpack('!H', csdrlen)[0]
-                    self.add_sdr(cfile.read(csdrlen))
+                    await self.add_sdr(cfile.read(csdrlen))
                     csdrlen = cfile.read(2)
                 for sid in self.broken_sensor_ids:
                     try:
@@ -765,11 +765,11 @@ class SDR(object):
             sdrdata = bytearray()
             while True:  # loop until SDR fetched wholly
                 if size != 0xff and rsvid == 0:
-                    rsvid = self.get_sdr_reservation()
+                    rsvid = await self.get_sdr_reservation()
                 rqdata = [rsvid & 0xff, rsvid >> 8,
                           recid & 0xff, recid >> 8,
                           offset, size]
-                sdrrec = self.ipmicmd.raw_command(netfn=0x0a, command=0x23,
+                sdrrec = await self.ipmicmd.raw_command(netfn=0x0a, command=0x23,
                                                   data=rqdata)
                 if sdrrec['code'] == 0xca:
                     if size == 0xff:  # get just 5 to get header to know length
@@ -802,7 +802,7 @@ class SDR(object):
                     size = chunksize
                 if (offset + size) > currlen:
                     size = currlen - offset
-            self.add_sdr(sdrdata)
+            await self.add_sdr(sdrdata)
             if sdrraw is not None:
                 sdrraw.append(bytes(sdrdata))
             offset = 0
@@ -835,14 +835,14 @@ class SDR(object):
             if self.sensors[number].readable:
                 yield number
 
-    def make_sdr_entry(self, sdrbytes):
-        return SDREntry(sdrbytes, self.ipmicmd.get_event_constants(),
+    async def make_sdr_entry(self, sdrbytes):
+        return SDREntry(sdrbytes, await self.ipmicmd.get_event_constants(),
                         False, self.mfg_id, self.prod_id)
 
-    def add_sdr(self, sdrbytes):
+    async def add_sdr(self, sdrbytes):
         if not isinstance(sdrbytes[0], int):
             sdrbytes = bytearray(sdrbytes)
-        newent = self.make_sdr_entry(sdrbytes)
+        newent = await self.make_sdr_entry(sdrbytes)
         if newent.sdrtype == TYPE_SENSOR:
             id = '{0}.{1}.{2}'.format(
                 newent.sensor_owner, newent.sensor_number, newent.sensor_lun)
