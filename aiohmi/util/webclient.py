@@ -162,7 +162,10 @@ class WebConnection:
         newwc = WebConnection(self.host, self.port,
                               verifycallback=self.verifycallback)
         newwc.stdheaders = copy.deepcopy(self.stdheaders)
-        newwc.cookies = copy.deepcopy(self.cookies)
+        newwc.cookies = CookieJar(quote_cookie=False)
+        for cookie in self.cookies:
+            newwc.cookies.update_cookies(
+                {cookie.key: cookie.value}, response_url=f'https://{self.host}:{self.port}/')
         return newwc
 
     async def request(

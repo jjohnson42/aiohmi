@@ -1135,15 +1135,9 @@ class OEMHandler(generic.OEMHandler):
             self.weblogging = False
         return self._wc
 
-    def get_webclient(self, login=True):
+    async def get_webclient(self, login=True):
         wc = self.webclient.dupe()
         wc.vintage = util._monotonic_time()
-        try:
-            wc.connect()
-        except socket.error as se:
-            if se.errno != errno.ECONNREFUSED:
-                raise
-            return None
         if not login:
             return wc
         referer = 'https://xcc/'
@@ -1154,15 +1148,13 @@ class OEMHandler(generic.OEMHandler):
                    'Referer': referer,
                    'Host': 'xcc',
                    'Content-Type': 'application/json'}
-        rsp, status = wc.grab_json_response_with_status(
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/providers/get_nonce', {})
         if status == 200:
             nonce = rsp.get('nonce', None)
             headers['Content-Security-Policy'] = 'nonce={0}'.format(nonce)
-        wc.request('POST', '/api/login', adata, headers)
-        rsp = wc.getresponse()
-        if rsp.status == 200:
-            rspdata = json.loads(rsp.read())
+        rspdata, status = await wc.grab_json_response_with_status('/api/login', adata, headers)
+        if status == 200:
             wc.set_header('Content-Type', 'application/json')
             wc.set_header('Authorization', 'Bearer ' + rspdata['access_token'])
             wc.set_header('Referer', referer)
@@ -1176,8 +1168,8 @@ class OEMHandler(generic.OEMHandler):
         res = await wc.grab_json_response_with_status(url, body, method=method)
         return res
 
-    def list_media(self, fishclient):
-        rt = self.wc.grab_json_response('/api/providers/rp_vm_remote_getdisk')
+    async def list_media(self, fishclient):
+        rt = await self.wc.grab_json_response('/api/providers/rp_vm_remote_getdisk')
         if 'items' in rt:
             for mt in rt['items']:
                 url = mt['remotepath']
@@ -1188,23 +1180,23 @@ class OEMHandler(generic.OEMHandler):
                     url = url.replace(':', '')
                     url = 'nfs://' + url
                 yield media.Media(mt['filename'], url)
-        for rdoc in self._list_rdoc():
+        async for rdoc in self._list_rdoc():
             yield rdoc
     
-    def _list_rdoc(self):
-        rt = self.wc.grab_json_response('/api/providers/rp_rdoc_imagelist')
+    async def _list_rdoc(self):
+        rt = await self.wc.grab_json_response('/api/providers/rp_rdoc_imagelist')
         if 'items' in rt:
             for mt in rt['items']:
                 yield media.Media(mt['filename'])
 
-    def attach_remote_media(self, url, user, password, vmurls):
+    async def attach_remote_media(self, url, user, password, vmurls):
         for vmurl in vmurls:
             if 'EXT' not in vmurl:
                 continue
-            vminfo = self._do_web_request(vmurl, cache=False)
+            vminfo = await self._do_web_request(vmurl, cache=False)
             if vminfo['ConnectedVia'] != 'NotConnected':
                 continue
-            self._do_web_request(vmurl, {'Image': url, 'Inserted': True},
+            await self._do_web_request(vmurl, {'Image': url, 'Inserted': True},
                                  'PATCH')
             raise pygexc.BypassGenericBehavior()
             break
@@ -1212,11 +1204,11 @@ class OEMHandler(generic.OEMHandler):
             raise pygexc.InvalidParameterValue(
                 'XCC does not have required license for operation')
 
-    def upload_media(self, filename, progress=None, data=None):
+    async def upload_media(self, filename, progress=None, data=None):
         wc = self.wc
         numrdocs = 0
         self._refresh_token()
-        for rdoc in self._list_rdoc():
+        async for rdoc in self._list_rdoc():
             numrdocs += 1
             if rdoc.name == os.path.basename(filename):
                 raise pygexc.InvalidParameterValue(
