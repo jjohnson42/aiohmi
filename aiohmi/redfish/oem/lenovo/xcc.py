@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+import asyncio
 import errno
 import fnmatch
 import json
@@ -152,14 +153,15 @@ class OEMHandler(generic.OEMHandler):
         return self
 
     async def get_screenshot(self, outfile):
-        await self.wc.grab_json_response('/api/providers/rp_screenshot')
+        wc = await self.wc()
+        await wc.grab_json_response('/api/providers/rp_screenshot')
         url = '/download/HostScreenShot.png'
-        fd = webclient.FileDownloader(self.wc, url, outfile)
+        fd = webclient.FileDownloader(wc, url, outfile)
         fd.start()
         fd.join()
 
-    def get_extended_bmc_configuration(self, fishclient, hideadvanced=True):
-        immsettings = self.get_system_configuration(fetchimm=True, hideadvanced=hideadvanced)
+    async def get_extended_bmc_configuration(self, fishclient, hideadvanced=True):
+        immsettings = await self.get_system_configuration(fetchimm=True, hideadvanced=hideadvanced)
         for setting in list(immsettings):
             if not setting.startswith('IMM.'):
                 del immsettings[setting]
@@ -311,7 +313,8 @@ class OEMHandler(generic.OEMHandler):
         if bay != -1:
             raise pygexc.UnsupportedFunctionality(
                 'This is not an enclosure manager')
-        wc = self.wc.dupe(timeout=5)
+        wc = await self.wc()
+        wc = wc.dupe(timeout=5)
         try:
             rsp = await wc.grab_json_response_with_status(
                 '/api/providers/virt_reseat', '{}')
@@ -332,9 +335,10 @@ class OEMHandler(generic.OEMHandler):
         except KeyError:
             return None
 
-    def get_bmc_configuration(self):
+    async def get_bmc_configuration(self):
         settings = {}
-        passrules = self.wc.grab_json_response('/api/dataset/imm_users_global')
+        wc = await self.wc()
+        passrules = await wc.grab_json_response('/api/dataset/imm_users_global')
         passrules = passrules.get('items', [{}])[0]
         settings['password_reuse_count'] = {
             'value': passrules.get('pass_min_resuse')}
@@ -350,13 +354,13 @@ class OEMHandler(generic.OEMHandler):
             'value': passrules.get('pass_min_length')}
         settings['password_lockout_period'] = {
             'value': passrules.get('lockout_period')}
-        presassert = self.wc.grab_json_response('/api/dataset/imm_rpp')
+        presassert = await wc.grab_json_response('/api/dataset/imm_rpp')
         asserted = presassert.get('items', [{}])[0].get('rpp_Assert', None)
         if asserted is not None:
             settings['presence_assert'] = {
                 'value': 'Enable' if asserted else 'Disable'
             }
-        secparms = self.wc.grab_json_response('/api/providers/imm_tls_mode')
+        secparms = await wc.grab_json_response('/api/providers/imm_tls_mode')
         if secparms and secparms.get('return', 1) == 0:
             tlsmode = secparms.get('tls_ver', -1)
             if tlsmode in tls_ver:
@@ -376,7 +380,7 @@ class OEMHandler(generic.OEMHandler):
                             'to a modern subset of NIST compliance',
                     'possible': [sec_mode[x][0] for x in sec_mode],
                 }
-        usbparms = self.wc.grab_json_response('/api/dataset/imm_usb')
+        usbparms = await wc.grab_json_response('/api/dataset/imm_usb')
         if usbparms:
             usbparms = usbparms.get('items', [{}])[0]
             if usbparms['usb_eth_over_usb_enabled'] == 1:
@@ -412,10 +416,11 @@ class OEMHandler(generic.OEMHandler):
         'password_lockout_period': 'USER_GlobalLockoutPeriod',
     }
 
-    def set_bmc_configuration(self, changeset):
+    async def set_bmc_configuration(self, changeset):
         ruleset = {}
         usbsettings = {}
         secparms = {}
+        wc = await self.wc()
         for key in changeset:
             if isinstance(changeset[key], str):
                 changeset[key] = {'value': changeset[key]}
@@ -427,12 +432,12 @@ class OEMHandler(generic.OEMHandler):
                     ruleset['USER_GlobalPassExpWarningPeriod'] = warntime
             elif 'presence_asserted'.startswith(key.lower()):
                 if 'enabled'.startswith(currval.lower()):
-                    self.wc.grab_json_response('/api/dataset',
+                    await wc.grab_json_response('/api/dataset',
                                                {'IMM_RPPAssert': '0'})
-                    self.wc.grab_json_response('/api/dataset',
+                    await wc.grab_json_response('/api/dataset',
                                                {'IMM_RPPAssert': '1'})
                 elif 'disabled'.startswith(currval.lower()):
-                    self.wc.grab_json_response('/api/dataset',
+                    await wc.grab_json_response('/api/dataset',
                                                {'IMM_RPPAssert': '0'})
                 else:
                     raise pygexc.InvalidParameterValue(
@@ -448,15 +453,16 @@ class OEMHandler(generic.OEMHandler):
                 raise pygexc.InvalidParameterValue(
                     '{0} not a known setting'.format(key))
         if usbsettings:
-            self.apply_usb_configuration(usbsettings)
+            await self.apply_usb_configuration(usbsettings)
         if secparms:
-            self.apply_sec_configuration(secparms)
+            await self.apply_sec_configuration(secparms)
         if ruleset:
-            self.wc.grab_json_response('/api/dataset', ruleset)
+            await wc.grab_json_response('/api/dataset', ruleset)
 
-    def apply_sec_configuration(self, secparms):
+    async def apply_sec_configuration(self, secparms):
         secmode = None
         tlsver = None
+        wc = await self.wc()
         if 'cryptography_mode' in secparms:
             secmode = secparms['cryptography_mode'].lower()
             for sm in sec_mode:
@@ -481,7 +487,7 @@ class OEMHandler(generic.OEMHandler):
                         secparms['minimum_tls_version'])
                 )
         if len(secparms) < 2:
-            currsecparms = self.wc.grab_json_response(
+            currsecparms = await wc.grab_json_response(
                 '/api/providers/imm_tls_mode')
             del currsecparms['return']
         else:
@@ -490,17 +496,18 @@ class OEMHandler(generic.OEMHandler):
             currsecparms['sec_mode'] = secmode
         if tlsver is not None:
             currsecparms['tls_ver'] = tlsver
-        self.wc.grab_json_response('/api/providers/imm_tls_mode',
+        await wc.grab_json_response('/api/providers/imm_tls_mode',
                                    currsecparms)
 
-    def apply_usb_configuration(self, usbsettings):
+    async def apply_usb_configuration(self, usbsettings):
         def numify(val):
             if 'enabled'.startswith(val.lower()):
                 return '1'
             if 'disabled'.startswith(val.lower()):
                 return '0'
             raise Exception('Usupported value')
-        usbparms = self.wc.grab_json_response('/api/dataset/imm_usb')
+        wc = await self.wc()
+        usbparms = await wc.grab_json_response('/api/dataset/imm_usb')
         usbparms = usbparms.get('items', [{}])[0]
         addrmode = '{0}'.format(usbparms['lan_over_usb_addr_mode'])
         ethena = '{0}'.format(usbparms['usb_eth_over_usb_enabled'])
@@ -521,7 +528,7 @@ class OEMHandler(generic.OEMHandler):
             needsettings = True
             newsettings['USB_PortForwardEna'] = numify(newfwd)
         if needsettings:
-            self.wc.grab_json_response('/api/dataset', newsettings)
+            await wc.grab_json_response('/api/dataset', newsettings)
         if 'usb_forwarded_ports' in usbsettings:
             oldfwds = {}
             usedids = set([])
@@ -530,7 +537,7 @@ class OEMHandler(generic.OEMHandler):
                 rule = '{0}:{1}'.format(
                     mapping['ext_port'], mapping['eth_port'])
                 if rule not in newfwds:
-                    self.wc.grab_json_response(
+                    await wc.grab_json_response(
                         '/api/function', {
                             'USB_RemoveMapping': '{0}'.format(mapping['id'])})
                 else:
@@ -546,11 +553,11 @@ class OEMHandler(generic.OEMHandler):
                     usedids.add(newid)
                     newmapping = '{0},{1}'.format(
                         newid, mapping.replace(':', ','))
-                    self.wc.grab_json_response(
+                    await wc.grab_json_response(
                         '/api/function', {'USB_AddMapping': newmapping})
 
-    def get_health(self, fishclient, verbose=True):
-        rsp = self._do_web_request('/api/providers/imm_active_events')
+    async def get_health(self, fishclient, verbose=True):
+        rsp = await self._do_web_request('/api/providers/imm_active_events')
         summary = {'badreadings': [], 'health': pygconst.Health.Ok}
         fallbackdata = []
         hmap = {
@@ -603,8 +610,8 @@ class OEMHandler(generic.OEMHandler):
         summary['badreadings'] = fallbackdata
         return summary
 
-    def get_description(self, fishclient):
-        description = self._do_web_request('/DeviceDescription.json')
+    async def get_description(self, fishclient):
+        description = await self._do_web_request('/DeviceDescription.json')
         if description:
             description = description[0]
         u_height = description.get('u-height', '')
@@ -618,11 +625,12 @@ class OEMHandler(generic.OEMHandler):
         slot = int(slot)
         return {'height': u_height, 'slot': slot}
 
-    def _get_agentless_firmware(self, components):
+    async def _get_agentless_firmware(self, components):
         skipkeys = set([])
-        adata = self.wc.grab_json_response(
+        wc = await self.wc()
+        adata = await wc.grab_json_response(
             '/api/dataset/imm_adapters?params=pci_GetAdapters')
-        fdata = self.wc.grab_json_response(
+        fdata = await wc.grab_json_response(
             '/api/function/adapter_update?params=pci_GetAdapterListAndFW')
         anames = set()
         for adata in adata.get('items', []):
@@ -691,8 +699,9 @@ class OEMHandler(generic.OEMHandler):
         bdata['version'] = diskent['fwVersion']
         return (diskname, bdata)
 
-    def _get_disk_firmware(self, coponents):
-        storagedata = storagedata = self.wc.grab_json_response(
+    async def _get_disk_firmware(self, coponents):
+        wc = await self.wc()
+        storagedata = await wc.grab_json_response(
             '/api/function/raid_alldevices?params=storage_GetAllDisks')
         for adp in storagedata.get('items', []):
             for diskent in adp.get('disks', ()):
@@ -700,15 +709,16 @@ class OEMHandler(generic.OEMHandler):
             for diskent in adp.get('aimDisks', ()):
                 yield self._get_disk_firmware_single(diskent)
 
-    def get_firmware_inventory(self, components, fishclient, category=None):
+    async def get_firmware_inventory(self, components, fishclient, category=None):
 
         if components and 'core' in components:
             category = 'core'
             components = components - set(['core'])
         if not category:
             category = 'all'
+        wc = await self.wc()
         if category in ('all', 'core'):
-            sysinf = self.wc.grab_json_response('/api/dataset/sys_info')
+            sysinf = await wc.grab_json_response('/api/dataset/sys_info')
             for item in sysinf.get('items', {}):
                 for firm in item.get('firmware', []):
                     firminfo = {
@@ -746,18 +756,19 @@ class OEMHandler(generic.OEMHandler):
         if category in ('all', 'disks'):
             needdiskfirmware = True
         if needadapterfirmware:
-            for adpinfo in self._get_agentless_firmware(components):
+            async for adpinfo in self._get_agentless_firmware(components):
                 yield adpinfo
         if needdiskfirmware:
-            for adpinfo in self._get_disk_firmware(components):
+            async for adpinfo in self._get_disk_firmware(components):
                 yield adpinfo
         raise pygexc.BypassGenericBehavior()
 
-    def get_storage_configuration(self, logout=True):
-        rsp = self.wc.grab_json_response(
+    async def get_storage_configuration(self, logout=True):
+        wc = await self.wc()
+        rsp = await wc.grab_json_response(
             '/api/function/raid_alldevices?params=storage_GetAllDevices,0')
         if not rsp:
-            rsp = self.wc.grab_json_response(
+            rsp = await wc.grab_json_response(
                 '/api/function/raid_alldevices?params=storage_GetAllDevices')
         standalonedisks = []
         pools = []
@@ -800,8 +811,9 @@ class OEMHandler(generic.OEMHandler):
                             serial=disk['serialNo'], fru=disk['fruPartNo']))
         return storage.ConfigSpec(disks=standalonedisks, arrays=pools)
 
-    def _set_drive_state(self, disk, state):
-        rsp = self.wc.grab_json_response(
+    async def _set_drive_state(self, disk, state):
+        wc = await self.wc()
+        rsp = await wc.grab_json_response(
             '/api/function',
             {'raidlink_DiskStateAction': '{0},{1}'.format(disk.id[1], state)})
         if rsp.get('return', -1) != 0:
@@ -809,13 +821,14 @@ class OEMHandler(generic.OEMHandler):
                 'Unexpected return to set disk state: {0}'.format(
                     rsp.get('return', -1)))
 
-    def _refresh_token(self):
-        self._refresh_token_wc(self.wc)
+    async def _refresh_token(self):
+        wc = await self.wc()
+        await self._refresh_token_wc(wc)
 
-    def _refresh_token_wc(self, wc):
-        wc.grab_json_response('/api/providers/identity')
+    async def _refresh_token_wc(self, wc):
+        await wc.grab_json_response('/api/providers/identity')
         if '_csrf_token' in wc.cookies:
-            wc.set_header('X-XSRF-TOKEN', self.wc.cookies['_csrf_token'])
+            wc.set_header('X-XSRF-TOKEN', wc.cookies['_csrf_token'])
             wc.vintage = util._monotonic_time()
 
     def _make_available(self, disk, realcfg):
@@ -853,10 +866,11 @@ class OEMHandler(generic.OEMHandler):
             raise pygexc.InvalidParameterValue('Requested disk not found')
         return currstatus
 
-    def _raid_number_map(self, controller):
+    async def _raid_number_map(self, controller):
         themap = {}
         cid = controller.split(',')
-        rsp = self.wc.grab_json_response(
+        wc = await self.wc()
+        rsp = await wc.grab_json_response(
             '/api/function/raid_conf?'
             'params=raidlink_GetDisksToConf,{0}'.format(cid[0]))
         if rsp.get('return') == 22:  # New style firmware
@@ -865,7 +879,7 @@ class OEMHandler(generic.OEMHandler):
             else:
                 arg = '{0},{1}'.format(cid[0], cid[2])
             arg = 'params=raidlink_GetDisksToConf,{0}'.format(arg)
-            rsp = self.wc.grab_json_response(
+            rsp = await wc.grab_json_response(
                 '/api/function/raid_conf?{0}'.format(arg))
         for lvl in rsp['items'][0]['supported_raidlvl']:
             mapdata = (lvl['rdlvl'], lvl['maxSpan'])
@@ -877,8 +891,9 @@ class OEMHandler(generic.OEMHandler):
             themap[raidname] = mapdata
         return themap
 
-    def check_storage_configuration(self, cfgspec=None):
-        rsp = self.wc.grab_json_response(
+    async def check_storage_configuration(self, cfgspec=None):
+        wc = await self.wc()
+        rsp = await wc.grab_json_response(
             '/api/function/raid_conf?params=raidlink_GetStatus')
         if rsp['items'][0]['status'] not in (2, 3):
             raise pygexc.TemporaryError('Storage configuration unavailable in '
@@ -887,17 +902,18 @@ class OEMHandler(generic.OEMHandler):
         if not cfgspec:
             return True
         for pool in cfgspec.arrays:
-            self._parse_storage_cfgspec(pool)
+            self._parse_storage_cfdef _wgspec(pool)
         return True
 
-    def _wait_storage_async(self):
+    async def _wait_storage_async(self):
         rsp = {'items': [{'status': 0}]}
+        wc = await self.wc()
         while rsp['items'][0]['status'] == 0:
-            time.sleep(1)
-            rsp = self.wc.grab_json_response(
+            await asyncio.sleep(1)
+            rsp = await wc.grab_json_response(
                 '/api/function/raid_conf?params=raidlink_QueryAsyncStatus')
 
-    def _parse_array_spec(self, arrayspec):
+    async def _parse_array_spec(self, arrayspec):
         controller = None
         if arrayspec.disks:
             for disk in list(arrayspec.disks) + list(arrayspec.hotspares):
@@ -906,7 +922,7 @@ class OEMHandler(generic.OEMHandler):
                 if controller != disk.id[0]:
                     raise pygexc.UnsupportedFunctionality(
                         'Cannot span arrays across controllers')
-            raidmap = self._raid_number_map(controller)
+            raidmap = await self._raid_number_map(controller)
             if not raidmap:
                 raise pygexc.InvalidParameterValue(
                     'There are no available drives for a new array')
@@ -933,13 +949,14 @@ class OEMHandler(generic.OEMHandler):
             args = [pth, ctl[0], rdlvl, spancount, drivesperspan, drvstr,
                     hstr]
             url = ','.join([str(x) for x in args])
-            rsp = self.wc.grab_json_response(url)
+            wc = await self.wc()
+            rsp = await wc.grab_json_response(url)
             if rsp.get('return', -1) == 22:
                 args.append(ctl[1])
                 args = [pth, ctl[0], rdlvl, spancount, drivesperspan, drvstr,
                         hstr, ctl[1]]
                 url = ','.join([str(x) for x in args])
-                rsp = self.wc.grab_json_response(url)
+                rsp = await wc.grab_json_response(url)
             if rsp['items'][0]['errcode'] == 16:
                 raise pygexc.InvalidParameterValue('Incorrect number of disks')
             elif rsp['items'][0]['errcode'] != 0:
@@ -960,26 +977,27 @@ class OEMHandler(generic.OEMHandler):
             #  existing array would be here
             pass
 
-    def _create_array(self, pool):
+    async def _create_array(self, pool):
         params = self._parse_array_spec(pool)
         cid = params['controller'].split(',')[0]
         cslotno = params['controller'].split(',')[1]
         url = '/api/function/raid_conf?params=raidlink_GetDefaultVolProp'
         args = (url, cid, 0, params['drives'])
-        props = self.wc.grab_json_response(','.join([str(x) for x in args]))
+        wc = await self.wc()
+        props = await wc.grab_json_response(','.join([str(x) for x in args]))
         usesctrlslot = False
         if not props:  # newer firmware requires raidlevel too
             args = (url, cid, params['raidlevel'], 0, params['drives'])
-            props = self.wc.grab_json_response(','.join([str(x) for x in args]))
+            props = await wc.grab_json_response(','.join([str(x) for x in args]))
         elif 'return' in props and props['return'] == 22:
             # Jan 2023 XCC FW - without controller slot number
             args = (url, cid, params['raidlevel'], 0, params['drives'])
-            props = self.wc.grab_json_response(','.join([str(x) for x in args]))
+            props = await wc.grab_json_response(','.join([str(x) for x in args]))
             if 'return' in props and props['return'] == 22:
                 usesctrlslot = True
                 # Jan 2023 XCC FW - with controller slot number
                 args = (url, cid, params['raidlevel'], 0, params['drives'], cslotno)
-                props = self.wc.grab_json_response(','.join([str(x) for x in args]))
+                props = await wc.grab_json_response(','.join([str(x) for x in args]))
         props = props['items'][0]
         volumes = pool.volumes
         remainingcap = params['capacity']
@@ -991,7 +1009,7 @@ class OEMHandler(generic.OEMHandler):
             if vol.name is None:
                 # need to iterate while there exists a volume of that name
                 if currvolnames is None:
-                    currcfg = self.get_storage_configuration(False)
+                    currcfg = await self.get_storage_configuration(False)
                     currvolnames = set([])
                     for pool in currcfg.arrays:
                         for volume in pool.volumes:
@@ -1049,7 +1067,7 @@ class OEMHandler(generic.OEMHandler):
             params['perspan'], params['drives'], params['hotspares'])
         arglist += ''.join(vols)
         parms = {'raidlink_AddNewVolWithNaAsync': arglist}
-        rsp = self.wc.grab_json_response(url, parms)
+        rsp = await wc.grab_json_response(url, parms)
         if rsp['return'] == 14:  # newer firmware
             if 'supported_cpwb' in props and not usesctrlslot: # no ctrl_type
                 arglist = '{0},{1},{2},{3},{4},{5},{6},'.format(
@@ -1057,7 +1075,7 @@ class OEMHandler(generic.OEMHandler):
                     params['perspan'], 0, params['drives'], params['hotspares'])
                 arglist += ''.join(vols)
                 parms = {'raidlink_AddNewVolWithNaAsync': arglist}
-                rsp = self.wc.grab_json_response(url, parms)
+                rsp = await wc.grab_json_response(url, parms)
             else: # with ctrl_type
                 if cid[2] == 2:
                     cnum = cid[1]
@@ -1066,14 +1084,15 @@ class OEMHandler(generic.OEMHandler):
                     params['perspan'], params['drives'], params['hotspares'])
                 arglist += ''.join(vols) + ',{0}'.format(cid[2])
                 parms = {'raidlink_AddNewVolWithNaAsync': arglist}
-                rsp = self.wc.grab_json_response(url, parms)
+                rsp = await wc.grab_json_response(url, parms)
         if rsp['return'] != 0:
             raise Exception(
                 'Unexpected response to add volume command: ' + repr(rsp))
-        self._wait_storage_async()
+        await self._wait_storage_async()
 
-    def remove_storage_configuration(self, cfgspec):
-        realcfg = self.get_storage_configuration(False)
+    async def remove_storage_configuration(self, cfgspec):
+        realcfg = await self.get_storage_configuration(False)
+        wc = await self.wc()
         for pool in cfgspec.arrays:
             for volume in pool.volumes:
                 cid = volume.id[0].split(',')
@@ -1081,46 +1100,46 @@ class OEMHandler(generic.OEMHandler):
                     vid = '{0},{1},{2}'.format(volume.id[1], cid[1], cid[2])
                 else:
                     vid = '{0},{1},{2}'.format(volume.id[1], cid[0], cid[2])
-                rsp = self.wc.grab_json_response(
+                rsp = await wc.grab_json_response(
                     '/api/function', {'raidlink_RemoveVolumeAsync': vid})
                 if rsp.get('return', -1) == 2:
                     # older firmware
                     vid = '{0},{1}'.format(volume.id[1], cid[0])
-                    rsp = self.wc.grab_json_response(
+                    rsp = await wc.grab_json_response(
                         '/api/function', {'raidlink_RemoveVolumeAsync': vid})
                 if rsp.get('return', -1) != 0:
                     raise Exception(
                         'Unexpected return to volume deletion: ' + repr(rsp))
-                self._wait_storage_async()
+                await self._wait_storage_async()
         for disk in cfgspec.disks:
-            self._make_available(disk, realcfg)
+            await self._make_available(disk, realcfg)
 
-    def apply_storage_configuration(self, cfgspec):
-        realcfg = self.get_storage_configuration(False)
+    async def apply_storage_configuration(self, cfgspec):
+        realcfg = await self.get_storage_configuration(False)
         for disk in cfgspec.disks:
             if disk.status.lower() == 'jbod':
-                self._make_jbod(disk, realcfg)
+                await self._make_jbod(disk, realcfg)
             elif disk.status.lower() == 'hotspare':
-                self._make_global_hotspare(disk, realcfg)
+                await self._make_global_hotspare(disk, realcfg)
             elif disk.status.lower() in ('unconfigured', 'available', 'ugood',
                                          'unconfigured good'):
-                self._make_available(disk, realcfg)
+                await self._make_available(disk, realcfg)
         for pool in cfgspec.arrays:
             if pool.disks:
-                self._create_array(pool)
+                await self._create_array(pool)
 
-    def weblogout(self):
+    async def weblogout(self):
         if self._wc:
             try:
-                self._wc.grab_json_response(self.logouturl)
+                await self._wc.grab_json_response(self.logouturl)
             except Exception:
                 pass
             self._wc = None
 
-    @property
-    def wc(self):
+    
+    async def wc(self):
         while self.weblogging:
-            time.sleep(0.25)
+            await asyncio.sleep(0.25)
         self.weblogging = True
         try:
             if (not self._wc or (self._wc.vintage
@@ -1130,7 +1149,7 @@ class OEMHandler(generic.OEMHandler):
                     # in case the existing session is still valid
                     # dispose of the session
                     self.weblogout()
-                self._wc = self.get_webclient()
+                self._wc = await self.get_webclient()
         finally:
             self.weblogging = False
         return self._wc
@@ -1169,7 +1188,8 @@ class OEMHandler(generic.OEMHandler):
         return res
 
     async def list_media(self, fishclient):
-        rt = await self.wc.grab_json_response('/api/providers/rp_vm_remote_getdisk')
+        wc = await self.wc()
+        rt = await wc.grab_json_response('/api/providers/rp_vm_remote_getdisk')
         if 'items' in rt:
             for mt in rt['items']:
                 url = mt['remotepath']
@@ -1184,7 +1204,8 @@ class OEMHandler(generic.OEMHandler):
             yield rdoc
     
     async def _list_rdoc(self):
-        rt = await self.wc.grab_json_response('/api/providers/rp_rdoc_imagelist')
+        wc = await self.wc()
+        rt = await wc.grab_json_response('/api/providers/rp_rdoc_imagelist')
         if 'items' in rt:
             for mt in rt['items']:
                 yield media.Media(mt['filename'])
@@ -1205,7 +1226,7 @@ class OEMHandler(generic.OEMHandler):
                 'XCC does not have required license for operation')
 
     async def upload_media(self, filename, progress=None, data=None):
-        wc = self.wc
+        wc = await self.wc()
         numrdocs = 0
         self._refresh_token()
         async for rdoc in self._list_rdoc():
@@ -1216,7 +1237,7 @@ class OEMHandler(generic.OEMHandler):
         if numrdocs >= 2:
             raise pygexc.InvalidParameterValue(
                 'Maximum number of uploaded media reached')
-        rsp, statu = wc.grab_json_response_with_status('/rdocupload')
+        rsp, statu = await wc.grab_json_response_with_status('/rdocupload')
         newmode = False
         if statu == 404:
             xid = random.randint(0, 1000000000)
@@ -1234,12 +1255,12 @@ class OEMHandler(generic.OEMHandler):
                     progress({'phase': 'upload',
                           'progress': 100 * wc.get_upload_progress()})
             else:
-                rsp = self.wc.grab_json_response(
+                rsp = await wc.grab_json_response(
                     '/upload/progress?X-Progress-ID={0}'.format(xid))
                 if progress and rsp['state'] == 'uploading':
                     progress({'phase': 'upload',
                             'progress': 100.0 * rsp['received'] / rsp['size']})
-            self._refresh_token()
+            await self._refresh_token()
         if uploadthread.rsp:
             rsp = json.loads(uploadthread.rsp)
         else:
@@ -1248,7 +1269,7 @@ class OEMHandler(generic.OEMHandler):
             progress({'phase': 'upload',
                       'progress': 100.0})
         if 'items' not in rsp or len(rsp['items']) == 0:
-            errmsg = repr(rsp) if rsp else self.wc.lastjsonerror if self.wc.lastjsonerror else repr(uploadthread.rspstatus)
+            errmsg = repr(rsp) if rsp else wc.lastjsonerror if wc.lastjsonerror else repr(uploadthread.rspstatus)
             raise pygexc.PyghmiException('Failed to upload image: ' + errmsg)
         thepath = rsp['items'][0]['path']
         thename = rsp['items'][0]['name']
@@ -1256,31 +1277,31 @@ class OEMHandler(generic.OEMHandler):
         addfile = {"Url": thepath, "Protocol": 6, "Write": writeable,
                    "Credential": ":", "Option": "", "Domain": "",
                    "WebUploadName": thename}
-        rsp = self.wc.grab_json_response('/api/providers/rp_rdoc_addfile',
+        rsp = await wc.grab_json_response('/api/providers/rp_rdoc_addfile',
                                          addfile)
-        self._refresh_token()
+        await self._refresh_token()
         if rsp.get('return', -1) != 0:
-            errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
+            errmsg = repr(rsp) if rsp else wc.lastjsonerror
             raise pygexc.PyghmiException('Failed to upload image: ' + errmsg)
         ready = False
         while not ready:
-            time.sleep(3)
-            rsp = self.wc.grab_json_response('/api/providers/rp_rdoc_getfiles')
+            await asyncio.sleep(3)
+            rsp = await wc.grab_json_response('/api/providers/rp_rdoc_getfiles')
             if 'items' not in rsp or len(rsp['items']) == 0:
                 raise Exception(
                     'Image upload was not accepted, it may be too large')
             ready = rsp['items'][0]['size'] != 0
-        self._refresh_token()
-        rsp = self.wc.grab_json_response('/api/providers/rp_rdoc_mountall',
+        await self._refresh_token()
+        rsp = await wc.grab_json_response('/api/providers/rp_rdoc_mountall',
                                          {})
-        self._refresh_token()
+        await self._refresh_token()
         if rsp.get('return', -1) != 0:
-            errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
+            errmsg = repr(rsp) if rsp else wc.lastjsonerror
             raise Exception('Unrecognized return: ' + errmsg)
         if progress:
             progress({'phase': 'complete'})
 
-    def redfish_update_firmware(self, usd, filename, data, progress, bank):
+    async def redfish_update_firmware(self, usd, filename, data, progress, bank):
         if usd['HttpPushUriTargetsBusy']:
             raise pygexc.TemporaryError('Cannot run multtiple updates to '
                                         'same target concurrently')
@@ -1308,12 +1329,12 @@ class OEMHandler(generic.OEMHandler):
         elif needseek:
             data.seek(0)
         upurl = usd['HttpPushUri']
-        self._do_web_request(
+        await self._do_web_request(
             '/redfish/v1/UpdateService',
             {'HttpPushUriTargetsBusy': True}, method='PATCH')
         try:
             if bank == 'backup':
-                self._do_web_request(
+                await self._do_web_request(
                     '/redfish/v1/UpdateService',
                     {'HttpPushUriTargets':
                         ['/redfish/v1/UpdateService'
@@ -1352,12 +1373,12 @@ class OEMHandler(generic.OEMHandler):
             retry = 3
             while not complete and retry > 0:
                 try:
-                    pgress = self._do_web_request(monitorurl, cache=False)
+                    pgress = await self._do_web_request(monitorurl, cache=False)
                 except socket.socket:
                     pgress = None
                 if not pgress:
                     retry -= 1
-                    time.sleep(3)
+                    await asyncio.sleep(3)
                     continue
                 retry = 3
                 for msg in pgress.get('Messages', []):
@@ -1394,33 +1415,35 @@ class OEMHandler(generic.OEMHandler):
                 '/redfish/v1/UpdateService',
                 {'HttpPushUriTargets': []}, method='PATCH')
 
-    def update_firmware(self, filename, data=None, progress=None, bank=None):
+    async def update_firmware(self, filename, data=None, progress=None, bank=None):
         result = None
-        usd = self._do_web_request('/redfish/v1/UpdateService')
+        wc = await self.wc()
+        usd = await self._do_web_request('/redfish/v1/UpdateService')
         rfishurl = usd.get('HttpPushUri', None)
         if rfishurl:
-            return self.redfish_update_firmware(
+            return await self.redfish_update_firmware(
                 usd, filename, data, progress, bank)
         if self.updating:
             raise pygexc.TemporaryError('Cannot run multiple updates to same '
                                         'target concurrently')
         self.updating = True
         try:
-            result = self.update_firmware_backend(filename, data, progress,
+            result = await self.update_firmware_backend(filename, data, progress,
                                                   bank)
         except Exception:
             self.updating = False
-            self._refresh_token()
-            self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
+            await self._refresh_token()
+            await wc.grab_json_response('/api/providers/fwupdate', json.dumps(
                 {'UPD_WebCancel': 1}))
             raise
         self.updating = False
         return result
 
-    def update_firmware_backend(self, filename, data=None, progress=None,
+    async def update_firmware_backend(self, filename, data=None, progress=None,
                                 bank=None):
         self._refresh_token()
-        rsv = self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
+        wc = await self.wc()
+        rsv = await wc.grab_json_response('/api/providers/fwupdate', json.dumps(
             {'UPD_WebReserve': 1}))
         if rsv['return'] == 103:
             raise Exception('Update already in progress')
@@ -1428,12 +1451,12 @@ class OEMHandler(generic.OEMHandler):
             raise Exception('Unexpected return to reservation: ' + repr(rsv))
         xid = random.randint(0, 1000000000)
         uploadthread = webclient.FileUploader(
-            self.wc, '/upload?X-Progress-ID={0}'.format(xid), filename, data)
+            wc, '/upload?X-Progress-ID={0}'.format(xid), filename, data)
         uploadthread.start()
         uploadstate = None
         while uploadthread.isAlive():
             uploadthread.join(3)
-            rsp = self.wc.grab_json_response(
+            rsp = await wc.grab_json_response(
                 '/upload/progress?X-Progress-ID={0}'.format(xid))
             if rsp['state'] == 'uploading':
                 progress({'phase': 'upload',
@@ -1446,7 +1469,7 @@ class OEMHandler(generic.OEMHandler):
             uploadstate = rsp['state']
             self._refresh_token()
         while uploadstate != 'done':
-            rsp = self.wc.grab_json_response(
+            rsp = await wc.grab_json_response(
                 '/upload/progress?X-Progress-ID={0}'.format(xid))
             uploadstate = rsp['state']
             self._refresh_token()
@@ -1455,21 +1478,21 @@ class OEMHandler(generic.OEMHandler):
             raise Exception('Unexpected response: ' + repr(rsp))
         progress({'phase': 'validating',
                   'progress': 0.0})
-        time.sleep(3)
+        await asyncio.sleep(3)
         # aggressive timing can cause the next call to occasionally
         # return 25 and fail
-        self._refresh_token()
-        rsp = self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
+        await self._refresh_token()
+        rsp = await wc.grab_json_response('/api/providers/fwupdate', json.dumps(
             {'UPD_WebSetFileName': rsp['items'][0]['path']}))
         if rsp.get('return', 0) in (25, 108):
             raise Exception('Temporary error validating update, try again')
         if rsp.get('return', -1) != 0:
-            errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
+            errmsg = repr(rsp) if rsp else wc.lastjsonerror
             raise Exception('Unexpected return to set filename: ' + errmsg)
-        self._refresh_token()
+        await self._refresh_token()
         progress({'phase': 'validating',
                   'progress': 25.0})
-        rsp = self.wc.grab_json_response('/api/providers/fwupdate', json.dumps(
+        rsp = await wc.grab_json_response('/api/providers/fwupdate', json.dumps(
             {'UPD_WebVerifyUploadFile': 1}))
         if rsp.get('return', 0) == 115:
             raise Exception('Update image not intended for this system')
@@ -1479,13 +1502,13 @@ class OEMHandler(generic.OEMHandler):
             raise Exception('Invalid update file or component '
                             'does not support remote update')
         elif rsp.get('return', -1) != 0:
-            errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
+            errmsg = repr(rsp) if rsp else wc.lastjsonerror
             raise Exception('Unexpected return to verify: ' + errmsg)
         verifystatus = 0
         verifyuploadfilersp = None
         while verifystatus != 1:
-            self._refresh_token()
-            rsp, status = self.wc.grab_json_response_with_status(
+            await self._refresh_token()
+            rsp, status = await wc.grab_json_response_with_status(
                 '/api/providers/fwupdate',
                 json.dumps({'UPD_WebVerifyUploadFileStatus': 1}))
             if not rsp or status != 200 or rsp.get('return', -1) == 2:
@@ -1496,22 +1519,22 @@ class OEMHandler(generic.OEMHandler):
                 raise Exception('Invalid update file or component '
                                 'does not support remote update')
             if rsp.get('return', -1) != 0:
-                errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
+                errmsg = repr(rsp) if rsp else wc.lastjsonerror
                 raise Exception(
                     'Unexpected return to verifystate: {0}'.format(errmsg))
             verifystatus = rsp['status']
             if verifystatus == 2:
                 raise Exception('Failed to verify firmware image')
             if verifystatus != 1:
-                time.sleep(1)
+                await asyncio.sleep(1)
             if verifystatus not in (0, 1, 255):
-                errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
+                errmsg = repr(rsp) if rsp else wc.lastjsonerror
                 raise Exception(
                     'Unexpected reply to verifystate: ' + errmsg)
         progress({'phase': 'validating',
                   'progress': 99.0})
-        self._refresh_token()
-        rsp = self.wc.grab_json_response('/api/dataset/imm_firmware_success')
+        await self._refresh_token()
+        rsp = await wc.grab_json_response('/api/dataset/imm_firmware_success')
         if len(rsp['items']) != 1:
             raise Exception('Unexpected result: ' + repr(rsp))
         firmtype = rsp['items'][0]['firmware_type']
@@ -1528,8 +1551,8 @@ class OEMHandler(generic.OEMHandler):
             validselectors = set([])
             for loc in locations:
                 validselectors.add(loc.replace('#', '-'))
-            self._refresh_token()
-            rsp = self.wc.grab_json_response(
+            await self._refresh_token()
+            rsp = await wc.grab_json_response(
                 '/api/function/adapter_update?params=pci_GetAdapterListAndFW')
             foundselectors = []
             for adpitem in rsp['items']:
@@ -1541,39 +1564,39 @@ class OEMHandler(generic.OEMHandler):
                         break
             else:
                 raise Exception('Could not find matching adapter for update')
-            self._refresh_token()
-            rsp = self.wc.grab_json_response('/api/function', json.dumps(
+            await self._refresh_token()
+            rsp = await wc.grab_json_response('/api/function', json.dumps(
                 {'pci_SetOOBFWSlots': '|'.join(foundselectors)}))
             if rsp.get('return', -1) != 0:
-                errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
+                errmsg = repr(rsp) if rsp else wc.lastjsonerror
                 raise Exception(
                     'Unexpected result from PCI select: ' + errmsg)
         else:
-            self._refresh_token()
-            rsp = self.wc.grab_json_response(
+            await self._refresh_token()
+            rsp = await wc.grab_json_response(
                 '/api/dataset/imm_firmware_update')
             if rsp['items'][0]['upgrades'][0]['id'] != 1:
                 raise Exception('Unexpected answer: ' + repr(rsp))
-        self._refresh_token()
+        await self._refresh_token()
         progress({'phase': 'apply',
                   'progress': 0.0})
         if bank in ('primary', None):
-            rsp = self.wc.grab_json_response(
+            rsp = await wc.grab_json_response(
                 '/api/providers/fwupdate', json.dumps(
                     {'UPD_WebStartDefaultAction': 1}))
         elif bank == 'backup':
-            rsp = self.wc.grab_json_response(
+            rsp = await wc.grab_json_response(
                 '/api/providers/fwupdate', json.dumps(
                     {'UPD_WebStartOptionalAction': 2}))
 
         if rsp.get('return', -1) != 0:
-            errmsg = repr(rsp) if rsp else self.wc.lastjsonerror
+            errmsg = repr(rsp) if rsp else wc.lastjsonerror
             raise Exception('Unexpected result starting update: %s' % errmsg)
         complete = False
         while not complete:
-            self._refresh_token()
-            time.sleep(3)
-            rsp = self.wc.grab_json_response(
+            await self._refresh_token()
+            await asyncio.sleep(3)
+            rsp = await wc.grab_json_response(
                 '/api/dataset/imm_firmware_progress')
             progress({'phase': 'apply',
                       'progress': rsp['items'][0]['action_percent_complete']})
@@ -1596,24 +1619,25 @@ class OEMHandler(generic.OEMHandler):
             return 'complete'
         return 'pending'
 
-    def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
-        rsp = self.wc.grab_json_response('/api/providers/ffdc',
+    async def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
+        wc = await self.wc()
+        rsp = await wc.grab_json_response('/api/providers/ffdc',
                                          {'Generate_FFDC': 1})
         if rsp.get('return', 0) == 4:
-            rsp = self.wc.grab_json_response('/api/providers/ffdc',
+            rsp = await wc.grab_json_response('/api/providers/ffdc',
                                              {'Generate_FFDC': 1,
                                               'thermal_log': 0})
         percent = 0
         while percent != 100:
-            time.sleep(3)
-            result = self.wc.grab_json_response('/api/providers/ffdc',
+            await asyncio.sleep(3)
+            result = await wc.grab_json_response('/api/providers/ffdc',
                                                 {'Generate_FFDC_status': 1})
-            self._refresh_token()
+            await self._refresh_token()
             if progress:
                 progress({'phase': 'initializing', 'progress': float(percent)})
             percent = result['progress']
         while 'FileName' not in result:
-            result = self.wc.grab_json_response('/api/providers/ffdc',
+            result = await wc.grab_json_response('/api/providers/ffdc',
                                                 {'Generate_FFDC_status': 1})
         url = '/ffdc/{0}'.format(result['FileName'])
         if autosuffix and not savefile.endswith('.tzz'):
@@ -1622,18 +1646,19 @@ class OEMHandler(generic.OEMHandler):
         fd.start()
         while fd.isAlive():
             fd.join(1)
-            if progress and self.wc.get_download_progress():
+            if progress and wc.get_download_progress():
                 progress({'phase': 'download',
-                          'progress': 100 * self.wc.get_download_progress()})
-            self._refresh_token()
+                          'progress': 100 * wc.get_download_progress()})
+            await self._refresh_token()
         if fd.exc:
             raise fd.exc
         if progress:
             progress({'phase': 'complete'})
         return savefile
 
-    def get_licenses(self, fishclient):
-        licdata = self.wc.grab_json_response('/api/providers/imm_fod')
+    async def get_licenses(self, fishclient):
+        wc = await self.wc()
+        licdata = await wc.grab_json_response('/api/providers/imm_fod')
         for lic in licdata.get('items', [{}])[0].get('keys', []):
             if lic['status'] == 0:
                 yield {'name': lic['feature'], 'state': 'Active'}
@@ -1643,12 +1668,13 @@ class OEMHandler(generic.OEMHandler):
                     'state': 'Missing required license'
                 }
 
-    def delete_license(self, name, fishclient):
-        licdata = self.wc.grab_json_response('/api/providers/imm_fod')
+    async def delete_license(self, name, fishclient):
+        wc = await self.wc()
+        licdata = await wc.grab_json_response('/api/providers/imm_fod')
         for lic in licdata.get('items', [{}])[0].get('keys', []):
             if lic.get('feature', None) == name:
                 licid = ','.join((str(lic['type']), str(lic['id'])))
-                self.wc.grab_json_response(
+                await wc.grab_json_response(
                     '/api/providers/imm_fod',
                     {
                         'FOD_LicenseKeyDelete': licid
@@ -1656,24 +1682,25 @@ class OEMHandler(generic.OEMHandler):
                 )
                 break
 
-    def save_licenses(self, directory, fishclient):
-        licdata = self.wc.grab_json_response('/api/providers/imm_fod')
+    async def save_licenses(self, directory, fishclient):
+        wc = await self.wc()
+        licdata = await wc.grab_json_response('/api/providers/imm_fod')
         for lic in licdata.get('items', [{}])[0].get('keys', []):
             licid = ','.join((str(lic['type']), str(lic['id'])))
-            rsp = self.wc.grab_json_response(
+            rsp = await wc.grab_json_response(
                 '/api/providers/imm_fod', {'FOD_LicenseKeyExport': licid})
             filename = rsp.get('FileName', None)
             if filename:
                 url = '/download/' + filename
                 savefile = os.path.join(directory, filename)
-                fd = webclient.FileDownloader(self.wc, url, savefile)
+                fd = webclient.FileDownloader(wc, url, savefile)
                 fd.start()
                 while fd.isAlive():
                     fd.join(1)
-                    self._refresh_token()
+                    await self._refresh_token()
                 yield savefile
 
-    def apply_license(self, filename, fishclient, progress=None, data=None):
+    async def apply_license(self, filename, fishclient, progress=None, data=None):
         license_errors = {
             310: "License is for a different model of system",
             311: "License is for a different system serial number",
@@ -1681,14 +1708,15 @@ class OEMHandler(generic.OEMHandler):
             313: "License is expired",
             314: "License usage limit reached",
         }
-        uploadthread = webclient.FileUploader(self.wc, '/upload', filename,
+        wc = await self.wc()
+        uploadthread = webclient.FileUploader(wc, '/upload', filename,
                                               data=data)
         uploadthread.start()
         uploadthread.join()
         rsp = json.loads(uploadthread.rsp)
         licpath = rsp.get('items', [{}])[0].get('path', None)
         if licpath:
-            rsp = self.wc.grab_json_response(
+            rsp = await wc.grab_json_response(
                 '/api/providers/imm_fod',
                 {
                     'FOD_LicenseKeyInstall': licpath
@@ -1697,21 +1725,23 @@ class OEMHandler(generic.OEMHandler):
             if rsp.get('return', 0) in license_errors:
                 raise pygexc.InvalidParameterValue(
                     license_errors[rsp['return']])
-        return self.get_licenses(fishclient)
+        return await self.get_licenses(fishclient)
 
-    def user_delete(self, uid, fishclient=None):
-        userinfo = self.wc.grab_json_response('/api/dataset/imm_users')
+    async def user_delete(self, uid, fishclient=None):
+        wc = await self.wc()
+        userinfo = await wc.grab_json_response('/api/dataset/imm_users')
         uidtonamemap = {}
         for user in userinfo.get('items', [{'users': []}])[0].get('users', []):
             uidtonamemap[user['users_user_id']] = user['users_user_name']
         if uid in uidtonamemap:
             deltarget = '{0},{1}'.format(uid, uidtonamemap[uid])
-            self.wc.grab_json_response('/api/function', {"USER_UserDelete": deltarget})
+            await wc.grab_json_response('/api/function', {"USER_UserDelete": deltarget})
             return True
-        return super(OEMHandler, self).user_delete(uid)
+        return await super(OEMHandler, self).user_delete(uid)
 
-    def get_user_expiration(self, uid):
-        userinfo = self.wc.grab_json_response('/api/dataset/imm_users')
+    async def get_user_expiration(self, uid):
+        wc = await self.wc()
+        userinfo = await wc.grab_json_response('/api/dataset/imm_users')
         for user in userinfo['items'][0]['users']:
             if str(user['users_user_id']) == str(uid):
                 days = user['users_pass_left_days']
@@ -1786,8 +1816,9 @@ class OEMHandler(generic.OEMHandler):
             if self.updating:
                 raise pygexc.TemporaryError(
                     'Cannot read extended inventory during firmware update')
-            if self.wc:
-                adapterdata = await self.wc.grab_json_response(self.ADP_URL)
+            wc = await self.wc()
+            if wc:
+                adapterdata = await wc.grab_json_response(self.ADP_URL)
                 if adapterdata:
                     self.datacache['lenovo_cached_adapters'] = (
                         adapterdata, util._monotonic_time())
@@ -1864,8 +1895,9 @@ class OEMHandler(generic.OEMHandler):
         # mode 0 is firmware, 1 is hardware
         storagedata = self.get_cached_data('lenovo_cached_storage')
         if not storagedata:
-            if self.wc:
-                storagedata = await self.wc.grab_json_response(
+            wc = await self.wc()
+            if wc:
+                storagedata = await wc.grab_json_response(
                     '/api/function/raid_alldevices?params=storage_GetAllDisks')
                 if storagedata:
                     self.datacache['lenovo_cached_storage'] = (
@@ -1892,8 +1924,9 @@ class OEMHandler(generic.OEMHandler):
     async def _get_cpu_inventory(self):
         procdata = self.get_cached_data('lenovo_cached_proc')
         if not procdata:
-            if self.wc:
-                procdata = await self.wc.grab_json_response(
+            wc = await self.wc()
+            if wc:
+                procdata = await wc.grab_json_response(
                     '/api/dataset/imm_processors')
                 if procdata:
                     self.datacache['lenovo_cached_proc'] = (
@@ -1909,8 +1942,9 @@ class OEMHandler(generic.OEMHandler):
     async def _get_mem_inventory(self):
         memdata = self.get_cached_data('lenovo_cached_memory')
         if not memdata:
-            if self.wc:
-                memdata = await self.wc.grab_json_response(
+            wc = await self.wc()
+            if wc:
+                memdata = await wc.grab_json_response(
                     '/api/dataset/imm_memory')
                 if memdata:
                     self.datacache['lenovo_cached_memory'] = (
