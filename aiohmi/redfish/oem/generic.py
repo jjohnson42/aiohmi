@@ -1063,7 +1063,7 @@ class OEMHandler(object):
                 if invpair[0].lower() == component.lower():
                     return invpair[1]
 
-    def get_inventory(self, withids=False):
+    async def get_inventory(self, withids=False):
         sysinfo = {
             'UUID': self._varsysinfo.get('UUID', ''),
             'Serial Number': self._varsysinfo.get('SerialNumber', ''),
@@ -1084,19 +1084,19 @@ class OEMHandler(object):
         diskurls = self._get_disk_urls()
         allurls = adpurls + diskurls
         list(self._do_bulk_requests(allurls))
-        for cpu in self._get_cpu_inventory(withids=withids):
+        async for cpu in self._get_cpu_inventory(withids=withids):
             yield cpu
-        for mem in self._get_mem_inventory(withids=withids):
+        async for mem in self._get_mem_inventory(withids=withids):
             yield mem
-        for adp in self._get_adp_inventory(withids=withids, urls=adpurls):
+        async for adp in self._get_adp_inventory(withids=withids, urls=adpurls):
             yield adp
-        for disk in self._get_disk_inventory(withids=withids, urls=diskurls):
+        async for disk in self._get_disk_inventory(withids=withids, urls=diskurls):
             yield disk
 
-    def _get_disk_inventory(self, onlyname=False, withids=False, urls=None):
+    async def _get_disk_inventory(self, onlyname=False, withids=False, urls=None):
         if not urls:
-            urls = self._get_disk_urls()
-        for inf in self._do_bulk_requests(urls):
+            urls = await self._get_disk_urls()
+        async for inf in self._do_bulk_requests(urls):
             inf, _ = inf
             ddata = {
                 'Model': inf.get('Model', None),
@@ -1110,11 +1110,11 @@ class OEMHandler(object):
                 dname = inf.get('Id', 'Disk')
             yield (dname, ddata)
 
-    def _get_adp_inventory(self, onlyname=False, withids=False, urls=None):
+    async def _get_adp_inventory(self, onlyname=False, withids=False, urls=None):
         foundmacs = False
         macinfobyadpname = {}
         if 'NetworkInterfaces' in self._varsysinfo:
-            nifdata = self._get_expanded_data(
+            nifdata = await self._get_expanded_data(
                 self._varsysinfo['NetworkInterfaces']['@odata.id'])
             for nifinfo in nifdata.get('Members', []):
                 nadurl = nifinfo.get(
@@ -1189,7 +1189,7 @@ class OEMHandler(object):
             if aname in macinfobyadpname:
                 yieldinf.update(macinfobyadpname[aname])
             funurls = [x['@odata.id'] for x in functions]
-            for fun in self._do_bulk_requests(funurls):
+            async for fun in self._do_bulk_requests(funurls):
                 funinfo, url = fun
                 yieldinf['PCI Device ID'] = funinfo['DeviceId'].replace('0x',
                                                                         '')
@@ -1203,7 +1203,7 @@ class OEMHandler(object):
                 if aname not in macinfobyadpname:
                     for nicinfo in funinfo.get('Links', {}).get(
                             'EthernetInterfaces', []):
-                        nicinfo = self._do_web_request(nicinfo['@odata.id'])
+                        nicinfo = await self._do_web_request(nicinfo['@odata.id'])
                         macaddr = nicinfo.get('MACAddress', None)
                         if macaddr:
                             macaddr = _normalize_mac(macaddr)
@@ -1222,7 +1222,7 @@ class OEMHandler(object):
             # No PCIe device inventory, but *maybe* ethernet inventory...
             idxsbyname = {}
             for nicinfo in self._get_eth_urls():
-                nicinfo = self._do_web_request(nicinfo)
+                nicinfo = await self._do_web_request(nicinfo)
                 nicname = nicinfo.get('Name', None)
                 nicinfo = nicinfo.get('MACAddress', nicinfo.get('PermanentAddress', None))
                 if nicinfo and ':' not in nicinfo:
@@ -1240,11 +1240,11 @@ class OEMHandler(object):
                             {'MAC Address {}'.format(idxsbyname[nicname]): nicinfo})
 
 
-    def _get_eth_urls(self):
+    async def _get_eth_urls(self):
         ethurls = self._varsysinfo.get('EthernetInterfaces', {})
         ethurls = ethurls.get('@odata.id', None)
         if ethurls:
-            ethurls = self._do_web_request(ethurls)
+            ethurls = await self._do_web_request(ethurls)
             ethurls = ethurls.get('Members', [])
             urls = [x['@odata.id'] for x in ethurls]
         else:
@@ -1259,8 +1259,8 @@ class OEMHandler(object):
             urls = []
         return urls
 
-    def _get_cpu_inventory(self, onlynames=False, withids=False, urls=None):
-        for currcpuinfo in self._get_cpu_data():
+    async def _get_cpu_inventory(self, onlynames=False, withids=False, urls=None):
+        async for currcpuinfo in self._get_cpu_data():
             url = currcpuinfo['@odata.id']
             name = currcpuinfo.get('Name', 'CPU')
             if name in self._hwnamemap:
@@ -1273,11 +1273,11 @@ class OEMHandler(object):
             cpuinfo = {'Model': currcpuinfo.get('Model', None)}
             yield name, cpuinfo
 
-    def _get_disk_urls(self):
+    async def _get_disk_urls(self):
         storurl = self._varsysinfo.get('Storage', {}).get('@odata.id', None)
         urls = []
         if storurl:
-            storurl = self._do_web_request(storurl)
+            storurl = await self._do_web_request(storurl)
             for url in storurl.get('Members', []):
                 url = url['@odata.id']
                 ctldata = self._do_web_request(url)
@@ -1289,18 +1289,18 @@ class OEMHandler(object):
         md = self._get_cpu_data(False)
         return [x['@odata.id'] for x in md]
 
-    def _get_cpu_data(self, expand='.'):
+    async def _get_cpu_data(self, expand='.'):
         cpumembers = []
         for sysurl in self._allsysurls:
-            currsysdata = self._do_web_request(sysurl)
+            currsysdata = await self._do_web_request(sysurl)
             currcpuurl = currsysdata.get('Processors', {}).get('@odata.id', None)
             if currcpuurl:
-                currcpudata = self._get_expanded_data(currcpuurl, expand)
+                currcpudata = await self._get_expanded_data(currcpuurl, expand)
                 cpumembers.extend(currcpudata.get('Members', []))
         return cpumembers
 
-    def _get_mem_inventory(self, onlyname=False, withids=False, urls=None):
-        memdata = self._get_mem_data()
+    async def _get_mem_inventory(self, onlyname=False, withids=False, urls=None):
+        memdata = await self._get_mem_data()
         for currmeminfo in memdata:
             url = currmeminfo['@odata.id']
             name = currmeminfo.get('Name', 'Memory')
@@ -1330,17 +1330,17 @@ class OEMHandler(object):
             }
             yield (name, meminfo)
 
-    def _get_mem_urls(self):
-        md = self._get_mem_data(False)
+    async def _get_mem_urls(self):
+        md = await self._get_mem_data(False)
         return [x['@odata.id'] for x in md]
 
-    def _get_mem_data(self, expand='.'):
+    async def _get_mem_data(self, expand='.'):
         memmembers = []
         for sysurl in self._allsysurls:
-            currsysdata = self._do_web_request(sysurl)
+            currsysdata = await self._do_web_request(sysurl)
             currmemurl = currsysdata.get('Memory', {}).get('@odata.id', None)
             if currmemurl:
-                currmemdata = self._get_expanded_data(currmemurl, expand)
+                currmemdata = await self._get_expanded_data(currmemurl, expand)
                 memmembers.extend(currmemdata.get('Members', []))
         return memmembers        
 
