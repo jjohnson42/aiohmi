@@ -1764,7 +1764,7 @@ class OEMHandler(generic.OEMHandler):
 
             return None
 
-    def get_inventory(self, withids=False):
+    async def get_inventory(self, withids=False):
         sysinfo = {
             'UUID': self._varsysinfo.get('UUID', ''),
             'Serial Number': self._varsysinfo.get('SerialNumber', ''),
@@ -1774,20 +1774,20 @@ class OEMHandler(generic.OEMHandler):
                 'SKU', self._varsysinfo.get('PartNumber', '')),
         }
         yield ('System', sysinfo)
-        for cpuinv in self._get_cpu_inventory():
+        async for cpuinv in self._get_cpu_inventory():
             yield cpuinv
-        for meminv in self._get_mem_inventory():
+        async for meminv in self._get_mem_inventory():
             yield meminv
-        hwmap = self.hardware_inventory_map()
+        hwmap = await self.hardware_inventory_map()
         for key in natural_sort(hwmap):
             yield (key, hwmap[key])
 
-    def hardware_inventory_map(self):
+    async def hardware_inventory_map(self):
         hwmap = self.get_cached_data('lenovo_cached_hwmap')
         if hwmap:
             return hwmap
         hwmap = {}
-        for disk in self.disk_inventory(mode=1):  # hardware mode
+        async for disk in self.disk_inventory(mode=1):  # hardware mode
             hwmap[disk[0]] = disk[1]
         adapterdata = self.get_cached_data('lenovo_cached_adapters')
         if not adapterdata:
@@ -1795,7 +1795,7 @@ class OEMHandler(generic.OEMHandler):
                 raise pygexc.TemporaryError(
                     'Cannot read extended inventory during firmware update')
             if self.wc:
-                adapterdata = self.wc.grab_json_response(self.ADP_URL)
+                adapterdata = await self.wc.grab_json_response(self.ADP_URL)
                 if adapterdata:
                     self.datacache['lenovo_cached_adapters'] = (
                         adapterdata, util._monotonic_time())
@@ -1868,12 +1868,12 @@ class OEMHandler(generic.OEMHandler):
         # self.weblogout()
         return hwmap
 
-    def disk_inventory(self, mode=0):
+    async def disk_inventory(self, mode=0):
         # mode 0 is firmware, 1 is hardware
         storagedata = self.get_cached_data('lenovo_cached_storage')
         if not storagedata:
             if self.wc:
-                storagedata = self.wc.grab_json_response(
+                storagedata = await self.wc.grab_json_response(
                     '/api/function/raid_alldevices?params=storage_GetAllDisks')
                 if storagedata:
                     self.datacache['lenovo_cached_storage'] = (
@@ -1897,11 +1897,11 @@ class OEMHandler(generic.OEMHandler):
                     for umd in adp.get('unmanagedDisks', []):
                         yield 'Disk {0}'.format(umd['slotNo']), bdata
 
-    def _get_cpu_inventory(self):
+    async def _get_cpu_inventory(self):
         procdata = self.get_cached_data('lenovo_cached_proc')
         if not procdata:
             if self.wc:
-                procdata = self.wc.grab_json_response(
+                procdata = await self.wc.grab_json_response(
                     '/api/dataset/imm_processors')
                 if procdata:
                     self.datacache['lenovo_cached_proc'] = (
@@ -1914,11 +1914,11 @@ class OEMHandler(generic.OEMHandler):
                 yield ('Processor {0}'.format(proc['processors_name']),
                        procinfo)
 
-    def _get_mem_inventory(self):
+    async def _get_mem_inventory(self):
         memdata = self.get_cached_data('lenovo_cached_memory')
         if not memdata:
             if self.wc:
-                memdata = self.wc.grab_json_response(
+                memdata = await self.wc.grab_json_response(
                     '/api/dataset/imm_memory')
                 if memdata:
                     self.datacache['lenovo_cached_memory'] = (
