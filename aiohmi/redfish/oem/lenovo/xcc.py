@@ -902,7 +902,7 @@ class OEMHandler(generic.OEMHandler):
         if not cfgspec:
             return True
         for pool in cfgspec.arrays:
-            self._parse_storage_cfdef _wgspec(pool)
+            self._parse_storage_cfgspec(pool)
         return True
 
     async def _wait_storage_async(self):
