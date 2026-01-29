@@ -158,6 +158,13 @@ class WebConnection:
     def set_header(self, key, value):
         self.stdheaders[key] = value
 
+    def dupe(self):
+        newwc = WebConnection(self.host, self.port,
+                              verifycallback=self.verifycallback)
+        newwc.stdheaders = copy.deepcopy(self.stdheaders)
+        newwc.cookies = copy.deepcopy(self.cookies)
+        return newwc
+
     async def request(
             self, method, url, body=None, headers=None, referer=None):
         if headers is None:
