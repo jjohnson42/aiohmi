@@ -197,7 +197,8 @@ class Command(object):
         self._varbmcurl = await tmpoem.get_default_mgrurl()        
         if 'Systems' in overview:
             self.sysurl = await tmpoem.get_default_sysurl()
-            self.powerurl = self.sysinfo.get('Actions', {}).get(
+            sysinfo = await self.sysinfo()
+            self.powerurl = sysinfo.get('Actions', {}).get(
                 '#ComputerSystem.Reset', {}).get('target', None)               
         return self
 
@@ -658,8 +659,9 @@ class Command(object):
     @property
     def _biosurl(self):
         if not self._varbiosurl:
-            self._varbiosurl = self.sysinfo.get('Bios', {}).get('@odata.id',
-                                                                None)
+            sysinfo = await self.sysinfo()
+            self._varbiosurl = sysinfo.get('Bios', {}).get('@odata.id',
+                                                          None)
         if self._varbiosurl is None:
             raise exc.UnsupportedFunctionality(
                 'Bios management not detected on this platform')
@@ -679,8 +681,9 @@ class Command(object):
 
     async def _sensormap(self):
         if not self._varsensormap:
-            if self.sysinfo:
-                for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
+            sysinfo = await self.sysinfo()
+            if sysinfo:
+                for chassis in sysinfo.get('Links', {}).get('Chassis', []):
                     self._mapchassissensors(chassis)
             else:  # no system, but check if this is a singular chassis
                 rootinfo = await self._do_web_request('/redfish/v1/')
@@ -739,35 +742,35 @@ class Command(object):
             therminf = self._do_web_request(thermurl, cache=1)
             return therminf.get('Temperatures', [])
 
-    @property
-    def _bmcurl(self):
+    async def _bmcurl(self):
         if not self._varbmcurl:
-            self._varbmcurl = self.sysinfo.get('Links', {}).get(
+            sysinfo = await self.sysinfo()
+            self._varbmcurl = sysinfo.get('Links', {}).get(
                 'ManagedBy', [{}])[0].get('@odata.id', None)
         return self._varbmcurl
 
-    @property
-    def _bmcnicurl(self):
+    async def _bmcnicurl(self):
         if not self._varbmcnicurl:
-            self._varbmcnicurl = self._get_bmc_nic_url()
+            self._varbmcnicurl = await self._get_bmc_nic_url()
         return self._varbmcnicurl
 
-    def list_network_interface_names(self):
-        bmcinfo = self._do_web_request(self._bmcurl)
+    async def list_network_interface_names(self):
+        bmcurl = await self._bmcurl()
+        bmcinfo = self._do_web_request(bmcurl)
         nicurl = bmcinfo.get('EthernetInterfaces', {}).get('@odata.id', None)
         if not nicurl:
             return
-        niclist = self._do_web_request(nicurl)
+        niclist = await self._do_web_request(nicurl)
         for nic in niclist.get('Members', []):
             curl = nic.get('@odata.id', None)
             if not curl:
                 continue
             yield curl.rsplit('/', 1)[1]
 
-    def _get_bmc_nic_url(self, name=None):
-        bmcinfo = self._do_web_request(self._bmcurl)
+    async def _get_bmc_nic_url(self, name=None):
+        bmcinfo = await self._do_web_request(await self._bmcurl())
         nicurl = bmcinfo.get('EthernetInterfaces', {}).get('@odata.id', None)
-        niclist = self._do_web_request(nicurl)
+        niclist = await self._do_web_request(nicurl)
         foundnics = 0
         lastnicurl = None
         for nic in niclist.get('Members', []):
@@ -781,7 +784,7 @@ class Command(object):
             if self.oem.hostnic and curl.endswith('/{0}'.format(
                     self.oem.hostnic)):
                 continue
-            nicinfo = self._do_web_request(curl)
+            nicinfo = await self._do_web_request(curl)
             if nicinfo.get('Links', {}).get('HostInterface', None):
                 # skip host interface
                 continue
@@ -806,17 +809,16 @@ class Command(object):
         if name is None:
             return lastnicurl
 
-    @property
-    def _bmcresetinfo(self):
+    async def _bmcresetinfo(self):
         if not self._varresetbmcurl:
-            bmcinfo = self._do_web_request(self._bmcurl)
+            bmcinfo = await self._do_web_request(await self._bmcurl())
             resetinf = bmcinfo.get('Actions', {}).get('#Manager.Reset', {})
             url = resetinf.get('target', '')
             valid = resetinf.get('ResetType@Redfish.AllowableValues', [])
             if not valid:
                 tmpurl = resetinf.get('@Redfish.ActionInfo', None)
                 if tmpurl:
-                    resetinf = self._do_web_request(tmpurl)
+                    resetinf = await self._do_web_request(tmpurl)
                     valid = resetinf.get('Parameters', [{}])[0].get(
                         'AllowableValues')
             resettype = None
@@ -829,13 +831,13 @@ class Command(object):
             self._varresetbmcurl = url, resettype
         return self._varresetbmcurl
 
-    def reset_bmc(self):
-        url, action = self._bmcresetinfo
+    async def reset_bmc(self):
+        url, action = await self._bmcresetinfo()
         if not url:
             raise Exception('BMC does not provide reset action')
         if not action:
             raise Exception('BMC does not accept a recognized reset type')
-        self._do_web_request(url, {'ResetType': action})
+        await self._do_web_request(url, {'ResetType': action})
 
     async def set_identify(self, on=True, blink=None):
         if hasattr(self.oem, 'set_identify'):
@@ -861,8 +863,9 @@ class Command(object):
         'Off': 'off',
     }
 
-    def get_identify(self):
-        ledstate = self.sysinfo['IndicatorLED']
+    async def get_identify(self):
+        await self.sysinfo()
+        ledstate = self.sysinfo
         return {'identifystate': self._idstatemap[ledstate]}
 
     def get_health(self, verbose=True):
@@ -1108,24 +1111,24 @@ class Command(object):
             retval['vlan_id'] = 'off'        
         return retval
 
-    def get_hostname(self):
-        netcfg = self._do_web_request(self._bmcnicurl)
+    async def get_hostname(self):
+        netcfg = await self._do_web_request(self._bmcnicurl)
         return netcfg['HostName']
 
-    def set_hostname(self, hostname):
-        self._do_web_request(self._bmcnicurl,
+    async def set_hostname(self, hostname):
+        await self._do_web_request(self._bmcnicurl,
                              {'HostName': hostname}, 'PATCH')
 
-    def get_firmware(self, components=(), category=None):
+    async def get_firmware(self, components=(), category=None):
         self._fwnamemap = {}
         try:
-            for firminfo in self.oem.get_firmware_inventory(components, self, category):
+            async for firminfo in self.oem.get_firmware_inventory(components, self, category):
                 yield firminfo
         except exc.BypassGenericBehavior:
             return
-        fwlist = self._do_web_request(self._fwinventory)
+        fwlist = await self._do_web_request(self._fwinventory)
         fwurls = [x['@odata.id'] for x in fwlist.get('Members', [])]
-        for res in self._do_bulk_requests(fwurls):
+        async for res in self._do_bulk_requests(fwurls):
             res = self._extract_fwinfo(res)
             if res[0] is None:
                 continue
@@ -1169,11 +1172,12 @@ class Command(object):
     def get_inventory(self, withids=False):
         return self.oem.get_inventory(withids)
 
-    def get_location_information(self):
+    async def get_location_information(self):
         locationinfo = {}
-        for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
+        sysinfo = await self.sysinfo()
+        for chassis in sysinfo.get('Links', {}).get('Chassis', []):
             chassisurl = chassis['@odata.id']
-            data = self._do_web_request(chassisurl)
+            data = await self._do_web_request(chassisurl)
             locdata = data.get('Location', {})
             postaladdress = locdata.get('PostalAddress', {})
             placement = locdata.get('Placement', {})
@@ -1200,7 +1204,7 @@ class Command(object):
                     locationinfo['contactnames'].append(contact)
         return locationinfo
 
-    def set_location_information(self, room=None, contactnames=None,
+    async def set_location_information(self, room=None, contactnames=None,
                                  location=None, building=None, rack=None):
         locationinfo = {}
         postaladdress = {}
@@ -1221,9 +1225,10 @@ class Command(object):
         if placement:
             locationinfo['Placement'] = placement
         if locationinfo:
-            for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
+            sysinfo = await self.sysinfo()
+            for chassis in sysinfo.get('Links', {}).get('Chassis', []):
                 chassisurl = chassis['@odata.id']
-                self._do_web_request(chassisurl, {'Location': locationinfo},
+                await self._do_web_request(chassisurl, {'Location': locationinfo},
                                      method='PATCH')
 
     async def oem(self):
@@ -1234,7 +1239,7 @@ class Command(object):
                 await self._do_web_request(self._varbmcurl, cache=False)  # This is to trigger token validation and renewel
             sysinfo = await self.sysinfo()
             self._oem = oem.get_oem_handler(
-                self.sysinfo, self._initsysurl, self.wc, self._urlcache, self)
+                sysinfo, self._initsysurl, self.wc, self._urlcache, self)
             self._oem.set_credentials(self.username, self.password)
         return self._oem
 
@@ -1242,32 +1247,32 @@ class Command(object):
         return self.oem.get_description(self)
 
     async def get_event_log(self, clear=False):
-        return self.oem.get_event_log(clear, self)
+        return await self.oem.get_event_log(clear, self)
 
-    def _get_chassis_env(self, chassis):
+    async def _get_chassis_env(self, chassis):
         chassisurl = chassis['@odata.id']
-        chassisinfo = self._do_web_request(chassisurl)
+        chassisinfo = await self._do_web_request(chassisurl)
         envurl = chassisinfo.get('EnvironmentMetrics', {}).get('@odata.id', '')
         if not envurl:
             return {}
-        envmetric = self._do_web_request(envurl, cache=1)
+        envmetric = await self._do_web_request(envurl, cache=1)
         retval = {
             'watts': envmetric.get('PowerWatts', {}).get('Reading', None),
             'inlet': envmetric.get('TemperatureCelsius', {}).get('Reading', None)
         }
         return retval
 
-    def get_average_processor_temperature(self):
-        return self.oem.get_average_processor_temperature(self)
+    async def get_average_processor_temperature(self):
+        return await self.oem.get_average_processor_temperature(self)
 
-    def get_system_power_watts(self):
-        return self.oem.get_system_power_watts(self)
+    async def get_system_power_watts(self):
+        return await self.oem.get_system_power_watts(self)
 
-
-    def get_inlet_temperature(self):
+    async def get_inlet_temperature(self):
         inlets = []
-        for chassis in self.sysinfo.get('Links', {}).get('Chassis', []):
-            envinfo = self._get_chassis_env(chassis)
+        sysinfo = await self.sysinfo()
+        for chassis in sysinfo.get('Links', {}).get('Chassis', []):
+            envinfo = await self._get_chassis_env(chassis)
             currinlet = envinfo.get('inlet', None)
             if currinlet:
                 inlets.append(currinlet)
@@ -1377,7 +1382,7 @@ class Command(object):
         """
         return self._oem.check_storage_configuration(cfgspec)
 
-    def attach_remote_media(self, url, username=None, password=None):
+    async def attach_remote_media(self, url, username=None, password=None):
         """Attach remote media by url
 
         Given a url, attach remote media (cd/usb image) to the target system.
@@ -1394,13 +1399,14 @@ class Command(object):
         # As such it's OEM specific until the standard
         # provides a better way.
         vmurls = []
-        vmcoll = self.sysinfo.get(
+        sysinfo = await self.sysinfo()
+        vmcoll = sysinfo.get(
             'VirtualMedia', {}).get('@odata.id', None)
         if not vmcoll:
             vmcoll = self.bmcinfo.get(
                 'VirtualMedia', {}).get('@odata.id', None)
         if vmcoll:
-            vmlist = self._do_web_request(vmcoll)
+            vmlist = await self._do_web_request(vmcoll)
             vmurls = [x['@odata.id'] for x in vmlist.get('Members', [])]
         suspendedxauth = False  # Don't trigger token expiry linked unmount
         if 'X-Auth-Token' in self.wc.stdheaders:
@@ -1442,19 +1448,20 @@ class Command(object):
         for res in self.oem.list_media(self, cache=False):
             pass          
 
-    def detach_remote_media(self):
+    async def detach_remote_media(self):
         try:
             self.oem.detach_remote_media()
         except exc.BypassGenericBehavior:
             return
-        vmcoll = self.sysinfo.get('VirtualMedia', {}).get('@odata.id', None)
+        sysinfo = await self.sysinfo()
+        vmcoll = sysinfo.get('VirtualMedia', {}).get('@odata.id', None)
         if not vmcoll:
-            bmcinfo = self._do_web_request(self._bmcurl)
+            bmcinfo = await self._do_web_request(await self._bmcurl())
             vmcoll = bmcinfo.get('VirtualMedia', {}).get('@odata.id', None)
         if vmcoll:
-            vmlist = self._do_web_request(vmcoll)
+            vmlist = await self._do_web_request(vmcoll)
             vmurls = [x['@odata.id'] for x in vmlist.get('Members', [])]
-            for vminfo in self._do_bulk_requests(vmurls):
+            for vminfo in await self._do_bulk_requests(vmurls):
                 vminfo, currl = vminfo
                 if vminfo['Image']:
                     ejurl = vminfo.get(
