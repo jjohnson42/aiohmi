@@ -601,13 +601,13 @@ class Command(object):
                                    'vintage': os.times()[4]}
         return res[0]
 
-    def get_bootdev(self):
+    async def get_bootdev(self):
         """Get current boot device override information.
 
         :raises: PyghmiException on error
         :returns: dict
         """
-        result = self._do_web_request(self.sysurl)
+        result = await self._do_web_request(self.sysurl)
         overridestate = result.get('Boot', {}).get(
             'BootSourceOverrideEnabled', None)
         if overridestate == 'Disabled':
@@ -656,8 +656,7 @@ class Command(object):
         """
         return self.oem.set_bootdev(bootdev, persist, uefiboot, self)
 
-    @property
-    def _biosurl(self):
+    async def _biosurl(self):
         if not self._varbiosurl:
             sysinfo = await self.sysinfo()
             self._varbiosurl = sysinfo.get('Bios', {}).get('@odata.id',
@@ -667,10 +666,9 @@ class Command(object):
                 'Bios management not detected on this platform')
         return self._varbiosurl
 
-    @property
-    def _setbiosurl(self):
+    async def _setbiosurl(self):
         if self._varsetbiosurl is None:
-            biosinfo = self._do_web_request(self._biosurl)
+            biosinfo = await self._do_web_request(await self._biosurl())
             self._varsetbiosurl = biosinfo.get(
                 '@Redfish.Settings', {}).get('SettingsObject', {}).get(
                     '@odata.id', None)
@@ -684,14 +682,14 @@ class Command(object):
             sysinfo = await self.sysinfo()
             if sysinfo:
                 for chassis in sysinfo.get('Links', {}).get('Chassis', []):
-                    self._mapchassissensors(chassis)
+                    await self._mapchassissensors(chassis)
             else:  # no system, but check if this is a singular chassis
                 rootinfo = await self._do_web_request('/redfish/v1/')
                 chassiscol = rootinfo.get('Chassis', {}).get('@odata.id', '')
                 if chassiscol:
                     chassislist = await self._do_web_request(chassiscol)
                     if len(chassislist.get('Members', [])) == 1:
-                        self._mapchassissensors(chassislist['Members'][0])
+                        await self._mapchassissensors(chassislist['Members'][0])
         return self._varsensormap
 
     async def _mapchassissensors(self, chassis):
