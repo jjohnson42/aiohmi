@@ -15,6 +15,6 @@
 from aiohmi.redfish.oem.dell import idrac
 
 
-def get_handler(sysinfo, sysurl, webclient, cache, cmd, rootinfo={}):
-    return idrac.OEMHandler(sysinfo, sysurl, webclient, cache,
+async def get_handler(sysinfo, sysurl, webclient, cache, cmd, rootinfo={}):
+    return await idrac.OEMHandler.create(sysinfo, sysurl, webclient, cache,
                             gpool=cmd._gpool)

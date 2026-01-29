@@ -17,10 +17,6 @@ import aiohmi.redfish.oem.generic as generic
 
 class OEMHandler(generic.OEMHandler):
 
-    def __init__(self, sysinfo, sysurl, webclient, cache, gpool=None):
-        super(OEMHandler, self).__init__(sysinfo, sysurl, webclient, cache,
-                                         gpool)
-
     def set_bootdev(self, bootdev, persist=False, uefiboot=None,
                     fishclient=None):
         # gleaned from web console, under configuration, system settings,

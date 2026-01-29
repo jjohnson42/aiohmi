@@ -40,19 +40,19 @@ async def get_handler(sysinfo, sysurl, webclient, cache, cmd, rootinfo={}):
             return tsma.TsmHandler(sysinfo, sysurl, webclient, cache)
     elif 'xclarity controller' in mgrinfo.get('Model', '').lower():
         if mgrinfo['Model'].endswith('3'):
-            return xcc3.OEMHandler(sysinfo, sysurl, webclient, cache,
+            return await xcc3.OEMHandler.create(sysinfo, sysurl, webclient, cache,
                                    gpool=cmd._gpool)
         else:
-            return xcc.OEMHandler(sysinfo, sysurl, webclient, cache,
+            return await xcc.OEMHandler.create(sysinfo, sysurl, webclient, cache,
                                   gpool=cmd._gpool)
     elif 'FrontPanelUSB' in leninf or 'USBManagementPortAssignment' in leninf or sysinfo.get('SKU', '').startswith('7X58'):
-        return xcc.OEMHandler(sysinfo, sysurl, webclient, cache,
+        return await xcc.OEMHandler.create(sysinfo, sysurl, webclient, cache,
                               gpool=cmd._gpool)
     else:
         leninv = sysinfo.get('Links', {}).get('OEM', {}).get(
             'Lenovo', {}).get('Inventory', {})
         if 'hdd' in leninv and 'hostMAC' in leninv and 'backPlane' in leninv:
-            return tsma.TsmHandler(sysinfo, sysurl, webclient, cache,
+            return await tsma.TsmHandler.create(sysinfo, sysurl, webclient, cache,
                                    gpool=cmd._gpool)
     try:
         devdesc = await webclient.grab_json_response_with_status('/DeviceDescription.json')

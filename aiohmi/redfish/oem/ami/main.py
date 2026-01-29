@@ -15,6 +15,6 @@
 import aiohmi.redfish.oem.ami.megarac as megarac
 
 
-def get_handler(sysinfo, sysurl, webclient, cache, cmd, rootinfo={}):
-    return megarac.OEMHandler(sysinfo, sysurl, webclient, cache,
+async def get_handler(sysinfo, sysurl, webclient, cache, cmd, rootinfo={}):
+    return await megarac.OEMHandler.create(sysinfo, sysurl, webclient, cache,
                             gpool=cmd._gpool)

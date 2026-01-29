@@ -139,8 +139,9 @@ class OEMHandler(generic.OEMHandler):
     PORTS = 'network_pPorts'
     DEVNO = 'generic_devNo'
 
-    def __init__(self, sysinfo, sysurl, webclient, cache, gpool=None):
-        super(OEMHandler, self).__init__(sysinfo, sysurl, webclient, cache,
+    @classmethod
+    async def create(cls, sysinfo, sysurl, webclient, cache, gpool=None):
+        self = await super(OEMHandler, cls).create(sysinfo, sysurl, webclient, cache,
                                          gpool)
         self._wc = None
         self.weblogging = False
@@ -148,6 +149,7 @@ class OEMHandler(generic.OEMHandler):
         self.datacache = {}
         self.fwc = None
         self.fwo = None
+        return self
 
     async def get_screenshot(self, outfile):
         await self.wc.grab_json_response('/api/providers/rp_screenshot')

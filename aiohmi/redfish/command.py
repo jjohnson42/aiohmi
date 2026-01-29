@@ -192,7 +192,7 @@ class Command(object):
         self.powerurl = None
         self.sysurl = None
         self._initsysurl = sysurl
-        tmpoem = oem.get_oem_handler({}, sysurl, self.wc, self._urlcache, self,
+        tmpoem = await oem.get_oem_handler({}, sysurl, self.wc, self._urlcache, self,
                                     rootinfo=overview)
         self._varbmcurl = tmpoem.get_default_mgrurl()        
         if 'Systems' in overview:

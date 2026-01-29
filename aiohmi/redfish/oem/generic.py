@@ -218,7 +218,10 @@ class OEMHandler(object):
             del self._urlcache[url]
         if url + '?$expand=.' in self._urlcache:
             del self._urlcache[url + '?$expand=.']
-    def __init__(self, sysinfo, sysurl, webclient, cache, gpool=None, rootinfo={}):
+    
+    @classmethod
+    async def create(self, sysinfo, sysurl, webclient, cache, gpool=None, rootinfo={}):
+        self = cls()
         self._gpool = gpool
         self._varsysinfo = sysinfo
         self._varsysurl = sysurl
@@ -228,7 +231,7 @@ class OEMHandler(object):
         self._hwnamemap = {}
         self._rootinfo = rootinfo
         if not self._rootinfo:
-            self._rootinfo = self.webclient.grab_json_response(
+            self._rootinfo = await self.webclient.grab_json_response(
                 '/redfish/v1/')
         self._varbmcurl = None
         self._varsysurl = sysurl        
@@ -236,7 +239,7 @@ class OEMHandler(object):
         if sysurl is None:  # generic means we need to gather all systems
             if 'Systems' in self._rootinfo:
                 systems = self._rootinfo['Systems']['@odata.id']
-                res = self.webclient.grab_json_response_with_status(systems)
+                res = await self.webclient.grab_json_response_with_status(systems)
                 if res[1] == 200:
                     members = res[0]['Members']
                     for system in members:
@@ -244,6 +247,7 @@ class OEMHandler(object):
                             self._allsysurls.append(system['@odata.id'])
         else:
             self._allsysurls = [sysurl]
+        return self
 
     async def get_screenshot(self, outfile):
         raise exc.UnsupportedFunctionality(

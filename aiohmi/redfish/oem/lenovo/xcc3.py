@@ -64,10 +64,12 @@ class SensorReading(object):
 
 class OEMHandler(generic.OEMHandler):
 
-    def __init__(self, sysinfo, sysurl, webclient, cache, gpool=None):
-        super(OEMHandler, self).__init__(sysinfo, sysurl, webclient, cache,
+    @classmethod
+    async def create(cls, sysinfo, sysurl, webclient, cache, gpool=None):
+        self = await super(OEMHandler, cls).create(sysinfo, sysurl, webclient, cache,
                                          gpool)
         self.datacache = {}
+        return self
 
     def weblogout(self):
         if self.webclient:

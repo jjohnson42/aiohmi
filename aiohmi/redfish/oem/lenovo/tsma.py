@@ -97,8 +97,11 @@ def read_hpm(filename, data):
 class TsmHandler(generic.OEMHandler):
     hostnic = 'usb0'
 
-    def __init__(self, sysinfo, sysurl, webclient, cache=None, fish=None,
+    @classmethod
+    async def create(cls, sysinfo, sysurl, webclient, cache=None, fish=None,
                  gpool=None):
+        self = await super(TsmHandler, cls).create(sysinfo, sysurl, webclient, cache, fish,
+                                         gpool)
         if cache is None:
             cache = {}
         self._wc = None
@@ -112,6 +115,7 @@ class TsmHandler(generic.OEMHandler):
                                          gpool)
         self.tsm = webclient.thehost
         self._certverify = webclient._certverify
+        return self
 
     def clear_bmc_configuration(self):
         wc = self.wc

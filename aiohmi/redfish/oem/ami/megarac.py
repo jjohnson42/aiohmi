@@ -16,12 +16,12 @@ import aiohmi.redfish.oem.generic as generic
 
 
 class OEMHandler(generic.OEMHandler):
-
-    def __init__(self, sysinfo, sysurl, webclient, cache, gpool=None):
-        super(OEMHandler, self).__init__(sysinfo, sysurl, webclient, cache,
+    @classmethod
+    async def create(self, sysinfo, sysurl, webclient, cache, gpool=None):
+        self = await super(OEMHandler, self).create(sysinfo, sysurl, webclient, cache,
                                          gpool)
         if sysurl is None:
-            systems, status = webclient.grab_json_response_with_status('/redfish/v1/Systems')
+            systems, status = await webclient.grab_json_response_with_status('/redfish/v1/Systems')
             if status == 200:
                 for system in systems.get('Members', []):
                     if system.get('@odata.id', '').endswith('/Self'):
