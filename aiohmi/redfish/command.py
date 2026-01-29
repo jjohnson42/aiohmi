@@ -194,9 +194,9 @@ class Command(object):
         self._initsysurl = sysurl
         tmpoem = await oem.get_oem_handler({}, sysurl, self.wc, self._urlcache, self,
                                     rootinfo=overview)
-        self._varbmcurl = tmpoem.get_default_mgrurl()        
+        self._varbmcurl = await tmpoem.get_default_mgrurl()        
         if 'Systems' in overview:
-            self.sysurl = tmpoem.get_default_sysurl()
+            self.sysurl = await tmpoem.get_default_sysurl()
             self.powerurl = self.sysinfo.get('Actions', {}).get(
                 '#ComputerSystem.Reset', {}).get('target', None)               
         return self

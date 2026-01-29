@@ -253,10 +253,10 @@ class OEMHandler(object):
         raise exc.UnsupportedFunctionality(
             'Retrieving screenshot is not implemented for this platform')
 
-    def get_default_mgrurl(self):
+    async def get_default_mgrurl(self):
         if not self._varbmcurl and 'Managers' in self._rootinfo:
             bmcoll = self._rootinfo['Managers']['@odata.id']
-            res = self.webclient.grab_json_response_with_status(bmcoll)
+            res = await self.webclient.grab_json_response_with_status(bmcoll)
             if res[1] == 401:
                 raise exc.PyghmiException('Access Denied')
             elif res[1] < 200 or res[1] >= 300:
@@ -266,10 +266,10 @@ class OEMHandler(object):
                 self._varbmcurl = bmcs[0]['@odata.id']
         return self._varbmcurl
     
-    def get_default_sysurl(self):
+    async def get_default_sysurl(self):
         if not self._varsysurl and 'Systems' in self._rootinfo:
             systems = self._rootinfo['Systems']['@odata.id']
-            res = self.webclient.grab_json_response_with_status(systems)
+            res = await self.webclient.grab_json_response_with_status(systems)
             if res[1] == 401:
                 raise exc.PyghmiException('Access Denied')
             elif res[1] < 200 or res[1] >= 300:
