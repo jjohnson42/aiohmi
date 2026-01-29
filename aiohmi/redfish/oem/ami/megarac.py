@@ -17,8 +17,8 @@ import aiohmi.redfish.oem.generic as generic
 
 class OEMHandler(generic.OEMHandler):
     @classmethod
-    async def create(self, sysinfo, sysurl, webclient, cache, gpool=None):
-        self = await super(OEMHandler, self).create(sysinfo, sysurl, webclient, cache,
+    async def create(cls, sysinfo, sysurl, webclient, cache, gpool=None):
+        self = await super().create(sysinfo, sysurl, webclient, cache,
                                          gpool)
         if sysurl is None:
             systems, status = await webclient.grab_json_response_with_status('/redfish/v1/Systems')

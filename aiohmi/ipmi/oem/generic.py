@@ -27,7 +27,8 @@ class OEMHandler(object):
     device_revision as keys in a dictionary, along with an ipmi Command object
     """
 
-    async def create(self, oemid, ipmicmd):
+    @classmethod
+    async def create(cls, oemid, ipmicmd):
         self = cls()
         return self
 

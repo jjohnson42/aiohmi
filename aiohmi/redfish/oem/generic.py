@@ -220,7 +220,7 @@ class OEMHandler(object):
             del self._urlcache[url + '?$expand=.']
     
     @classmethod
-    async def create(self, sysinfo, sysurl, webclient, cache, gpool=None, rootinfo={}):
+    async def create(cls, sysinfo, sysurl, webclient, cache, gpool=None, rootinfo={}):
         self = cls()
         self._gpool = gpool
         self._varsysinfo = sysinfo
