@@ -86,7 +86,7 @@ class OEMHandler(generic.OEMHandler):
         except KeyError:
             return None
     
-    def get_inventory(self, withids=False):
+    async def get_inventory(self, withids=False):
         sysinfo = {
             'UUID': self._varsysinfo.get('UUID', '').lower(),
             'Serial Number': self._varsysinfo.get('SerialNumber', ''),
@@ -96,20 +96,20 @@ class OEMHandler(generic.OEMHandler):
                 'SKU', self._varsysinfo.get('PartNumber', '')),
         }
         yield ('System', sysinfo)
-        for cpuinv in self._get_cpu_inventory():
+        async for cpuinv in self._get_cpu_inventory():
             yield cpuinv
-        for meminv in self._get_mem_inventory():
+        async for meminv in self._get_mem_inventory():
             yield meminv
-        hwmap = self.hardware_inventory_map()
+        hwmap = await self.hardware_inventory_map()
         for key in natural_sort(hwmap):
             yield (key, hwmap[key])
     
-    def hardware_inventory_map(self):
+    async def hardware_inventory_map(self):
         hwmap = self.get_cached_data('lenovo_cached_hwmap')
         if hwmap:
             return hwmap
         hwmap = {}
-        for disk in self.disk_inventory(mode=1):  # hardware mode
+        async for disk in self.disk_inventory(mode=1):  # hardware mode
             hwmap[disk[0]] = disk[1]
         adapterdata = self.get_cached_data('lenovo_cached_adapters')
         if not adapterdata:
@@ -117,7 +117,7 @@ class OEMHandler(generic.OEMHandler):
             #     raise pygexc.TemporaryError(
             #         'Cannot read extended inventory during firmware update')
             if self.webclient:
-                adapterdata = list(self._do_bulk_requests([i['@odata.id'] for i in self.webclient.grab_json_response(
+                adapterdata = list(self._do_bulk_requests([i['@odata.id'] for i in await self.webclient.grab_json_response(
                         '/redfish/v1/Chassis/1')['Links']['PCIeDevices']]))               
                 if adapterdata:
                     self.datacache['lenovo_cached_adapters'] = (

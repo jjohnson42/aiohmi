@@ -1504,18 +1504,18 @@ class OEMHandler(object):
         return usd,upurl,ismultipart
 
 
-    def _do_bulk_requests(self, urls, cache=True):
+    async def _do_bulk_requests(self, urls, cache=True):
         if self._gpool:
             urls = [(x, None, None, cache) for x in urls]
             for res in self._gpool.starmap(self._do_web_request_withurl, urls):
                 yield res
         else:
             for url in urls:
-                yield self._do_web_request_withurl(url, cache=cache)
+                yield await self._do_web_request_withurl(url, cache=cache)
 
-    def _do_web_request_withurl(self, url, payload=None, method=None,
+    async def _do_web_request_withurl(self, url, payload=None, method=None,
                                 cache=True):
-        return self._do_web_request(url, payload, method, cache), url
+        return await self._do_web_request(url, payload, method, cache), url
 
     async def _get_session_token(self, wc):
         username = self.username
