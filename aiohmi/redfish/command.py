@@ -1191,7 +1191,8 @@ class Command(object):
 
     async def get_inventory(self, withids=False):
         oem = await self.oem()
-        return await oem.get_inventory(withids)
+        async for x in oem.get_inventory(withids):
+            yield x
 
     async def get_location_information(self):
         locationinfo = {}
@@ -1259,7 +1260,7 @@ class Command(object):
             elif self._varbmcurl:
                 await self._do_web_request(self._varbmcurl, cache=False)  # This is to trigger token validation and renewel
             sysinfo = await self.sysinfo()
-            self._oem = oem.get_oem_handler(
+            self._oem = await oem.get_oem_handler(
                 sysinfo, self._initsysurl, self.wc, self._urlcache, self)
             self._oem.set_credentials(self.username, self.password)
         return self._oem
