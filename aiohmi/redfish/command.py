@@ -246,25 +246,30 @@ class Command(object):
             okroles.add('ReadOnly')
         return okroles
 
-    def get_trusted_cas(self):
-        for ca in self.oem.get_trusted_cas():
+    async def get_trusted_cas(self):
+        oem = await self.oem()
+        for ca in await oem.get_trusted_cas():
             yield ca
     
-    def get_bmc_csr(self, keytype=None, keylength=None, cn=None, city=None,
+    async def get_bmc_csr(self, keytype=None, keylength=None, cn=None, city=None,
                     state=None, country=None, org=None, orgunit=None):
-        return self.oem.get_bmc_csr(
+        oem = await self.oem()
+        return await oem.get_bmc_csr(
             keytype=keytype, keylength=keylength, cn=cn)
 
-    def install_bmc_certificate(self, certdata):
-        return self.oem.install_bmc_certificate(certdata)
-
-    def add_trusted_ca(self, pemdata):
-        return self.oem.add_trusted_ca(pemdata)
+    async def install_bmc_certificate(self, certdata):
+        oem = await self.oem()
+        return await oem.install_bmc_certificate(certdata)
     
-    def del_trusted_ca(self, certid):
-        return self.oem.del_trusted_ca(certid)
+    async def add_trusted_ca(self, pemdata):
+        oem = await self.oem()
+        return await oem.add_trusted_ca(pemdata)
+    
+    async def del_trusted_ca(self, certid):
+        oem = await self.oem()
+        return await oem.del_trusted_ca(certid)
 
-    def get_users(self):
+    async def get_users(self):
         """get list of users and channel access information (helper)
 
         :param channel: number [1:7]
@@ -288,6 +293,7 @@ class Command(object):
             if srvurl:
                 srvinfo = self._do_web_request(srvurl)
                 accounts = srvinfo.get('Members', [])
+                oem = await self.oem()
                 for account in accounts:
                     accinfo = self._do_web_request(account['@odata.id'])
                     currname = accinfo.get('UserName', '')
@@ -296,7 +302,7 @@ class Command(object):
                         names[currid] = {
                             'name': currname,
                             'uid': currid,
-                            'expiration': self.oem.get_user_expiration(currid),
+                            'expiration': await oem.get_user_expiration(currid),
                             'access': {
                                 'privilege_level': accinfo.get('RoleId',
                                                                'Unknown')
@@ -304,8 +310,9 @@ class Command(object):
                         }
         return names
 
-    def _account_url_info_by_id(self, uid):
+    async def _account_url_info_by_id(self, uid):
         srvurl = self._accountserviceurl
+        oem = await self.oem()
         if srvurl:
             srvinfo = self._do_web_request(srvurl)
             srvurl = srvinfo.get('Accounts', {}).get('@odata.id', None)
@@ -316,12 +323,13 @@ class Command(object):
                     accinfo = self._do_web_request(account['@odata.id'])
                     currid = accinfo.get('Id', None)
                     if str(currid) == str(uid):
-                        accinfo['expiration'] = self.oem.get_user_expiration(
+                        accinfo['expiration'] = await oem.get_user_expiration(
                             uid)
                         return account['@odata.id'], accinfo
 
-    def get_user(self, uid):
+    async def get_user(self, uid):
         srvurl = self._accountserviceurl
+        oem = await self.oem()
         if srvurl:
             srvinfo = self._do_web_request(srvurl)
             srvurl = srvinfo.get('Accounts', {}).get('@odata.id', None)
@@ -333,14 +341,15 @@ class Command(object):
                     currname = accinfo.get('UserName', '')
                     currid = accinfo.get('Id', None)
                     if str(currid) == str(uid):
+                        oem = await self.oem()
                         return {'name': currname, 'uid': uid,
-                                'expiration': self.oem.get_user_expiration(
+                                'expiration': await oem.get_user_expiration(
                                     uid),
                                 'access': {
                                     'privilege_level': accinfo.get(
                                         'RoleId', 'Unknown')}}
 
-    def set_user_password(self, uid, mode='set_password', password=None):
+    async def set_user_password(self, uid, mode='set_password', password=None):
         """Set user password and (modes)
 
         :param uid: id number of user.  see: get_names_uid()['name']
@@ -357,7 +366,7 @@ class Command(object):
             True on success
         """
 
-        accinfo = self._account_url_info_by_id(uid)
+        accinfo = await self._account_url_info_by_id(uid)
         if not accinfo:
             raise Exception("No such account found")
         etag = accinfo[1].get('@odata.etag', None)
@@ -372,7 +381,7 @@ class Command(object):
                                  method='PATCH', etag=etag)
         return True
 
-    def disable_user(self, uid, mode):
+    async def disable_user(self, uid, mode):
         """Disable User
 
         Just disable the User.
@@ -383,13 +392,13 @@ class Command(object):
             disable       = disable user connections
             enable        = enable user connections
         """
-        self.set_user_password(uid, mode)
+        await self.set_user_password(uid, mode)
         return True
 
-    def set_user_access(self, uid, privilege_level='ReadOnly'):
+    async def set_user_access(self, uid, privilege_level='ReadOnly'):
         if privilege_level.startswith('custom.'):
             privilege_level = privilege_level.replace('custom.', '')
-        accinfo = self._account_url_info_by_id(uid)
+        accinfo = await self._account_url_info_by_id(uid)
         if accinfo:
             method = 'PATCH'
         else:
@@ -400,17 +409,17 @@ class Command(object):
             if role.lower() == privilege_level.lower():
                 privilege_level = role
                 break
-        self._do_web_request(accinfo[0], {'RoleId': privilege_level},
+        await self._do_web_request(accinfo[0], {'RoleId': privilege_level},
                              method=method, etag=etag)
 
-    def create_user(self, uid, name, password, privilege_level='ReadOnly'):
+    async def create_user(self, uid, name, password, privilege_level='ReadOnly'):
         """create/ensure a user is created with provided settings
 
         :param privilege_level:
             User Privilege level.  Redfish role, commonly Administrator,
             Operator, and ReadOnly
         """
-        accinfo = self._account_url_info_by_id(uid)
+        accinfo = await self._account_url_info_by_id(uid)
         if not accinfo:
             raise Exception("Unable to find indicated uid")
         if privilege_level.startswith('custom.'):
@@ -429,35 +438,38 @@ class Command(object):
         return True
 
     async def get_screenshot(self, outfile):
-        return await self.oem.get_screenshot(outfile)
+        oem = await self.oem()
+        return await oem.get_screenshot(outfile)
 
     async def get_ikvm_methods(self):
-        return await self.oem.get_ikvm_methods()
+        oem = await self.oem()
+        return await oem.get_ikvm_methods()
 
     async def get_ikvm_launchdata(self):
-        return await self.oem.get_ikvm_launchdata()   
+        oem = await self.oem()
+        return await oem.get_ikvm_launchdata()   
 
-    def user_delete(self, uid):
-        self.oem.user_delete(uid, self)
+    async def user_delete(self, uid):
+        oem = await self.oem()
+        return await oem.user_delete(uid, self)
 
-    def set_user_name(self, uid, name):
+    async def set_user_name(self, uid, name):
         """Set user name
 
         :param uid: user id
         :param name: username
         """
-        accinfo = self._account_url_info_by_id(uid)
+        accinfo = await self._account_url_info_by_id(uid)
         if not accinfo:
             raise Exception("No such account found")
         etag = accinfo[1].get('@odata.etag', None)
-        self._do_web_request(accinfo[0], {'UserName': name}, method='PATCH',
+        await self._do_web_request(accinfo[0], {'UserName': name}, method='PATCH',
                              etag=etag)
         return True
 
-    @property
-    def _updateservice(self):
+    async def _updateservice(self):
         if not self._varupdateservice:
-            overview = self._do_web_request('/redfish/v1/')
+            overview = await self._do_web_request('/redfish/v1/')
             us = overview.get('UpdateService', {}).get('@odata.id', None)
             if not us:
                 raise exc.UnsupportedFunctionality(
@@ -465,10 +477,9 @@ class Command(object):
             self._varupdateservice = us
         return self._varupdateservice
 
-    @property
-    def _fwinventory(self):
+    async def _fwinventory(self):
         if not self._varfwinventory:
-            usi = self._do_web_request(self._updateservice)
+            usi = await self._do_web_request(await self._updateservice())
             self._varfwinventory = usi.get('FirmwareInventory', {}).get(
                 '@odata.id', None)
             if not self._varfwinventory:
@@ -485,15 +496,14 @@ class Command(object):
             self.sysurl = None
             return {}
 
-    @property
-    def bmcinfo(self):
-        return self._do_web_request(self._bmcurl)
+    async def bmcinfo(self):
+        return await self._do_web_request(self._bmcurl)
 
     async def get_power(self):
         currinfo = await self._do_web_request(self.sysurl, cache=False)
         return {'powerstate': str(currinfo['PowerState'].lower())}
 
-    def reseat_bay(self, bay):
+    async def reseat_bay(self, bay):
         """Request the reseat of a bay
 
         Request the enclosure manager to reseat the system in a particular
@@ -502,14 +512,15 @@ class Command(object):
         :param bay: The bay identifier to reseat
         :return:
         """
-        self.oem.reseat_bay(bay)
+        oem = await self.oem()
+        await oem.reseat_bay(bay)
 
     async def set_power(self, powerstate, wait=False):
         if powerstate == 'boot':
-            oldpowerstate = await self.get_power()['powerstate']
+            oldpowerstate = (await self.get_power())['powerstate']
             powerstate = 'on' if oldpowerstate == 'off' else 'reset'
         elif powerstate in ('on', 'off'):
-            oldpowerstate = await self.get_power()['powerstate']
+            oldpowerstate = (await self.get_power())['powerstate']
             if oldpowerstate == powerstate:
                 return {'powerstate': powerstate}
         reqpowerstate = powerstate
@@ -635,7 +646,7 @@ class Command(object):
         return {'bootdev': bootdev, 'persistent': persistent,
                 'uefimode': uefimode}
 
-    def set_bootdev(self, bootdev, persist=False, uefiboot=None):
+    async def set_bootdev(self, bootdev, persist=False, uefiboot=None):
         """Set boot device to use on next reboot
 
         :param bootdev:
@@ -654,7 +665,8 @@ class Command(object):
         :raises: PyghmiException on an error.
         :returns: dict or True -- If callback is not provided, the response
         """
-        return self.oem.set_bootdev(bootdev, persist, uefiboot, self)
+        oem = await self.oem()
+        return await oem.set_bootdev(bootdev, persist, uefiboot, self)
 
     async def _biosurl(self):
         if not self._varbiosurl:
@@ -696,7 +708,8 @@ class Command(object):
         chassisurl = chassis['@odata.id']
         chassisinfo = await self._do_web_request(chassisurl)
         sensors = None
-        if self.oem.usegenericsensors:
+        oem = await self.oem()
+        if oem.usegenericsensors:
             sensors = chassisinfo.get('Sensors', {}).get('@odata.id', '')
         if sensors:
             sensorinf = await self._do_web_request(sensors)
@@ -771,6 +784,7 @@ class Command(object):
         niclist = await self._do_web_request(nicurl)
         foundnics = 0
         lastnicurl = None
+        oem = await self.oem()
         for nic in niclist.get('Members', []):
             curl = nic.get('@odata.id', None)
             if not curl:
@@ -779,8 +793,8 @@ class Command(object):
                 if curl.endswith('/{0}'.format(name)):
                     return curl
                 continue
-            if self.oem.hostnic and curl.endswith('/{0}'.format(
-                    self.oem.hostnic)):
+            if oem.hostnic and curl.endswith('/{0}'.format(
+                    oem.hostnic)):
                 continue
             nicinfo = await self._do_web_request(curl)
             if nicinfo.get('Links', {}).get('HostInterface', None):
@@ -838,8 +852,9 @@ class Command(object):
         await self._do_web_request(url, {'ResetType': action})
 
     async def set_identify(self, on=True, blink=None):
-        if hasattr(self.oem, 'set_identify'):
-            return self.oem.set_identify(on, blink)    
+        oem = await self.oem()
+        if hasattr(oem, 'set_identify'):
+            return await oem.set_identify(on, blink)    
         targurl = self.sysurl
         if not targurl:
             root = await self._do_web_request('/redfish/v1')
@@ -866,13 +881,15 @@ class Command(object):
         ledstate = self.sysinfo
         return {'identifystate': self._idstatemap[ledstate]}
 
-    def get_health(self, verbose=True):
-        return self.oem.get_health(self, verbose)
+    async def get_health(self, verbose=True):
+        oem = await self.oem()
+        return await oem.get_health(self, verbose)
 
-    def get_extended_bmc_configuration(self, hideadvanced=True):
-        return self.oem.get_extended_bmc_configuration(self, hideadvanced=hideadvanced)
+    async def get_extended_bmc_configuration(self, hideadvanced=True):
+        oem = await self.oem()
+        return await oem.get_extended_bmc_configuration(self, hideadvanced=hideadvanced)
 
-    def get_bmc_configuration(self):
+    async def get_bmc_configuration(self):
         """Get miscellaneous BMC configuration
 
         In much the same way a bmc can present arbitrary key-value
@@ -882,9 +899,10 @@ class Command(object):
         """
 
         # For now, this is a stub, no implementation for redfish currently
-        return self.oem.get_bmc_configuration()
+        oem = await self.oem()
+        return await oem.get_bmc_configuration()
 
-    def set_bmc_configuration(self, changeset):
+    async def set_bmc_configuration(self, changeset):
         """Get miscellaneous BMC configuration
 
         In much the same way a bmc can present arbitrary key-value
@@ -894,10 +912,12 @@ class Command(object):
         """
 
         # For now, this is a stub, no implementation for redfish currently
-        return self.oem.set_bmc_configuration(changeset)
+        oem = await self.oem()
+        return await oem.set_bmc_configuration(changeset)
 
     async def set_system_configuration(self, changeset):
-        return await self.oem.set_system_configuration(changeset, self)
+        oem = await self.oem()
+        return await oem.set_system_configuration(changeset, self)
 
     async def get_ntp_enabled(self):
         bmcinfo = await self._do_web_request(self._bmcurl)
@@ -1119,8 +1139,9 @@ class Command(object):
 
     async def get_firmware(self, components=(), category=None):
         self._fwnamemap = {}
+        oem = await self.oem()
         try:
-            async for firminfo in self.oem.get_firmware_inventory(components, self, category):
+            async for firminfo in oem.get_firmware_inventory(components, self, category):
                 yield firminfo
         except exc.BypassGenericBehavior:
             return
@@ -1160,15 +1181,17 @@ class Command(object):
             currinf['state'] = 'backup'
         return fwname, currinf
 
-    
-    def get_inventory_descriptions(self, withids=False):
-        return self.oem.get_inventory_descriptions(withids)
+    async def get_inventory_descriptions(self, withids=False):
+        oem = await self.oem()
+        return await oem.get_inventory_descriptions(withids)
 
-    def get_inventory_of_component(self, component):
-        return self.oem.get_inventory_of_component(component)
+    async def get_inventory_of_component(self, component):
+        oem = await self.oem()
+        return await oem.get_inventory_of_component(component)
 
-    def get_inventory(self, withids=False):
-        return self.oem.get_inventory(withids)
+    async def get_inventory(self, withids=False):
+        oem = await self.oem()
+        return await oem.get_inventory(withids)
 
     async def get_location_information(self):
         locationinfo = {}
@@ -1241,12 +1264,14 @@ class Command(object):
             self._oem.set_credentials(self.username, self.password)
         return self._oem
 
-    def get_description(self):
-        return self.oem.get_description(self)
+    async def get_description(self):
+        oem = await self.oem()
+        return await oem.get_description(self)
 
     async def get_event_log(self, clear=False):
-        return await self.oem.get_event_log(clear, self)
-
+        oem = await self.oem()
+        return await oem.get_event_log(clear, self)
+    
     async def _get_chassis_env(self, chassis):
         chassisurl = chassis['@odata.id']
         chassisinfo = await self._do_web_request(chassisurl)
@@ -1261,10 +1286,12 @@ class Command(object):
         return retval
 
     async def get_average_processor_temperature(self):
-        return await self.oem.get_average_processor_temperature(self)
+        oem = await self.oem()
+        return await oem.get_average_processor_temperature(self)
 
     async def get_system_power_watts(self):
-        return await self.oem.get_system_power_watts(self)
+        oem = await self.oem()
+        return await oem.get_system_power_watts(self)
 
     async def get_inlet_temperature(self):
         inlets = []
@@ -1337,7 +1364,8 @@ class Command(object):
                         unavailable=unavail)
 
     async def list_media(self):
-        return await self.oem.list_media(self)
+        oem = await self.oem()
+        return await oem.list_media(self)
 
     async def get_storage_configuration(self):
         """"Get storage configuration data
@@ -1350,7 +1378,8 @@ class Command(object):
 
         :return: A aiohmi.storage.ConfigSpec object describing current config
         """
-        return await self.oem.get_storage_configuration()
+        oem = await self.oem()
+        return await oem.get_storage_configuration()
 
     async def remove_storage_configuration(self, cfgspec):
         """Remove specified storage configuration from controller.
@@ -1358,9 +1387,10 @@ class Command(object):
         :param cfgspec: A aiohmi.storage.ConfigSpec describing what to remove
         :return:
         """
-        return await self.oem.remove_storage_configuration(cfgspec)
+        oem = await self.oem()
+        return await oem.remove_storage_configuration(cfgspec)
 
-    def apply_storage_configuration(self, cfgspec=None):
+    async def apply_storage_configuration(self, cfgspec=None):
         """Evaluate a configuration for validity
 
         This will check if configuration is currently available and, if given,
@@ -1368,7 +1398,8 @@ class Command(object):
         :param cfgspec: A aiohmi.storage.ConfigSpec describing desired oonfig
         :return:
         """
-        return self.oem.apply_storage_configuration(cfgspec)
+        oem = await self.oem()
+        return await oem.apply_storage_configuration(cfgspec)
 
     def check_storage_configuration(self, cfgspec=None):
         """Evaluate a configuration for validity
@@ -1401,7 +1432,8 @@ class Command(object):
         vmcoll = sysinfo.get(
             'VirtualMedia', {}).get('@odata.id', None)
         if not vmcoll:
-            vmcoll = self.bmcinfo.get(
+            bmcinfo = await self.bmcinfo()
+            vmcoll = bmcinfo.get(
                 'VirtualMedia', {}).get('@odata.id', None)
         if vmcoll:
             vmlist = await self._do_web_request(vmcoll)
@@ -1410,9 +1442,10 @@ class Command(object):
         if 'X-Auth-Token' in self.wc.stdheaders:
             suspendedxauth = True
             del self.wc.stdheaders['X-Auth-Token']
-            self.wc.set_basic_credentials(self.username, self.password)        
+            self.wc.set_basic_credentials(self.username, self.password)
+        oem = await self.oem()
         try:
-            self.oem.attach_remote_media(url, username, password, vmurls)
+            await oem.attach_remote_media(url, username, password, vmurls)
         except exc.BypassGenericBehavior:
             if suspendedxauth:
                 self.wc.stdheaders['X-Auth-Token'] = self.xauthtoken
@@ -1443,12 +1476,13 @@ class Command(object):
                 self.wc.stdheaders['X-Auth-Token'] = self.xauthtoken
                 if 'Authorization' in self.wc.stdheaders:
                     del self.wc.stdheaders['Authorization']    
-        for res in self.oem.list_media(self, cache=False):
+        async for res in oem.list_media(self, cache=False):
             pass          
 
     async def detach_remote_media(self):
+        oem = await self.oem()
         try:
-            self.oem.detach_remote_media()
+            await oem.detach_remote_media()
         except exc.BypassGenericBehavior:
             return
         sysinfo = await self.sysinfo()
@@ -1479,10 +1513,11 @@ class Command(object):
                                                      method='PATCH')
                             else:
                                 raise
-        for res in self.oem.list_media(self, cache=False):
-            pass        
+        oem = await self.oem()
+        async for res in oem.list_media(self, cache=False):
+            pass
 
-    def upload_media(self, filename, progress=None, data=None):
+    async def upload_media(self, filename, progress=None, data=None):
         """Upload a file to be hosted on the target BMC
 
         This will upload the specified data to
@@ -1493,12 +1528,14 @@ class Command(object):
                          will be given to the bmc.
         :param progress: Optional callback for progress updates
         """
-        return self.oem.upload_media(filename, progress, data)
+        oem = await self.oem()
+        return await oem.upload_media(filename, progress, data)
 
-    def get_update_status(self):
-        return self.oem.get_update_status()   
+    async def get_update_status(self):
+        oem = await self.oem()
+        return await oem.get_update_status()   
 
-    def update_firmware(self, file, data=None, progress=None, bank=None):
+    async def update_firmware(self, file, data=None, progress=None, bank=None):
         """Send file to BMC to perform firmware update
 
          :param filename:  The filename to upload to the target BMC
@@ -1510,31 +1547,36 @@ class Command(object):
         """
         if progress is None:
             progress = lambda x: True
-        return self.oem.update_firmware(file, data, progress, bank)
+        oem = await self.oem()
+        return await oem.update_firmware(file, data, progress, bank)
 
-    def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
+    async def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
         if os.path.exists(savefile) and not os.path.isdir(savefile):
             raise exc.InvalidParameterValue(
                 'Not allowed to overwrite existing file: {0}'.format(
                     savefile))
-        return self.oem.get_diagnostic_data(savefile, progress, autosuffix)
+        oem = await self.oem()
+        return await oem.get_diagnostic_data(savefile, progress, autosuffix)
 
-    def get_licenses(self):
-        return self.oem.get_licenses(self)
+    async def get_licenses(self):
+        oem = await self.oem()
+        return await oem.get_licenses(self)
 
-    def delete_license(self, name):
-        return self.oem.delete_license(name, self)
+    async def delete_license(self, name):
+        oem = await self.oem()
+        return await oem.delete_license(name, self)
 
-    def save_licenses(self, directory):
+    async def save_licenses(self, directory):
         if os.path.exists(directory) and not os.path.isdir(directory):
             raise exc.InvalidParameterValue(
                 'Not allowed to overwrite existing file: {0}'.format(
                     directory))
-        return self.oem.save_licenses(directory, self)
+        oem = await self.oem()
+        return await oem.save_licenses(directory, self)
 
-    def apply_license(self, filename, progress=None, data=None):
-        return self.oem.apply_license(filename, self, progress, data)
-
+    async def apply_license(self, filename, progress=None, data=None):
+        oem = await self.oem()
+        return await oem.apply_license(filename, self, progress, data)
 
 if __name__ == '__main__':
     print(repr(
