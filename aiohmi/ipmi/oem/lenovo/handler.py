@@ -206,11 +206,11 @@ class OEMHandler(generic.OEMHandler):
                 ipmicmd.ipmi_session.password.decode('utf-8'))
         return self
 
-    @property
-    def _megarac_eth_index(self):
+    
+    async def _megarac_eth_index(self):
         if self._mrethidx is None:
-            chan = self.ipmicmd.get_network_channel()
-            rsp = self.ipmicmd.xraw_command(0x32, command=0x62, data=(chan,))
+            chan = await self.ipmicmd.get_network_channel()
+            rsp = await self.ipmicmd.raw_command(0x32, command=0x62, data=(chan,))
             self._mrethidx = rsp['data'][0]
         return self._mrethidx
  
@@ -335,16 +335,16 @@ class OEMHandler(generic.OEMHandler):
                 and event['component_type_id'] == 13):
             event['component'] += ' {0}'.format(evdata[1] & 0b11111)
 
-    def reseat_bay(self, bay):
+    async def reseat_bay(self, bay):
         if self.is_fpc:
-            return self.smmhandler.reseat_bay(bay)
+            return await self.smmhandler.reseat_bay(bay)
         elif self.has_xcc and bay == -1:
-            return self.immhandler.reseat()
-        return super(OEMHandler, self).reseat_bay(bay)
+            return await self.immhandler.reseat()
+        return await super(OEMHandler, self).reseat_bay(bay)
 
     async def get_ntp_enabled(self):
         if await self.has_tsm() or await self.has_ami() or await self.has_asrock():
-            ntpres = await self.ipmicmd.xraw_command(netfn=0x32, command=0xa7)
+            ntpres = await self.ipmicmd.raw_command(netfn=0x32, command=0xa7)
             return ntpres['data'][0] == '\x01'
         elif await self.is_fpc():
             return await self.smmhandler.get_ntp_enabled(self._fpc_variant)
@@ -355,7 +355,7 @@ class OEMHandler(generic.OEMHandler):
     async def get_ntp_servers(self):
         if self.has_tsm or self.has_ami or await self.has_asrock():
             srvs = []
-            ntpres = await self.ipmicmd.xraw_command(netfn=0x32, command=0xa7)
+            ntpres = await self.ipmicmd.raw_command(netfn=0x32, command=0xa7)
             srvs.append(ntpres['data'][1:129].rstrip('\x00'))
             srvs.append(ntpres['data'][129:257].rstrip('\x00'))
             return srvs
@@ -368,10 +368,10 @@ class OEMHandler(generic.OEMHandler):
     async def set_ntp_enabled(self, enabled):
         if await self.has_tsm() or await self.has_ami() or await self.has_asrock():
             if enabled:
-                await self.ipmicmd.xraw_command(
+                await self.ipmicmd.raw_command(
                     netfn=0x32, command=0xa8, data=(3, 1), timeout=15)
             else:
-                await self.ipmicmd.xraw_command(
+                await self.ipmicmd.raw_command(
                     netfn=0x32, command=0xa8, data=(3, 0), timeout=15)
             return True
         if await self.is_fpc():
@@ -387,7 +387,7 @@ class OEMHandler(generic.OEMHandler):
                 raise pygexc.InvalidParameterValue("Index must be 0 or 1")
             cmddata = bytearray((1 + index, ))
             cmddata += server.ljust(128, '\x00')
-            await self.ipmicmd.xraw_command(netfn=0x32, command=0xa8, data=cmddata)
+            await self.ipmicmd.raw_command(netfn=0x32, command=0xa8, data=cmddata)
             return True
         elif await self.is_fpc():
             if not 0 <= index <= 2:
@@ -455,7 +455,7 @@ class OEMHandler(generic.OEMHandler):
         if (self.oemid['manufacturer_id'] == 19046
                 and self.oemid['device_id'] == 32):
             try:
-                await self.ipmicmd.xraw_command(netfn=0x3a, command=0xf)
+                await self.ipmicmd.raw_command(netfn=0x3a, command=0xf)
             except pygexc.IpmiException as ie:
                 if ie.ipmicode == 193:
                     return False
@@ -473,7 +473,7 @@ class OEMHandler(generic.OEMHandler):
                 and (self.oemid['product_id'] == 1182
                      or self.oemid['product_id'] == 1184)):
             try:
-                await self.ipmicmd.xraw_command(netfn=0x3a,
+                await self.ipmicmd.raw_command(netfn=0x3a,
                                           command=0x50,
                                           data=(0x00, 0x00, 0x00))
             except pygexc.IpmiException as ie:
@@ -495,7 +495,7 @@ class OEMHandler(generic.OEMHandler):
             if not self.oem_inventory_info:
                 await self._collect_tsm_inventory()
             return iter(self.oem_inventory_info)
-        elif self.has_imm:
+        elif await self.has_imm():
             return await self.immhandler.get_hw_descriptions()
         elif await self.is_fpc():
             return await self.smmhandler.get_inventory_descriptions(self.ipmicmd,
@@ -507,7 +507,7 @@ class OEMHandler(generic.OEMHandler):
             await self._collect_tsm_inventory()
             for compname in self.oem_inventory_info:
                 yield (compname, self.oem_inventory_info[compname])
-        elif self.has_imm:
+        elif await self.has_imm():
             for inv in self.immhandler.get_hw_inventory():
                 yield inv
         elif await self.is_fpc():
@@ -589,7 +589,7 @@ class OEMHandler(generic.OEMHandler):
                 for i in range(0x01, 0xff):
                     tmp_command["data"][-1] = i
                     try:
-                        partrsp = await self.ipmicmd.xraw_command(**tmp_command)
+                        partrsp = await self.ipmicmd.raw_command(**tmp_command)
                         count += 1
                         if asrock and partrsp["data"][1] == "\xff":
                             continue
@@ -610,7 +610,7 @@ class OEMHandler(generic.OEMHandler):
             else:
                 try:
                     cmd = self.get_cmd_type(catid, catspec)
-                    rsp = await self.ipmicmd.xraw_command(**cmd)
+                    rsp = await self.ipmicmd.raw_command(**cmd)
                 except pygexc.IpmiException:
                     continue
             # Parse the response we got
@@ -671,12 +671,12 @@ class OEMHandler(generic.OEMHandler):
         for (name, id_) in led_set.items():
             try:
                 if asrock:
-                    rsp = await self.ipmicmd.xraw_command(netfn=0x3A, command=cmd,
+                    rsp = await self.ipmicmd.raw_command(netfn=0x3A, command=cmd,
                                                     data=(0x03, id_, 0x00))
                     rdata = bytearray(rsp['data'][:])
                     status = rdata[1]
                 else:
-                    rsp = await self.ipmicmd.xraw_command(netfn=0x3A, command=cmd,
+                    rsp = await self.ipmicmd.raw_command(netfn=0x3A, command=cmd,
                                                     data=(id_,))
                     rdata = bytearray(rsp['data'][:])
                     status = rdata[0]
@@ -689,7 +689,7 @@ class OEMHandler(generic.OEMHandler):
 
     async def set_identify(self, on, duration, blink):
         if on and not duration and self.is_sd350:
-            await self.ipmicmd.xraw_command(netfn=0x3a, command=6, data=(1, 1))
+            await self.ipmicmd.raw_command(netfn=0x3a, command=6, data=(1, 1))
         elif self.has_xcc:
             await self.immhandler.set_identify(on, duration, blink)
         else:
@@ -788,7 +788,7 @@ class OEMHandler(generic.OEMHandler):
         if self._hasxcc is not None:
             return self._hasxcc
         try:
-            bdata = await self.ipmicmd.xraw_command(netfn=0x3a, command=0xc1)
+            bdata = await self.ipmicmd.raw_command(netfn=0x3a, command=0xc1)
         except pygexc.IpmiException:
             self._hasxcc = False
             self._hasimm = False
@@ -811,7 +811,7 @@ class OEMHandler(generic.OEMHandler):
         if self._hasimm is not None:
             return self._hasimm
         try:
-            bdata = await self.ipmicmd.xraw_command(netfn=0x3a, command=0xc1)
+            bdata = await self.ipmicmd.raw_command(netfn=0x3a, command=0xc1)
         except pygexc.IpmiException:
             self._hasimm = False
             return False
@@ -829,7 +829,7 @@ class OEMHandler(generic.OEMHandler):
         if(self.oemid['manufacturer_id'] == 19046
                 and self.oemid['product_id'] == 13616):
             try:
-                rsp = await self.ipmicmd.xraw_command(netfn=0x3a, command=0x80)
+                rsp = await self.ipmicmd.raw_command(netfn=0x3a, command=0x80)
             except pygexc.IpmiException as ie:
                 if ie.ipmicode == 193:
                     return False
@@ -845,7 +845,7 @@ class OEMHandler(generic.OEMHandler):
         if await self.has_tsm() or await self.has_ami() or await self.has_asrock():
             command = firmware.get_categories()["firmware"]
             fw_cmd = self.get_cmd_type("firmware", command)
-            rsp = await self.ipmicmd.xraw_command(**fw_cmd)
+            rsp = await self.ipmicmd.raw_command(**fw_cmd)
 
             # the newest Lenovo ThinkServer versions are returning Bios version
             # numbers through another command
@@ -853,7 +853,7 @@ class OEMHandler(generic.OEMHandler):
             if await self.has_tsm() or await self.has_asrock():
                 bios_command = firmware.get_categories()["bios_version"]
                 bios_cmd = self.get_cmd_type("bios_version", bios_command)
-                bios_rsp = await self.ipmicmd.xraw_command(**bios_cmd)
+                bios_rsp = await self.ipmicmd.raw_command(**bios_cmd)
                 if await self.has_asrock():
                     bios_versions = bios_rsp['data']
                 else:
@@ -887,7 +887,7 @@ class OEMHandler(generic.OEMHandler):
 
     async def get_oem_capping_enabled(self):
         if await self.has_tsm():
-            rsp = await self.ipmicmd.xraw_command(netfn=0x3a, command=0x1b,
+            rsp = await self.ipmicmd.raw_command(netfn=0x3a, command=0x1b,
                                             data=(3,))
             # disabled
             if rsp['data'][0] == '\x00':
@@ -896,7 +896,7 @@ class OEMHandler(generic.OEMHandler):
             else:
                 return True
 
-    def set_oem_capping_enabled(self, enable):
+    async def set_oem_capping_enabled(self, enable):
         """Set PSU based power capping
 
         :param enable: True for enable and False for disable
@@ -908,25 +908,25 @@ class OEMHandler(generic.OEMHandler):
         else:
             statecode = 0
         if self.has_tsm:
-            self.ipmicmd.xraw_command(netfn=0x3a, command=0x1a,
+            await self.ipmicmd.raw_command(netfn=0x3a, command=0x1a,
                                       data=(3, statecode))
             return True
 
-    def get_oem_remote_kvm_available(self):
+    async def get_oem_remote_kvm_available(self):
         if self.has_tsm:
-            rsp = self.ipmicmd.raw_command(netfn=0x3a, command=0x13)
+            rsp = await self.ipmicmd.raw_command(netfn=0x3a, command=0x13)
             return rsp['data'][0] == 0
         return False
 
-    def _restart_dns(self):
+    async def _restart_dns(self):
         if self.has_tsm:
-            self.ipmicmd.xraw_command(netfn=0x32, command=0x6c, data=(7, 0))
+            await self.ipmicmd.raw_command(netfn=0x32, command=0x6c, data=(7, 0))
 
     async def get_oem_domain_name(self):
         if self.has_tsm:
             name = ''
             for i in range(1, 5):
-                rsp = self.ipmicmd.xraw_command(netfn=0x32, command=0x6b,
+                rsp = await self.ipmicmd.raw_command(netfn=0x32, command=0x6b,
                                                 data=(4, i))
                 name += rsp['data'][:]
             return name.rstrip('\x00')
@@ -937,7 +937,7 @@ class OEMHandler(generic.OEMHandler):
         if self.has_tsm:
             # set the domain name length
             data = [3, 0, 0, 0, 0, len(name)]
-            self.ipmicmd.xraw_command(netfn=0x32, command=0x6c, data=data)
+            await self.ipmicmd.raw_command(netfn=0x32, command=0x6c, data=data)
 
             # set the domain name content
             name = name.ljust(256, "\x00")
@@ -945,19 +945,19 @@ class OEMHandler(generic.OEMHandler):
                 data = [4, i + 1]
                 offset = i * 64
                 data.extend([ord(x) for x in name[offset:offset + 64]])
-                self.ipmicmd.xraw_command(netfn=0x32, command=0x6c, data=data)
+                await self.ipmicmd.raw_command(netfn=0x32, command=0x6c, data=data)
 
-            self._restart_dns()
+            await self._restart_dns()
             return
         elif await self.is_fpc():
-            self.smmhandler.set_domain(name)
+            await self.smmhandler.set_domain(name)
 
     async def set_hostname(self, hostname):
         if await self.has_xcc():
-            return self.immhandler.set_hostname(hostname)
+            return await self.immhandler.set_hostname(hostname)
         elif await self.is_fpc():
-            return self.smmhandler.set_hostname(hostname)
-        return super(OEMHandler, self).set_hostname(hostname)
+            return await self.smmhandler.set_hostname(hostname)
+        return await super(OEMHandler, self).set_hostname(hostname)
 
     async def get_hostname(self):
         if await self.has_xcc():
@@ -1021,14 +1021,14 @@ class OEMHandler(generic.OEMHandler):
                                            self.ipmicmd.ipmi_session.userid,
                                            self.ipmicmd.ipmi_session.password)
 
-    def add_extra_net_configuration(self, netdata, channel=None):
+    async def add_extra_net_configuration(self, netdata, channel=None):
         if self.has_tsm:
-            ipv6_addr = self.ipmicmd.xraw_command(
+            ipv6_addr = await self.ipmicmd.raw_command(
                 netfn=0x0c, command=0x02,
                 data=(0x01, 0xc5, 0x00, 0x00))["data"][1:]
             if not ipv6_addr:
                 return
-            rspdata = self.ipmicmd.xraw_command(
+            rspdata = await self.ipmicmd.raw_command(
                 netfn=0xc, command=0x02,
                 data=(0x1, 0xc6, 0, 0))['data']
             ipv6_prefix_ba = bytearray(rspdata)
@@ -1051,7 +1051,7 @@ class OEMHandler(generic.OEMHandler):
             return self._has_megarac
         self._has_megarac = False
         try:
-            rsp = await self.ipmicmd.xraw_command(netfn=0x32, command=0x7e)
+            rsp = await self.ipmicmd.raw_command(netfn=0x32, command=0x7e)
             # We don't have a handy classify-only, so use get sel policy
             # rsp should have a length of one, and be either '\x00' or '\x01'
             if len(rsp['data'][:]) == 1 and rsp['data'][0] in ('\x00', '\x01'):
@@ -1066,21 +1066,21 @@ class OEMHandler(generic.OEMHandler):
 
     async def set_alert_ipv6_destination(self, ip, destination, channel):
         if await self.has_megarac():
-            ethidx = self._megarac_eth_index
+            ethidx = await self._megarac_eth_index()
             reqdata = bytearray([channel, 193, destination, ethidx, 0])
             parsedip = socket.inet_pton(socket.AF_INET6, ip)
             reqdata.extend(parsedip)
             reqdata.extend('\x00\x00\x00\x00\x00\x00')
-            await self.ipmicmd.xraw_command(netfn=0xc, command=1, data=reqdata)
+            await self.ipmicmd.raw_command(netfn=0xc, command=1, data=reqdata)
             return True
         return False
 
-    def _set_short_ris_string(self, selector, value):
+    async def _set_short_ris_string(self, selector, value):
         data = (1, selector, 0) + struct.unpack('{0}B'.format(len(value)),
                                                 value)
-        self.ipmicmd.xraw_command(netfn=0x32, command=0x9f, data=data)
+        await self.ipmicmd.raw_command(netfn=0x32, command=0x9f, data=data)
 
-    def _set_ris_string(self, selector, value):
+    async def _set_ris_string(self, selector, value):
         if len(value) > 256:
             raise pygexc.UnsupportedFunctionality(
                 'Value exceeds 256 characters: {0}'.format(value))
@@ -1088,25 +1088,25 @@ class OEMHandler(generic.OEMHandler):
         padded = list(struct.unpack('256B', padded))
         # 8 = RIS, 4 = hd, 2 = fd, 1 = cd
         try:  # try and clear in-progress if left incomplete
-            self.ipmicmd.xraw_command(netfn=0x32, command=0x9f,
+            await self.ipmicmd.raw_command(netfn=0x32, command=0x9f,
                                       data=(1, selector, 0, 0))
         except pygexc.IpmiException:
             pass
         # set in-progress
-        self.ipmicmd.xraw_command(netfn=0x32, command=0x9f,
+        await self.ipmicmd.raw_command(netfn=0x32, command=0x9f,
                                   data=(1, selector, 0, 1))
         # now do the set
         for x in range(0, 256, 64):
             currdata = padded[x:x + 64]
             currchunk = x // 64 + 1
             cmddata = [1, selector, currchunk] + currdata
-            self.ipmicmd.xraw_command(netfn=0x32, command=0x9f, data=cmddata)
+            await self.ipmicmd.raw_command(netfn=0x32, command=0x9f, data=cmddata)
         # unset in-progress
-        self.ipmicmd.xraw_command(netfn=0x32, command=0x9f,
+        await self.ipmicmd.raw_command(netfn=0x32, command=0x9f,
                                   data=(1, selector, 0, 0))
 
-    def _megarac_fetch_image_shortnames(self):
-        rsp = self.ipmicmd.xraw_command(netfn=0x32, command=0xd8,
+    async def _megarac_fetch_image_shortnames(self):
+        rsp = await self.ipmicmd.raw_command(netfn=0x32, command=0xd8,
                                         data=(7, 1, 0))
         imgnames = rsp['data'][1:]
         shortnames = []
@@ -1114,57 +1114,57 @@ class OEMHandler(generic.OEMHandler):
             shortnames.append(imgnames[idx + 2:idx + 22].rstrip('\0'))
         return shortnames
 
-    def _megarac_media_waitforready(self, imagename):
+    async def _megarac_media_waitforready(self, imagename):
         # first, we have, sadly, a 10 second grace period for some invisible
         # async activity to get far enough long to monitor
-        self.ipmicmd.ipmi_session.pause(10)
+        await self.ipmicmd.ipmi_session.pause(10)
         risenabled = '\x00'
         mountok = '\xff'
         while risenabled != '\x01':
-            risenabled = self.ipmicmd.xraw_command(
-                netfn=0x32, command=0x9e, data=(8, 10))['data'][2]
+            risenabled = (await self.ipmicmd.raw_command(
+                netfn=0x32, command=0x9e, data=(8, 10)))['data'][2]
         while mountok == '\xff':
-            mountok = self.ipmicmd.xraw_command(
-                netfn=0x32, command=0x9e, data=(1, 8))['data'][2]
+            mountok = (await self.ipmicmd.raw_command(
+                netfn=0x32, command=0x9e, data=(1, 8)))['data'][2]
         targshortname = _megarac_abbrev_image(imagename)
-        shortnames = self._megarac_fetch_image_shortnames()
+        shortnames = await self._megarac_fetch_image_shortnames()
         while targshortname not in shortnames:
             self.ipmicmd.wait_for_rsp(1)
-            shortnames = self._megarac_fetch_image_shortnames()
+            shortnames = await self._megarac_fetch_image_shortnames()
         self.ipmicmd.ipmi_session.pause(10)
         try:
-            self.ipmicmd.xraw_command(netfn=0x32, command=0xa0, data=(1, 0))
-            self.ipmicmd.ipmi_session.pause(5)
+            await self.ipmicmd.raw_command(netfn=0x32, command=0xa0, data=(1, 0))
+            await self.ipmicmd.ipmi_session.pause(5)
         except pygexc.IpmiException:
             pass
 
-    def _megarac_attach_media(self, proto, username, password, imagename,
+    async def _megarac_attach_media(self, proto, username, password, imagename,
                               domain, path, host):
         # First we must ensure that the RIS is actually enabled
-        self.ipmicmd.xraw_command(netfn=0x32, command=0x9f, data=(8, 10, 0, 1))
+        await self.ipmicmd.raw_command(netfn=0x32, command=0x9f, data=(8, 10, 0, 1))
         if username is not None:
-            self._set_ris_string(3, username)
+            await self._set_ris_string(3, username)
         if password is not None:
-            self._set_short_ris_string(4, password)
+            await self._set_short_ris_string(4, password)
         if domain is not None:
-            self._set_ris_string(6, domain)
-        self._set_ris_string(1, path)
+            await self._set_ris_string(6, domain)
+        await self._set_ris_string(1, path)
         ip = util.get_ipv4(host)[0]
-        self._set_short_ris_string(2, ip)
-        self._set_short_ris_string(5, proto)
+        await self._set_short_ris_string(2, ip)
+        await self._set_short_ris_string(5, proto)
         # now to restart RIS to have changes take effect...
-        self.ipmicmd.xraw_command(netfn=0x32, command=0x9f, data=(8, 11))
+        await self.ipmicmd.raw_command(netfn=0x32, command=0x9f, data=(8, 11))
         # now to kick off the requested mount
-        self._megarac_media_waitforready(imagename)
-        self._set_ris_string(0, imagename)
-        self.ipmicmd.xraw_command(netfn=0x32, command=0xa0,
+        await self._megarac_media_waitforready(imagename)
+        await self._set_ris_string(0, imagename)
+        await self.ipmicmd.raw_command(netfn=0x32, command=0xa0,
                                   data=(1, 1))
 
-    def attach_remote_media(self, url, username, password):
+    async def attach_remote_media(self, url, username, password):
         if self.has_imm:
-            self.immhandler.attach_remote_media(url, username, password)
+            await self.immhandler.attach_remote_media(url, username, password)
         elif self.has_tsma:
-            return self.tsmahandler.attach_remote_media(
+            return await self.tsmahandler.attach_remote_media(
                 url, username, password, None)
         elif self.has_megarac:
             proto, host, path = util.urlsplit(url)
@@ -1177,12 +1177,12 @@ class OEMHandler(generic.OEMHandler):
             elif username is not None and '\\' in username:
                 domain, username = username.split('\\', 1)
             try:
-                self._megarac_attach_media(proto, username, password,
+                await self._megarac_attach_media(proto, username, password,
                                            imagename, domain, path, host)
             except pygexc.IpmiException as ie:
                 if ie.ipmicode in (0x92, 0x99):
                     # if starting from scratch, this can happen...
-                    self._megarac_attach_media(proto, username, password,
+                    await self._megarac_attach_media(proto, username, password,
                                                imagename, domain, path, host)
                 else:
                     raise
@@ -1276,9 +1276,9 @@ class OEMHandler(generic.OEMHandler):
         elif self.has_tsma:
             await self.tsmahandler.detach_remote_media()
         elif await self.has_megarac():
-            await self.ipmicmd.xraw_command(
+            await self.ipmicmd.raw_command(
                 netfn=0x32, command=0x9f, data=(8, 10, 0, 0))
-            await self.ipmicmd.xraw_command(netfn=0x32, command=0x9f, data=(8, 11))
+            await self.ipmicmd.raw_command(netfn=0x32, command=0x9f, data=(8, 11))
 
     def upload_media(self, filename, progress, data):
         if self.has_xcc or self.has_imm:
@@ -1322,7 +1322,7 @@ class OEMHandler(generic.OEMHandler):
             return self.immhandler.apply_license(filename, progress, data)
         return super(OEMHandler, self).apply_license(filename, progress, data)
 
-    def set_oem_extended_privilleges(self, uid):
+    async def set_oem_extended_privilleges(self, uid):
         """Set user extended privillege as 'KVM & VMedia Allowed'
 
         |KVM & VMedia Not Allowed	0x00 0x00 0x00 0x00
@@ -1333,7 +1333,7 @@ class OEMHandler(generic.OEMHandler):
         :param uid: User ID.
         """
         if self.has_tsm:
-            self.ipmicmd.xraw_command(netfn=0x32, command=0xa3, data=(
+            await self.ipmicmd.raw_command(netfn=0x32, command=0xa3, data=(
                 uid, 0x03, 0x00, 0x00, 0x00))
             return True
         return False

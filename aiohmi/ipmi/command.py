@@ -441,7 +441,7 @@ class Command(object):
         return {'bootdev': bootdev}
 
     async def xraw_command(self, **kwargs):
-        print("WARNING: deprecated xraw call here")
+        raise Exception("Don't use this anymore")
         return await self.raw_command(**kwargs)
 
     async def raw_command(self, netfn, command, bridge_request=(), data=(),
@@ -962,16 +962,16 @@ class Command(object):
             await self.raw_command(netfn=0xc, command=1, data=cmddata)
             if netmask is not None:
                 cmddata = bytearray((channel, 6)) + netmask
-                self.xraw_command(netfn=0xc, command=1, data=cmddata)
+                await self.raw_command(netfn=0xc, command=1, data=cmddata)
         if ipv4_gateway is not None:
             cmddata = bytearray((channel, 12)) + socket.inet_aton(ipv4_gateway)
-            self.xraw_command(netfn=0xc, command=1, data=cmddata)
+            await self.raw_command(netfn=0xc, command=1, data=cmddata)
         if vlan_id in ('off', 0, '0'):
             cmddata = bytearray((channel, 0x14, 0, 0))
-            self.xraw_command(netfn=0xc, command=1, data=cmddata)
+            await self.raw_command(netfn=0xc, command=1, data=cmddata)
         elif vlan_id is not None:
             cmddata = bytearray((channel, 0x14)) + struct.pack('<H', int(vlan_id) | 0x8000)
-            self.xraw_command(netfn=0xc, command=1, data=cmddata)        
+            await self.raw_command(netfn=0xc, command=1, data=cmddata)        
 
     def get_storage_configuration(self):
         """"Get storage configuration data
@@ -1082,7 +1082,7 @@ class Command(object):
         self.init_sdr()
         for sensor in self._sdr.get_sensor_numbers():
             currsensor = self._sdr.sensors[sensor]
-            rsp = await self.xraw_command(command=0x2d, netfn=4,
+            rsp = await self.raw_command(command=0x2d, netfn=4,
                                           rslun=currsensor.sensor_lun,
                                           data=(currsensor.sensor_number,))
             if 'error' in rsp:
@@ -1110,7 +1110,7 @@ class Command(object):
         for sensor in self._oem.get_sensor_descriptions():
             yield sensor
 
-    def get_network_channel(self):
+    async def get_network_channel(self):
         """Get a reasonable 'default' network channel.
 
         When configuring/examining network configuration, it's desirable to
@@ -1122,7 +1122,7 @@ class Command(object):
         if self._netchannel is None:
             for channel in chain((0xe,), range(1, 0xc)):
                 try:
-                    rsp = self.xraw_command(
+                    rsp = await self.raw_command(
                         netfn=6, command=0x42, data=(channel,))
                 except exc.IpmiException as ie:
                     if ie.ipmicode == 0xcc:
@@ -1140,7 +1140,7 @@ class Command(object):
                         if channel != 0xe:
                             # skip checking if channel is active if we are
                             # actively using the channel
-                            self.xraw_command(
+                            await self.raw_command(
                                 netfn=0xc, command=2, data=(channel, 5, 0, 0))
                         # If still here, the channel seems serviceable...
                         # However some implementations may still have
@@ -1155,21 +1155,21 @@ class Command(object):
                         continue
         return self._netchannel
 
-    def get_alert_destination_count(self, channel=None):
+    async def get_alert_destination_count(self, channel=None):
         """Get the number of supported alert destinations
 
         :param channel: Channel for alerts to be examined, defaults to current
         """
         if channel is None:
-            channel = self.get_network_channel()
+            channel = await self.get_network_channel()
         rqdata = (channel, 0x11, 0, 0)
-        rsp = self.xraw_command(netfn=0xc, command=2, data=rqdata)
-        self.oem_init()
+        rsp = await self.raw_command(netfn=0xc, command=2, data=rqdata)
+        await self.oem_init()
         if hasattr(self._oem, 'get_alert_destination_count'):
-            return self._oem.get_alert_destination_count(ord(rsp['data'][1]))
+            return await self._oem.get_alert_destination_count(ord(rsp['data'][1]))
         return bytearray(rsp['data'])[1]
 
-    def get_alert_destination(self, destination=0, channel=None):
+    async def get_alert_destination(self, destination=0, channel=None):
         """Get alert destination
 
         Get a specified alert destination.  Returns a dictionary of relevant
@@ -1186,15 +1186,15 @@ class Command(object):
         :param destination:  The destination number.  Defaults to 0
         :param channel: The channel for alerting.  Defaults to current channel
         """
-        self.oem_init()
+        await self.oem_init()
         if hasattr(self._oem, 'get_alert_destination'):
-            return self._oem.get_alert_destination(destination, channel)
+            return await self._oem.get_alert_destination(destination, channel)
 
         destinfo = {}
         if channel is None:
-            channel = self.get_network_channel()
+            channel = await self.get_network_channel()
         rqdata = (channel, 18, destination, 0)
-        rsp = self.xraw_command(netfn=0xc, command=2, data=rqdata)
+        rsp = await self.raw_command(netfn=0xc, command=2, data=rqdata)
         dtype, acktimeout, retries = struct.unpack('BBB', rsp['data'][2:])
         destinfo['acknowledge_required'] = dtype & 0b10000000 == 0b10000000
         # Ignore destination type for now...
@@ -1202,7 +1202,7 @@ class Command(object):
             destinfo['acknowledge_timeout'] = acktimeout
         destinfo['retries'] = retries
         rqdata = (channel, 19, destination, 0)
-        rsp = self.xraw_command(netfn=0xc, command=2, data=rqdata)
+        rsp = await self.raw_command(netfn=0xc, command=2, data=rqdata)
         if bytearray(rsp['data'])[2] & 0b11110000 == 0:
             destinfo['address_format'] = 'ipv4'
             destinfo['address'] = socket.inet_ntoa(rsp['data'][4:8])
@@ -1212,7 +1212,7 @@ class Command(object):
                                                    rsp['data'][3:])
         return destinfo
 
-    def clear_alert_destination(self, destination=0, channel=None):
+    async def clear_alert_destination(self, destination=0, channel=None):
         """Clear an alert destination
 
         Remove the specified alert destination configuration.
@@ -1220,11 +1220,11 @@ class Command(object):
         :param destination:  The destination to clear (defaults to 0)
         """
         if channel is None:
-            channel = self.get_network_channel()
-        self.set_alert_destination(
+            channel = await self.get_network_channel()
+        await self.set_alert_destination(
             '0.0.0.0', False, 0, 0, destination, channel)
 
-    def set_alert_community(self, community, channel=None):
+    async def set_alert_community(self, community, channel=None):
         """Set the community string for alerts
 
         This configures the string the BMC will use as the community string
@@ -1234,14 +1234,14 @@ class Command(object):
         :param channel: The LAN channel (defaults to auto detect)
         """
         if channel is None:
-            channel = self.get_network_channel()
+            channel = await self.get_network_channel()
         community = community.encode('utf-8')
         community += b'\x00' * (18 - len(community))
         cmddata = bytearray((channel, 16))
         cmddata += community
-        self.xraw_command(netfn=0xc, command=1, data=cmddata)
+        await self.raw_command(netfn=0xc, command=1, data=cmddata)
 
-    def _assure_alert_policy(self, channel, destination):
+    async def _assure_alert_policy(self, channel, destination):
         """Make sure an alert policy exists
 
         Each policy will be a dict with the following keys:
@@ -1251,12 +1251,12 @@ class Command(object):
         # First we do a get PEF configuration parameters to get the count
         # of entries.  We have no guarantee that the meaningful data will
         # be contiguous
-        rsp = self.xraw_command(netfn=4, command=0x13, data=(8, 0, 0))
+        rsp = await self.raw_command(netfn=4, command=0x13, data=(8, 0, 0))
         numpol = bytearray(rsp['data'])[1]
         desiredchandest = (channel << 4) | destination
         availpolnum = None
         for polnum in range(1, numpol + 1):
-            currpol = self.xraw_command(netfn=4, command=0x13,
+            currpol = await self.raw_command(netfn=4, command=0x13,
                                         data=(9, polnum, 0))
             polidx, chandest = struct.unpack_from('>BB', currpol['data'][2:4])
             if not polidx & 0b1000:
@@ -1272,11 +1272,11 @@ class Command(object):
         # 1 == set to which this rule belongs
         # 8 == 0b1000, in other words, enable this policy, always send to
         # indicated destination
-        self.xraw_command(netfn=4, command=0x12,
+        await self.raw_command(netfn=4, command=0x12,
                           data=(9, availpolnum, 24,
                                 desiredchandest, 0))
 
-    def get_alert_community(self, channel=None):
+    async def get_alert_community(self, channel=None):
         """Get the current community string for alerts
 
         Returns the community string that will be in SNMP traps from this
@@ -1287,8 +1287,8 @@ class Command(object):
         :returns: The community string
         """
         if channel is None:
-            channel = self.get_network_channel()
-        rsp = self.xraw_command(netfn=0xc, command=2, data=(channel, 16, 0, 0))
+            channel = await self.get_network_channel()
+        rsp = await self.raw_command(netfn=0xc, command=2, data=(channel, 16, 0, 0))
         return rsp['data'][1:].partition('\x00')[0]
 
     @property
@@ -1332,7 +1332,7 @@ class Command(object):
         if (acknowledge_required is not None
                 or retries is not None
                 or acknowledge_timeout is not None):
-            currtype = self.xraw_command(netfn=0xc, command=2, data=(
+            currtype = self.raw_command(netfn=0xc, command=2, data=(
                 channel, 18, destination, 0))
             if currtype['data'][0] != b'\x11':
                 raise exc.PyghmiException("Unknown parameter format")
@@ -1350,7 +1350,7 @@ class Command(object):
                 currtype[3] = retries
             destreq = bytearray((channel, 18))
             destreq.extend(currtype)
-            self.xraw_command(netfn=0xc, command=1, data=destreq)
+            await self.raw_command(netfn=0xc, command=1, data=destreq)
         if ip is not None:
             destdata = bytearray((channel, 19, destination))
             try:
@@ -1362,7 +1362,7 @@ class Command(object):
                 parsedip = socket.inet_pton(socket.AF_INET6, ip)
                 destdata.append(0b10000000)
                 destdata.extend(parsedip)
-            self.xraw_command(netfn=0xc, command=1, data=destdata)
+            await self.raw_command(netfn=0xc, command=1, data=destdata)
         if not ip == '0.0.0.0':
             self._assure_alert_policy(channel, destination)
 
@@ -1442,8 +1442,8 @@ class Command(object):
             return self._oem.set_asset_tag(tag)
         return self._chunkwise_dcmi_set(8, tag)
 
-    def _chunkwise_dcmi_fetch(self, command):
-        szdata = self.xraw_command(
+    async def _chunkwise_dcmi_fetch(self, command):
+        szdata = await self.raw_command(
             netfn=0x2c, command=command, data=(0xdc, 0, 0))
         totalsize = bytearray(szdata['data'])[1]
         chksize = 0xf
@@ -1452,7 +1452,7 @@ class Command(object):
         while offset < totalsize:
             if (offset + chksize) > totalsize:
                 chksize = totalsize - offset
-            chk = self.xraw_command(
+            chk = await self.raw_command(
                 netfn=0x2c, command=command, data=(0xdc, offset, chksize))
             retstr += chk['data'][2:]
             offset += chksize
@@ -1460,7 +1460,7 @@ class Command(object):
             retstr = retstr.decode('utf-8')
         return retstr
 
-    def _chunkwise_dcmi_set(self, command, data):
+    async def _chunkwise_dcmi_set(self, command, data):
         chunks = [data[i:i + 15] for i in range(0, len(data), 15)]
         offset = 0
         for chunk in chunks:
@@ -1470,9 +1470,9 @@ class Command(object):
             # set offset, otherwise the last setting will override
             # the previous setting
             offset += len(chunk)
-            self.xraw_command(netfn=0x2c, command=command, data=cmddata)
+            await self.raw_command(netfn=0x2c, command=command, data=cmddata)
 
-    def set_channel_access(self, channel=None,
+    async def set_channel_access(self, channel=None,
                            access_update_mode='non_volatile',
                            alerting=False, per_msg_auth=False,
                            user_level_auth=False, access_mode='always',
@@ -1536,7 +1536,7 @@ class Command(object):
             * proprietary   = used by OEM
         """
         if channel is None:
-            channel = self.get_network_channel()
+            channel = await self.get_network_channel()
         data = []
         data.append(channel & 0b00001111)
         access_update_modes = {
@@ -1585,7 +1585,7 @@ class Command(object):
             raise Exception(response['error'])
         return True
 
-    def get_channel_access(self, channel=None, read_mode='volatile'):
+    async def get_channel_access(self, channel=None, read_mode='volatile'):
         """Get channel access
 
         :param channel: number [1:7]
@@ -1614,7 +1614,7 @@ class Command(object):
            }
         """
         if channel is None:
-            channel = self.get_network_channel()
+            channel = await self.get_network_channel()
         data = []
         data.append(channel & 0b00001111)
         b = 0
@@ -1625,7 +1625,7 @@ class Command(object):
         b |= (read_modes[read_mode] << 6) & 0b11000000
         data.append(b)
 
-        response = self.raw_command(netfn=0x06, command=0x41, data=data)
+        response = await self.raw_command(netfn=0x06, command=0x41, data=data)
         if 'error' in response:
             raise Exception(response['error'])
 
@@ -1656,11 +1656,11 @@ class Command(object):
         r['privilege_level'] = privilege_levels[data[1] & 0b00001111]
         return r
 
-    def get_screenshot(self, outfile):
+    async def get_screenshot(self, outfile):
         self.oem_init()
-        return self._oem.get_screenshot(outfile)
+        return await self._oem.get_screenshot(outfile)
 
-    def get_channel_info(self, channel=None):
+    async def get_channel_info(self, channel=None):
         """Get channel info
 
         :param channel: number [1:7]
@@ -1675,10 +1675,10 @@ class Command(object):
                 serial/modem channel that supports connection mode auto-detect)
         """
         if channel is None:
-            channel = self.get_network_channel()
+            channel = await self.get_network_channel()
         data = []
         data.append(channel & 0b00001111)
-        response = self.raw_command(netfn=0x06, command=0x42, data=data)
+        response = await self.raw_command(netfn=0x06, command=0x42, data=data)
         if 'error' in response:
             raise Exception(response['error'])
         data = response['data']
@@ -1721,7 +1721,7 @@ class Command(object):
         r['Auxiliary Channel Info'] = [data[7], data[8]]
         return r
 
-    def set_user_access(self, uid, channel=None, callback=False,
+    async def set_user_access(self, uid, channel=None, callback=False,
                         link_auth=True, ipmi_msg=True, privilege_level='user'):
         """Set user access
 
@@ -1769,13 +1769,13 @@ class Command(object):
             * no_access
             * custom.<name>
         """
-        self.oem_init()
+        await self.oem_init()
         if hasattr(self._oem, 'oem_user_access'):
             callback, privilege_level = self._oem.oem_user_access(
                 callback, privilege_level)
 
         if channel is None:
-            channel = self.get_network_channel()
+            channel = await self.get_network_channel()
         b = 0b10000000
         if callback:
             b |= 0b01000000
@@ -1793,14 +1793,13 @@ class Command(object):
             'proprietary': 5,
             'no_access': 0x0F,
         }
-        self.oem_init()
-        self._oem.set_user_access(
+        await self._oem.set_user_access(
             uid, channel, callback, link_auth, ipmi_msg, privilege_level)
         if privilege_level.startswith('custom.'):
             return True  # unable to proceed with standard support
         data = [b, uid & 0b00111111,
                 privilege_levels[privilege_level] & 0b00001111, 0]
-        response = self.raw_command(netfn=0x06, command=0x43, data=data)
+        response = await self.raw_command(netfn=0x06, command=0x43, data=data)
         if 'error' in response:
             raise Exception(response['error'])
         # Set KVM and VMedia Allowed if is administrator
@@ -1808,7 +1807,7 @@ class Command(object):
             self.set_extended_privilleges(uid)
         return True
 
-    def get_user_access(self, uid, channel=None):
+    async def get_user_access(self, uid, channel=None):
         """Get user access
 
         :param uid: user number [1:16]
@@ -1829,9 +1828,9 @@ class Command(object):
         """
         # user access available during call-in or callback direct connection
         if channel is None:
-            channel = self.get_network_channel()
+            channel = await self.get_network_channel()
         data = [channel, uid]
-        response = self.raw_command(netfn=0x06, command=0x44, data=data)
+        response = await self.raw_command(netfn=0x06, command=0x44, data=data)
         if 'error' in response:
             raise Exception(response['error'])
         data = response['data']
@@ -1844,8 +1843,8 @@ class Command(object):
         r['access']['callback'] = (data[3] & 0b01000000) != 0
         r['access']['link_auth'] = (data[3] & 0b00100000) != 0
         r['access']['ipmi_msg'] = (data[3] & 0b00010000) != 0
-        self.oem_init()
-        oempriv = self._oem.get_user_privilege_level(uid)
+        await self.oem_init()
+        oempriv = await self._oem.get_user_privilege_level(uid)
         if oempriv:
             r['access']['privilege_level'] = oempriv
         else:
@@ -1861,7 +1860,7 @@ class Command(object):
             r['access']['privilege_level'] = privilege_levels[data[3] & 0b00001111]
         return r
 
-    def set_user_name(self, uid, name):
+    async def set_user_name(self, uid, name):
         """Set user name
 
         :param uid: user number [1:16]
@@ -1876,17 +1875,17 @@ class Command(object):
         name = bytearray(name)
         data.extend(name)
         # set timeout to 2s to avoid retry causing enable failure
-        self.xraw_command(netfn=0x06, command=0x45, data=data, timeout=2)
+        await self.raw_command(netfn=0x06, command=0x45, data=data, timeout=2)
         return True
 
-    def get_user_name(self, uid, return_none_on_error=True):
+    async def get_user_name(self, uid, return_none_on_error=True):
         """Get user name
 
         :param uid: user number [1:16]
         :param return_none_on_error: return None on error
             TODO: investigate return code on error
         """
-        response = self.raw_command(netfn=0x06, command=0x46, data=(uid,))
+        response = await self.raw_command(netfn=0x06, command=0x46, data=(uid,))
         if 'error' in response:
             if return_none_on_error:
                 return None
@@ -1903,7 +1902,7 @@ class Command(object):
                     name = n
         return name
 
-    def set_user_password(self, uid, mode='set_password', password=None):
+    async def set_user_password(self, uid, mode='set_password', password=None):
         """Set user password and (modes)
 
         :param uid: id number of user.  see: get_names_uid()['name']
@@ -1943,7 +1942,7 @@ class Command(object):
         self.oem_init()
         data = self._oem.process_password(password, data)
         try:
-            self.xraw_command(netfn=0x06, command=0x47, data=data)
+            await self.raw_command(netfn=0x06, command=0x47, data=data)
         except exc.IpmiException as ie:
             if mode == 'test_password':
                 return False
@@ -1954,18 +1953,18 @@ class Command(object):
             raise
         return True
 
-    def get_channel_max_user_count(self, channel=None):
+    async def get_channel_max_user_count(self, channel=None):
         """Get max users in channel (helper)
 
         :param channel: number [1:7]
         :return: int -- often 16
         """
         if channel is None:
-            channel = self.get_network_channel()
-        access = self.get_user_access(channel=channel, uid=1)
+            channel = await self.get_network_channel()
+        access = await self.get_user_access(channel=channel, uid=1)
         return access['channel_info']['max_user_count']
 
-    def get_user(self, uid, channel=None):
+    async def get_user(self, uid, channel=None):
         """Get user (helper)
 
         :param uid: user number [1:16]
@@ -1985,16 +1984,16 @@ class Command(object):
                 None for 'unknown', 0 for no expiry, days to expire otherwise.
         """
         if channel is None:
-            channel = self.get_network_channel()
-        name = self.get_user_name(uid)
-        access = self.get_user_access(uid, channel)
-        self.oem_init()
-        expiration = self._oem.get_user_expiration(uid)
+            channel = await self.get_network_channel()
+        name = await self.get_user_name(uid)
+        access = await self.get_user_access(uid, channel)
+        await self.oem_init()
+        expiration = await self._oem.get_user_expiration(uid)
         data = {'name': name, 'uid': uid, 'channel': channel,
                 'access': access['access'], 'expiration': expiration}
         return data
 
-    def get_name_uids(self, name, channel=None):
+    async def get_name_uids(self, name, channel=None):
         """get list of users (helper)
 
         :param channel: number [1:7]
@@ -2002,15 +2001,15 @@ class Command(object):
         :return: list of users
         """
         if channel is None:
-            channel = self.get_network_channel()
+            channel = await self.get_network_channel()
         uid_list = []
-        max_ids = self.get_channel_max_user_count(channel)
+        max_ids = await self.get_channel_max_user_count(channel)
         for uid in range(1, max_ids):
-            if name == self.get_user_name(uid=uid):
+            if name == await self.get_user_name(uid=uid):
                 uid_list.append(uid)
         return uid_list
 
-    def get_users(self, channel=None):
+    async def get_users(self, channel=None):
         """get list of users and channel access information (helper)
 
         :param channel: number [1:7]
@@ -2026,15 +2025,15 @@ class Command(object):
                 privilege_level: (str)[callback, user, operatorm administrator,
                                        proprietary, no_access]
         """
-        self.oem_init()
+        await self.oem_init()
         if channel is None:
-            channel = self.get_network_channel()
+            channel = await self.get_network_channel()
         names = {}
-        max_ids = self.get_channel_max_user_count(channel)
+        max_ids = await self.get_channel_max_user_count(channel)
         for uid in range(1, max_ids + 1):
-            name = self.get_user_name(uid=uid)
+            name = await self.get_user_name(uid=uid)
             if self._oem.is_valid(name):
-                names[uid] = self.get_user(uid=uid, channel=channel)
+                names[uid] = await self.get_user(uid=uid, channel=channel)
         return names
 
     def create_user(self, uid, name, password, channel=None, callback=False,
@@ -2165,66 +2164,66 @@ class Command(object):
     def get_firmware(self, components=(), category=None):
         """Retrieve OEM Firmware information"""
 
-        self.oem_init()
-        mcinfo = self.xraw_command(netfn=6, command=1)
+        await self.oem_init()
+        mcinfo = await self.raw_command(netfn=6, command=1)
         major, minor = struct.unpack('BB', mcinfo['data'][2:4])
         bmcver = '{0}.{1}'.format(major, hex(minor)[2:])
-        return self._oem.get_oem_firmware(bmcver, components, category)
+        return await self._oem.get_oem_firmware(bmcver, components, category)
 
-    def get_capping_enabled(self):
+    async def get_capping_enabled(self):
         """Get PSU based power capping status
 
         :return: True if enabled and False if disabled
         """
-        self.oem_init()
-        return self._oem.get_oem_capping_enabled()
+        await self.oem_init()
+        return await self._oem.get_oem_capping_enabled()
 
-    def set_capping_enabled(self, enable):
+    async def set_capping_enabled(self, enable):
         """Set PSU based power capping
 
         :param enable: True for enable and False for disable
         """
-        self.oem_init()
-        return self._oem.set_oem_capping_enabled(enable)
+        await self.oem_init()
+        return await self._oem.set_oem_capping_enabled(enable)
 
-    def set_server_capping(self, value):
-        self.oem_init()
-        self._oem.set_oem_server_capping(value)
+    async def set_server_capping(self, value):
+        await self.oem_init()
+        await self._oem.set_oem_server_capping(value)
 
-    def get_server_capping(self):
-        self.oem_init()
-        return self._oem.get_oem_server_capping()
+    async def get_server_capping(self):
+        await self.oem_init()
+        return await self._oem.get_oem_server_capping()
 
-    def get_remote_kvm_available(self):
+    async def get_remote_kvm_available(self):
         """Get remote KVM availability"""
 
-        self.oem_init()
-        return self._oem.get_oem_remote_kvm_available()
+        await self.oem_init()
+        return await self._oem.get_oem_remote_kvm_available()
 
-    def get_domain_name(self):
+    async def get_domain_name(self):
         """Get Domain name"""
 
-        self.oem_init()
-        return self._oem.get_oem_domain_name()
+        await self.oem_init()
+        return await self._oem.get_oem_domain_name()
 
-    def set_domain_name(self, name):
+    async def set_domain_name(self, name):
         """Set Domain name
 
         :param name: domain name to be set
         """
-        self.oem_init()
-        self._oem.set_oem_domain_name(name)
+        await self.oem_init()
+        await self._oem.set_oem_domain_name(name)
 
-    def get_graphical_console(self):
+    async def get_graphical_console(self):
         """Get graphical console launcher"""
-        self.oem_init()
-        return self._oem.get_graphical_console()
+        await self.oem_init()
+        return await self._oem.get_graphical_console()
  
-    def get_update_status(self):
-        self.oem_init()
-        return self._oem.get_update_status()
+    async def get_update_status(self):
+        await self.oem_init()
+        return await self._oem.get_update_status()
 
-    def update_firmware(self, filename, data=None, progress=None, bank=None):
+    async def update_firmware(self, filename, data=None, progress=None, bank=None):
         """Send file to BMC to perform firmware update
 
          :param filename: The filename to upload to the target BMC
@@ -2235,12 +2234,12 @@ class Command(object):
          :param bank: Indicate a target 'bank' of firmware if supported
         """
 
-        self.oem_init()
+        await self.oem_init()
         if progress is None:
             progress = lambda x: True
-        return self._oem.update_firmware(filename, data, progress, bank)
+        return await self._oem.update_firmware(filename, data, progress, bank)
 
-    def attach_remote_media(self, url, username=None, password=None):
+    async def attach_remote_media(self, url, username=None, password=None):
         """Attach remote media by url
 
         Given a url, attach remote media (cd/usb image) to the target system.
@@ -2252,14 +2251,14 @@ class Command(object):
                          '\' syntax.
         :param password: Password for endpoint to use when accessing the URL.
         """
-        self.oem_init()
-        return self._oem.attach_remote_media(url, username, password)
+        await self.oem_init()
+        return await self._oem.attach_remote_media(url, username, password)
 
-    def detach_remote_media(self):
-        self.oem_init()
-        return self._oem.detach_remote_media()
+    async def detach_remote_media(self):
+        await self.oem_init()
+        return await self._oem.detach_remote_media()
 
-    def upload_media(self, filename, progress=None, data=None):
+    async def upload_media(self, filename, progress=None, data=None):
         """Upload a file to be hosted on the target BMC
 
         This will upload the specified data to
@@ -2270,40 +2269,40 @@ class Command(object):
                          will be given to the bmc.
         :param progress: Optional callback for progress updates
         """
-        self.oem_init()
-        return self._oem.upload_media(filename, progress, data)
+        await self.oem_init()
+        return await self._oem.upload_media(filename, progress, data)
 
-    def list_media(self):
+    async def list_media(self):
         """List attached remote media
 
         :returns: An iterable list of attached media
         """
-        self.oem_init()
-        return self._oem.list_media()
+        await self.oem_init()
+        return await self._oem.list_media()
+    
+    async def get_licenses(self):
+        await self.oem_init()
+        return await self._oem.get_licenses()
 
-    def get_licenses(self):
-        self.oem_init()
-        return self._oem.get_licenses()
+    async def delete_license(self, name):
+        await self.oem_init()
+        return await self._oem.delete_license(name)
 
-    def delete_license(self, name):
-        self.oem_init()
-        return self._oem.delete_license(name)
-
-    def save_licenses(self, directory):
+    async def save_licenses(self, directory):
         if os.path.exists(directory) and not os.path.isdir(directory):
             raise exc.InvalidParameterValue(
                 'Not allowed to overwrite existing file: {0}'.format(
                     directory))
-        self.oem_init()
-        return self._oem.save_licenses(directory)
+        await self.oem_init()
+        return await self._oem.save_licenses(directory)
 
-    def apply_license(self, filename, progress=None, data=None):
-        self.oem_init()
-        return self._oem.apply_license(filename, progress, data)
+    async def apply_license(self, filename, progress=None, data=None):
+        await self.oem_init()
+        return await self._oem.apply_license(filename, progress, data)
 
-    def set_extended_privilleges(self, uid):
+    async def set_extended_privilleges(self, uid):
         """Set user extended privillege as 'KVM & VMedia Allowed'
 
         """
-        self.oem_init()
-        return self._oem.set_oem_extended_privilleges(uid)
+        await self.oem_init()
+        return await self._oem.set_oem_extended_privilleges(uid)

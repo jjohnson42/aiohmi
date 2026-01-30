@@ -285,12 +285,12 @@ def decode_eventdata(sensor_type, offset, eventdata, event_consts, sdr):
                 pass
 
 
-def _fix_sel_time(records, ipmicmd):
+async def _fix_sel_time(records, ipmicmd):
     timefetched = False
     rsp = None
     while not timefetched:
         try:
-            rsp = ipmicmd.xraw_command(netfn=0xa, command=0x48)
+            rsp = await ipmicmd.raw_command(netfn=0xa, command=0x48)
             timefetched = True
         except pygexc.IpmiException as pi:
             if pi.ipmicode == 0x81:
@@ -467,7 +467,7 @@ class EventHandler(object):
             if additionaldata:
                 event['event_data'] = additionaldata
 
-    def decode_pet(self, specifictrap, petdata):
+    async def decode_pet(self, specifictrap, petdata):
         if isinstance(specifictrap, int):
             specifictrap = struct.unpack('4B', struct.pack('>I', specifictrap))
         if len(specifictrap) != 4:
@@ -489,13 +489,13 @@ class EventHandler(object):
                                        petdata[25], petdata[27], petdata[28],
                                        *event_data))
         try:
-            self._ipmicmd.xraw_command(netfn=4, command=0x17, data=petack)
+            await self._ipmicmd.raw_command(netfn=4, command=0x17, data=petack)
         except pygexc.IpmiException:  # Ignore failure to ack for now
             pass
         self._populate_event(deassertion, event, event_data, event_type,
                              sensor_type, sensorid)
         event['timecode'] = ltimestamp
-        _fix_sel_time((event,), self._ipmicmd)
+        await _fix_sel_time((event,), self._ipmicmd)
         return event
 
     def _decode_standard_event(self, eventdata, event):
@@ -536,14 +536,14 @@ class EventHandler(object):
             del event['event_data_bytes']
         return event
 
-    def _fetch_entries(self, ipmicmd, startat, targetlist, rsvid=0):
+    async def _fetch_entries(self, ipmicmd, startat, targetlist, rsvid=0):
         curr = startat
         endat = curr
         while curr != 0xffff:
             endat = curr
             reqdata = bytearray(struct.pack('<HHH', rsvid, curr, 0xff00))
             try:
-                rsp = ipmicmd.xraw_command(
+                rsp = await ipmicmd.raw_command(
                     netfn=0xa, command=0x43, data=reqdata)
             except pygexc.IpmiException as pi:
                 if pi.ipmicode == 203:
@@ -554,7 +554,7 @@ class EventHandler(object):
             targetlist.append(self._sel_decode(rsp['data'][2:]))
         return endat
 
-    def fetch_sel(self, ipmicmd, clear=False):
+    async def fetch_sel(self, ipmicmd, clear=False):
         """Fetch SEL entries
 
         Return an iterable of SEL entries.  If clearing is requested,
@@ -567,19 +567,19 @@ class EventHandler(object):
         records = []
         # First we do a fetch all without reservation, reducing the risk
         # of having a long lived reservation that gets canceled in the middle
-        endat = self._fetch_entries(ipmicmd, 0, records)
+        endat = await self._fetch_entries(ipmicmd, 0, records)
         if clear and records:  # don't bother clearing if there were no records
             # To do clear, we make a reservation first...
-            rsp = ipmicmd.xraw_command(netfn=0xa, command=0x42)
+            rsp = await ipmicmd.raw_command(netfn=0xa, command=0x42)
             rsvid = struct.unpack_from('<H', rsp['data'])[0]
             # Then we refetch the tail with reservation (check for change)
             del records[-1]  # remove the record that's about to be duplicated
-            self._fetch_entries(ipmicmd, endat, records, rsvid)
+            await self._fetch_entries(ipmicmd, endat, records, rsvid)
             # finally clear the SEL
             # 0XAA means start initiate, 0x524c43 is 'RCL' or 'CLR' backwards
             clrdata = bytearray(struct.pack('<HI', rsvid, 0xAA524C43))
-            ipmicmd.xraw_command(netfn=0xa, command=0x47, data=clrdata)
+            await ipmicmd.raw_command(netfn=0xa, command=0x47, data=clrdata)
         # Now to fixup the record timestamps... first we need to get the BMC
         # opinion of current time
-        _fix_sel_time(records, ipmicmd)
+        await _fix_sel_time(records, ipmicmd)
         return records

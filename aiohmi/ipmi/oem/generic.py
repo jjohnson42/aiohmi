@@ -48,9 +48,9 @@ class OEMHandler(object):
     def get_screenshot(self, outfile):
         return {}    
 
-    def get_system_power_watts(self, ipmicmd):
+    async def get_system_power_watts(self, ipmicmd):
         # Use DCMI getpower reading command
-        rsp = ipmicmd.xraw_command(netfn=0x2c, command=2, data=(0xdc, 1, 0, 0))
+        rsp = await ipmicmd.raw_command(netfn=0x2c, command=2, data=(0xdc, 1, 0, 0))
         wattage = struct.unpack('<H', rsp['data'][1:3])[0]
         return wattage   
 

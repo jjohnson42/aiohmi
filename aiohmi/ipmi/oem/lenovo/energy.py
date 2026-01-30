@@ -65,7 +65,7 @@ class EnergyManager(object):
             return True
         return False
 
-    def get_sensor(self, name, ipmicmd):
+    async def get_sensor(self, name, ipmicmd):
         if name.lower() not in self._mypowermeters:
             raise pygexc.UnsupportedFunctionality('Unrecogcized sensor')
         tries = 3
@@ -73,7 +73,7 @@ class EnergyManager(object):
         while tries:
             tries -= 1
             try:
-                rsp = ipmicmd.xraw_command(netfn=0x3a, command=0x32, data=[4, 8, 0, 0, 0])
+                rsp = await ipmicmd.raw_command(netfn=0x3a, command=0x32, data=[4, 8, 0, 0, 0])
                 break
             except pygexc.IpmiException as ie:
                 if tries and ie.ipmicode == 0xc3:
@@ -90,21 +90,21 @@ class EnergyManager(object):
         elif name.lower().startswith('total'):
             return npow + gpupow, 'W'
 
-    def get_fapm_energy(self, ipmicmd):
-        rsp = ipmicmd.xraw_command(netfn=0x3a, command=0x32, data=[4, 2, 0, 0, 0])
+    async def get_fapm_energy(self, ipmicmd):
+        rsp = await ipmicmd.raw_command(netfn=0x3a, command=0x32, data=[4, 2, 0, 0, 0])
         j, mj = struct.unpack('<IH', rsp['data'][2:8])
         mj = mj + (j * 1000)
         return float(mj / 1000000 / 3600)
 
-    def get_energy_precision(self, ipmicmd):
-        rsp = ipmicmd.xraw_command(
+    async def get_energy_precision(self, ipmicmd):
+        rsp = await ipmicmd.raw_command(
             netfn=0x2e, command=0x81,
             data=self.iana + self.modhandle + b'\x01\x80')
         print(repr(rsp['data'][:]))
 
-    def get_ac_energy(self, ipmicmd):
+    async def get_ac_energy(self, ipmicmd):
         try:
-            rsp = ipmicmd.xraw_command(
+            rsp = await ipmicmd.raw_command(
                 netfn=0x2e, command=0x81,
                 data=self.iana + self.modhandle + b'\x01\x82\x01\x08')
             # data is in millijoules, convert to the more recognizable kWh
@@ -115,10 +115,10 @@ class EnergyManager(object):
                 return 0.0
             raise
 
-    def get_dc_energy(self, ipmicmd):
+    async def get_dc_energy(self, ipmicmd):
         if self._usefapm:
-            return self.get_fapm_energy(ipmicmd)
-        rsp = ipmicmd.xraw_command(
+            return await self.get_fapm_energy(ipmicmd)
+        rsp = await ipmicmd.raw_command(
             netfn=0x2e, command=0x81,
             data=self.iana + self.modhandle + b'\x01\x82\x00\x08')
         # data is in millijoules, convert to the more recognizable kWh
@@ -130,11 +130,11 @@ class Energy(object):
     def __init__(self, ipmicmd):
         self.ipmicmd = ipmicmd
 
-    def get_energy_sensor(self):
+    async def get_energy_sensor(self):
         # read the cpu usage
 
         try:
-            rsp = self.ipmicmd.xraw_command(netfn=0x04,
+            rsp = await self.ipmicmd.raw_command(netfn=0x04,
                                             command=0x2d,
                                             bridge_request={"addr": 0x2c,
                                                             "channel": 0x06},

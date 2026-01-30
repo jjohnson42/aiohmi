@@ -67,7 +67,7 @@ async def run_command_with_retry(connection, data):
     while tries:
         tries -= 1
         try:
-            return await connection.xraw_command(
+            return await connection.raw_command(
                 netfn=IMM_NETFN, command=IMM_COMMAND, data=data)
         except pygexc.IpmiException as e:
             if e.ipmicode != 0xa or not tries:

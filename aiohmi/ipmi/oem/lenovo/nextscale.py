@@ -75,31 +75,31 @@ def stringtoboolean(originput, name):
                                        '{1}'.format(originput, name))
 
 
-def fpc_read_ac_input(ipmicmd):
-    rsp = ipmicmd.xraw_command(netfn=0x32, command=0x90, data=(1,))
+async def fpc_read_ac_input(ipmicmd):
+    rsp = await ipmicmd.raw_command(netfn=0x32, command=0x90, data=(1,))
     rsp = rsp['data']
     if len(rsp) == 6:
         rsp = b'\x00' + bytes(rsp)
     return struct.unpack_from('<H', rsp[3:5])[0]
 
 
-def fpc_read_dc_output(ipmicmd):
-    rsp = ipmicmd.xraw_command(netfn=0x32, command=0x90, data=(2,))
+async def fpc_read_dc_output(ipmicmd):
+    rsp = await ipmicmd.raw_command(netfn=0x32, command=0x90, data=(2,))
     rsp = rsp['data']
     if len(rsp) == 6:
         rsp = b'\x00' + bytes(rsp)
     return struct.unpack_from('<H', rsp[3:5])[0]
 
 
-def fpc_read_fan_power(ipmicmd):
-    rsp = ipmicmd.xraw_command(netfn=0x32, command=0x90, data=(3,))
+async def fpc_read_fan_power(ipmicmd):
+    rsp = await ipmicmd.raw_command(netfn=0x32, command=0x90, data=(3,))
     rsp = bytes(rsp['data'])
     rsp += b'\x00'
     return struct.unpack_from('<I', rsp[1:])[0] / 100.0
 
 
-def fpc_read_psu_fan(ipmicmd, number, sz):
-    rsp = ipmicmd.xraw_command(netfn=0x32, command=0xa5, data=(number,))
+async def fpc_read_psu_fan(ipmicmd, number, sz):
+    rsp = await ipmicmd.raw_command(netfn=0x32, command=0xa5, data=(number,))
     rsp = bytes(rsp['data'])
     if len(rsp) > 5:
         return struct.unpack_from('<H', rsp[2:4])[0]
@@ -107,8 +107,8 @@ def fpc_read_psu_fan(ipmicmd, number, sz):
         return struct.unpack_from('<H', rsp[:2])[0]
 
 
-def fpc_get_psustatus(ipmicmd, number, sz):
-    rsp = ipmicmd.xraw_command(netfn=0x32, command=0x91)
+async def fpc_get_psustatus(ipmicmd, number, sz):
+    rsp = await ipmicmd.raw_command(netfn=0x32, command=0x91)
     mask = 1 << (number - 1)
     rsp['data'] = bytearray(rsp['data'])
     if len(rsp['data']) >= 10:
@@ -138,9 +138,9 @@ def fpc_get_psustatus(ipmicmd, number, sz):
     return (health, states)
 
 
-def fpc_get_nodeperm(ipmicmd, number, sz):
+async def fpc_get_nodeperm(ipmicmd, number, sz):
     try:
-        rsp = ipmicmd.xraw_command(netfn=0x32, command=0xa7, data=(number,))
+        rsp = await ipmicmd.raw_command(netfn=0x32, command=0xa7, data=(number,))
     except pygexc.IpmiException as ie:
         if ie.ipmicode == 0xd5:  # no node present
             return (pygconst.Health.Ok, ['Absent'])
@@ -172,14 +172,14 @@ def fpc_get_nodeperm(ipmicmd, number, sz):
     return (health, states)
 
 
-def fpc_read_powerbank(ipmicmd):
-    rsp = ipmicmd.xraw_command(netfn=0x32, command=0xa2)
+async def fpc_read_powerbank(ipmicmd):
+    rsp = await ipmicmd.raw_command(netfn=0x32, command=0xa2)
     return struct.unpack_from('<H', rsp['data'][3:])[0]
 
 
-def get_psu_count(ipmicmd, variant):
+async def get_psu_count(ipmicmd, variant):
     if variant == 0x26:
-        mymsg = ipmicmd.xraw_command(netfn=0x32, command=0xa8)
+        mymsg = await ipmicmd.raw_command(netfn=0x32, command=0xa8)
         builddata = bytearray(mymsg['data'])
         if builddata[13] in (3, 6):
             return 9
@@ -189,10 +189,10 @@ def get_psu_count(ipmicmd, variant):
         return variant & 0xf
 
 
-def fpc_get_dripstatus(ipmicmd, number, sz):
+async def fpc_get_dripstatus(ipmicmd, number, sz):
     health = pygconst.Health.Ok
     states = []
-    rsp = ipmicmd.xraw_command(0x34, 5)
+    rsp = await ipmicmd.raw_command(0x34, 5)
     rdata = bytearray(rsp['data'])
     number = number - 1
     if rdata[0] & (1 << number) == 0:
@@ -320,8 +320,8 @@ def get_sensor_descriptions(ipmicmd, size):
             yield {'name': name, 'type': sensor['type']}
 
 
-def get_fpc_firmware(bmcver, ipmicmd, fpcorsmm):
-    mymsg = ipmicmd.xraw_command(netfn=0x32, command=0xa8)
+async def get_fpc_firmware(bmcver, ipmicmd, fpcorsmm):
+    mymsg = await ipmicmd.raw_command(netfn=0x32, command=0xa8)
     builddata = bytearray(mymsg['data'])
     name = None
     if fpcorsmm != 6:  # SMM
@@ -348,14 +348,14 @@ def get_fpc_firmware(bmcver, ipmicmd, fpcorsmm):
                                                     builddata[4])})
 
 
-def get_sensor_reading(name, ipmicmd, sz):
+async def get_sensor_reading(name, ipmicmd, sz):
     value = None
     sensor = None
     health = pygconst.Health.Ok
     states = []
     if name in fpc_sensors and 'elements' not in fpc_sensors[name]:
         sensor = fpc_sensors[name]
-        value = sensor['provider'](ipmicmd)
+        value = await sensor['provider'](ipmicmd)
     else:
         bnam, _, idx = name.rpartition(' ')
         idx = int(idx)
@@ -370,9 +370,9 @@ def get_sensor_reading(name, ipmicmd, sz):
             if idx <= max:
                 sensor = fpc_sensors[bnam]
                 if 'returns' in sensor:
-                    health, states = sensor['provider'](ipmicmd, idx, sz)
+                    health, states = await sensor['provider'](ipmicmd, idx, sz)
                 else:
-                    value = sensor['provider'](ipmicmd, idx, sz)
+                    value = await sensor['provider'](ipmicmd, idx, sz)
     if sensor is not None:
         return sdr.SensorReading({'name': name, 'imprecision': None,
                                   'value': value, 'states': states,
@@ -392,8 +392,8 @@ class SMMClient(object):
         self.password = ipmicmd.ipmi_session.password
         self._wc = None
 
-    def clear_bmc_configuration(self):
-        self.ipmicmd.xraw_command(0x32, 0xad)
+    async def clear_bmc_configuration(self):
+        await self.ipmicmd.raw_command(0x32, 0xad)
 
     rulemap = {
         'password_reuse_count': 'passwordReuseCheckNum',
@@ -414,7 +414,7 @@ class SMMClient(object):
         5: 'Boosted',
     }
 
-    def get_bmc_configuration(self, variant):
+    async def get_bmc_configuration(self, variant):
         settings = {}
         wc = self.wc
         wc.request(
@@ -434,10 +434,10 @@ class SMMClient(object):
                 except ValueError:
                     val = ruleinfo.text
                 settings[rule] = {'value': val}
-        dwc = self.ipmicmd.xraw_command(0x32, 0x94)
+        dwc = await self.ipmicmd.raw_command(0x32, 0x94)
         dwc = bytearray(dwc['data'])
         if len(dwc) not in (3, 4) or dwc[0] == 1:
-            rsp = self.ipmicmd.xraw_command(0x34, 3)
+            rsp = await self.ipmicmd.raw_command(0x34, 3)
             fanmode = self.fanmodes[bytearray(rsp['data'])[0]]
             settings['fanspeed'] = {
                 'value': fanmode, 'default': 'Normal',
@@ -449,7 +449,7 @@ class SMMClient(object):
                          'the Normal response to provide more aggressive '
                          'cooling.'),
                 'possible': [self.fanmodes[x] for x in self.fanmodes]}
-        powercfg = self.ipmicmd.xraw_command(0x32, 0xa2)
+        powercfg = await self.ipmicmd.raw_command(0x32, 0xa2)
         powercfg = bytearray(powercfg['data'])
         if len(powercfg) == 5:
             if variant and variant >> 5:
@@ -496,19 +496,19 @@ class SMMClient(object):
         try:
             numbays = 12
             try:
-                chassiscapinfo = self.ipmicmd.xraw_command(
+                chassiscapinfo = await self.ipmicmd.raw_command(
                     0x32, 0x9d, data=[13])
             except pygexc.IpmiException as e:
                 if e.ipmicode == 201:  # this must be a 2U
                     numbays = 4
-                    chassiscapinfo = self.ipmicmd.xraw_command(
+                    chassiscapinfo = await self.ipmicmd.raw_command(
                         0x32, 0x9d, data=[5])
                 else:
                     raise
             retoffset = 0
             if len(chassiscapinfo['data']) > 10:
                 retoffset = 1
-            chassiscapstate = self.ipmicmd.xraw_command(
+            chassiscapstate = await self.ipmicmd.raw_command(
                 0x32, 0xa0, data=[numbays + 1])
             capstate = bool(chassiscapstate['data'][retoffset])
             capmin, capmax, protcap, usercap, thermcap = struct.unpack(
@@ -527,7 +527,7 @@ class SMMClient(object):
             for baynum in range(numbays):
                 baynum += 1
                 try:
-                    baycapinfo = self.ipmicmd.xraw_command(
+                    baycapinfo = await self.ipmicmd.raw_command(
                         0x32, 0x9d, data=[baynum])
                 except Exception:
                     continue
@@ -546,7 +546,7 @@ class SMMClient(object):
                             'in bay {0}'.format(baynum)
                 }
                 try:
-                    baycapstate = self.ipmicmd.xraw_command(
+                    baycapstate = await self.ipmicmd.raw_command(
                         0x32, 0xa0, data=[baynum])
                 except Exception:
                     continue
@@ -560,7 +560,7 @@ class SMMClient(object):
         except Exception:
             pass
         try:
-            dhcpsendname = self.ipmicmd.xraw_command(0xc, 0x2,
+            dhcpsendname = await self.ipmicmd.raw_command(0xc, 0x2,
                                                      data=[1, 0xc5, 0, 0])
             dhcpsendname = bytearray(dhcpsendname['data'])
             dhcpsendname = 'Enable' if dhcpsendname[1] == 1 else 'Disable'
@@ -570,7 +570,7 @@ class SMMClient(object):
                          'DHCP client requests in option 12'),
                 'possible': ['Enable', 'Disable']
             }
-            dhcpsendvci = self.ipmicmd.xraw_command(0xc, 0x2,
+            dhcpsendvci = await self.ipmicmd.raw_command(0xc, 0x2,
                                                     data=[1, 0xc6, 0, 0])
             dhcpsendvci = bytearray(dhcpsendvci['data'])
             dhcpsendvci = 'Enable' if dhcpsendvci[1] == 1 else 'Disable'
@@ -583,7 +583,7 @@ class SMMClient(object):
         except Exception:
             pass
         try:
-            chassisvpd = self.ipmicmd.xraw_command(0x32, 0xb0, data=(5, 0))
+            chassisvpd = await self.ipmicmd.raw_command(0x32, 0xb0, data=(5, 0))
             chassisvpd = bytearray(chassisvpd['data'][2:])
             chassisvpd = bytes(chassisvpd).strip()
             if not isinstance(chassisvpd, str):
@@ -595,7 +595,7 @@ class SMMClient(object):
         except Exception:
             pass
         try:
-            chassisvpd = self.ipmicmd.xraw_command(0x32, 0xb0, data=(5, 1))
+            chassisvpd = await self.ipmicmd.raw_command(0x32, 0xb0, data=(5, 1))
             chassisvpd = bytearray(chassisvpd['data'][2:])
             chassisvpd = bytes(chassisvpd).strip()
             if not isinstance(chassisvpd, str):
@@ -608,29 +608,29 @@ class SMMClient(object):
             pass
         return settings
 
-    def set_bay_cap(self, baynum, val):
+    async def set_bay_cap(self, baynum, val):
         payload = struct.pack('<BH', baynum, int(val))
-        self.ipmicmd.xraw_command(0x32, 0x9e, data=payload)
+        await self.ipmicmd.raw_command(0x32, 0x9e, data=payload)
 
-    def augment_zerofru(self, zerofru, variant):
+    async def augment_zerofru(self, zerofru, variant):
         if variant & 0x20 != 0x20:
             return
-        model = self.ipmicmd.xraw_command(
-            netfn=0x32, command=0xb0, data=[5, 11])['data'][2:]
+        model = (await self.ipmicmd.raw_command(
+            netfn=0x32, command=0xb0, data=[5, 11]))['data'][2:]
         zerofru['Product name'] = bytes(model).strip()
         zerofru['Manufacturer'] = 'Lenovo'
 
-    def set_bay_cap_active(self, baynum, val):
-        currstate = self.ipmicmd.xraw_command(0x32, 0xa0, data=[baynum])
+    async def set_bay_cap_active(self, baynum, val):
+        currstate = await self.ipmicmd.raw_command(0x32, 0xa0, data=[baynum])
         currstate = currstate['data']
         if len(currstate) == 5:
             currstate = currstate[1:]
         savemode = currstate[3]
         enable = val.lower().startswith('enable')
         payload = [baynum, 1 if enable else 0, savemode]
-        self.ipmicmd.xraw_command(0x32, 0x9f, data=payload)
+        await self.ipmicmd.raw_command(0x32, 0x9f, data=payload)
 
-    def set_bmc_configuration(self, changeset, variant):
+    async def set_bmc_configuration(self, changeset, variant):
         rules = []
         powercfg = [None, None]
         sendhost = None
@@ -691,7 +691,7 @@ class SMMClient(object):
                     byteval = mode
                     mode = self.fanmodes[mode]
                     if changeset[key]['value'].lower() == mode.lower():
-                        self.ipmicmd.xraw_command(
+                        await self.ipmicmd.raw_command(
                             0x32, 0x9b, data=[byteval])
                         break
                 else:
@@ -706,7 +706,7 @@ class SMMClient(object):
         if powercfg != [None, None]:
             if variant != 6:
                 if None in powercfg:
-                    currcfg = self.ipmicmd.xraw_command(0x32, 0xa2)
+                    currcfg = await self.ipmicmd.raw_command(0x32, 0xa2)
                     currcfg = bytearray(currcfg['data'])
                     if variant and variant >> 5 and len(currcfg) == 5:
                         currcfg = currcfg[-2:]
@@ -714,30 +714,30 @@ class SMMClient(object):
                         powercfg[0] = currcfg[0]
                     if powercfg[1] is None:
                         powercfg[1] = currcfg[1]
-                self.ipmicmd.xraw_command(0x32, 0xa3, data=powercfg)
+                await self.ipmicmd.raw_command(0x32, 0xa3, data=powercfg)
             elif variant == 6:
                 if powercfg[0] is not None:
-                    self.ipmicmd.xraw_command(0x32, 0xa3, data=powercfg[:1])
+                    await self.ipmicmd.raw_command(0x32, 0xa3, data=powercfg[:1])
                 if powercfg[1] is not None:
-                    self.ipmicmd.xraw_command(0x32, 0x9c, data=powercfg[1:])
+                    await self.ipmicmd.raw_command(0x32, 0x9c, data=powercfg[1:])
         if sendhost is not None:
             sendhost = 1 if sendhost else 0
-            self.ipmicmd.xraw_command(0xc, 1, data=[1, 0xc5, sendhost])
+            await self.ipmicmd.raw_command(0xc, 1, data=[1, 0xc5, sendhost])
         if sendvci is not None:
             sendvci = 1 if sendvci else 0
-            self.ipmicmd.xraw_command(0xc, 1, data=[1, 0xc6, sendvci])
+            await self.ipmicmd.raw_command(0xc, 1, data=[1, 0xc6, sendvci])
         if newserial:
             newserial = newserial.ljust(10).encode('utf8')
             cmdata = b'\x05\x01' + newserial
-            self.ipmicmd.xraw_command(0x32, 0xaf, data=cmdata)
+            await self.ipmicmd.raw_command(0x32, 0xaf, data=cmdata)
         if newmodel:
             newmodel = newmodel.ljust(10).encode('utf8')
             cmdata = b'\x05\x00' + newmodel
-            self.ipmicmd.xraw_command(0x32, 0xaf, data=cmdata)
+            await self.ipmicmd.raw_command(0x32, 0xaf, data=cmdata)
 
-    def set_user_priv(self, uid, priv):
+    async def set_user_priv(self, uid, priv):
         if priv.lower() == 'administrator':
-            rsp = self.ipmicmd.xraw_command(netfn=6, command=0x46, data=(uid,))
+            rsp = await self.ipmicmd.raw_command(netfn=6, command=0x46, data=(uid,))
             username = bytes(rsp['data']).rstrip(b'\x00')
             if not isinstance(username, str):
                 username = username.decode('utf8')
@@ -748,21 +748,21 @@ class SMMClient(object):
             rsp = wc.getresponse()
             rsp.read()
 
-    def reseat_bay(self, bay):
+    async def reseat_bay(self, bay):
         bay = int(bay)
         if bay == -1:
-            self.ipmicmd.xraw_command(0x32, 0xf5)
+            await self.ipmicmd.raw_command(0x32, 0xf5)
             return
         if bay % 2 == 0:
             # even node may be unable to reseat based on shared io
             try:
-                rsp = self.ipmicmd.xraw_command(0x32, 0xc5, data=[1])
+                rsp = await self.ipmicmd.raw_command(0x32, 0xc5, data=[1])
             except Exception:
                 rsp = {'data': [1]}
             rsp['data'] = bytearray(rsp['data'])
             if rsp['data'][0] == 2:  # shared io
                 try:
-                    rsp = self.ipmicmd.xraw_command(0x32, 0xa7, data=[bay - 1])
+                    rsp = await self.ipmicmd.raw_command(0x32, 0xa7, data=[bay - 1])
                 except Exception:
                     raise Exception('Shared IO detected trying to reseat {}, '
                                     'but unable to determine status of '
@@ -773,17 +773,17 @@ class SMMClient(object):
                     raise Exception('Unable to reseat bay {0} due to bay {1} '
                                     'being on with shared IO'.format(
                                         bay, bay - 1))
-        self.ipmicmd.xraw_command(netfn=0x32, command=0xa4,
+        await self.ipmicmd.raw_command(netfn=0x32, command=0xa4,
                                   data=[bay, 2])
 
-    def get_diagnostic_data(self, savefile, progress=None, autosuffix=False,
+    async def get_diagnostic_data(self, savefile, progress=None, autosuffix=False,
                             variant=None):
         if variant == 6:
             raise Exception('Service data not supported on FPC')
-        rsp = self.ipmicmd.xraw_command(netfn=0x32, command=0xb1, data=[0])
+        rsp = await self.ipmicmd.raw_command(netfn=0x32, command=0xb1, data=[0])
         if bytearray(rsp['data'])[0] != 0:
             raise Exception("Service data generation already in progress")
-        rsp = self.ipmicmd.xraw_command(netfn=0x34, command=0x12, data=[0])
+        rsp = await self.ipmicmd.raw_command(netfn=0x34, command=0x12, data=[0])
         if bytearray(rsp['data'])[0] != 0:
             raise Exception("Service data generation already in progress")
         rsp['data'] = b'\x01'
@@ -795,7 +795,7 @@ class SMMClient(object):
             initpct += 3.0
             if initpct > 99.0:
                 initpct = 99.0
-            rsp = self.ipmicmd.xraw_command(netfn=0x34, command=0x12, data=[1])
+            rsp = await self.ipmicmd.raw_command(netfn=0x34, command=0x12, data=[1])
             if progress:
                 progress({'phase': 'initializing', 'progress': initpct})
         wc = self.wc
@@ -821,9 +821,9 @@ class SMMClient(object):
     async def process_fru(self, fru):
         smmv1 = self.smm_variant & 0xf0 == 0
         # TODO(jjohnson2): can also get EIOM, SMM, and riser data if warranted
-        snum = bytes(await self.ipmicmd.xraw_command(
+        snum = bytes(await self.ipmicmd.raw_command(
             netfn=0x32, command=0xb0, data=(5, 1))['data'][:])
-        mnum = bytes(await self.ipmicmd.xraw_command(
+        mnum = bytes(await self.ipmicmd.raw_command(
             netfn=0x32, command=0xb0, data=(5, 0))['data'][:])
         if not smmv1:
             snum = snum[2:]
@@ -1075,8 +1075,8 @@ class SMMClient(object):
         psuidx = int(component.replace('PSU ', ''))
         return self.get_psu_info(ipmicmd, psuidx)
 
-    def get_psu_info(self, ipmicmd, psunum):
-        psuinfo = ipmicmd.xraw_command(0x34, 0x6, data=(psunum,))
+    async def get_psu_info(self, ipmicmd, psunum):
+        psuinfo = await ipmicmd.raw_command(0x34, 0x6, data=(psunum,))
         psuinfo = bytearray(psuinfo['data'])
         psutype = struct.unpack('<H', psuinfo[23:25])[0]
         psui = {}

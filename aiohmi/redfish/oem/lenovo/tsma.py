@@ -345,7 +345,7 @@ class TsmHandler(generic.OEMHandler):
         if status != 200:
             raise Exception(repr(rsp))
 
-    def get_firmware_inventory(self, components, raisebypass=True,
+    async def get_firmware_inventory(self, components, raisebypass=True,
                                ipmicmd=None):
         wc = self.wc
         fwinf, status = wc.grab_json_response_with_status(
@@ -381,10 +381,10 @@ class TsmHandler(generic.OEMHandler):
                     lxpminf['main'], subver)
             yield ('LXPM', lxpmres)
         if ipmicmd:
-            rsp = ipmicmd.xraw_command(0x3c, 0x40, data=(7, 2))
+            rsp = await ipmicmd.raw_command(0x3c, 0x40, data=(7, 2))
             buildid = cstr_to_str(bytes(rsp['data']))
             yield ('LXPM Windows Driver Bundle', {'build': buildid})
-            rsp = ipmicmd.xraw_command(0x3c, 0x40, data=(7, 3))
+            rsp = await ipmicmd.raw_command(0x3c, 0x40, data=(7, 3))
             buildid = cstr_to_str(bytes(rsp['data']))
             yield ('LXPM Linux Driver Bundle', {'build': buildid})
         name = 'TSM'

@@ -335,11 +335,11 @@ class IMMClient(object):
             else:
                 self.fwo[key]['new_value'] = newnewvalues
 
-    def clear_bmc_configuration(self):
-        self.ipmicmd.xraw_command(0x2e, 0xcc,
+    async def clear_bmc_configuration(self):
+        await self.ipmicmd.raw_command(0x2e, 0xcc,
                                   data=(0x5e, 0x2b, 0, 0xa, 1, 0xff, 0, 0, 0))
 
-    def set_property(self, propname, value):
+    async def set_property(self, propname, value):
         if not isinstance(value, int) or value > 255:
             raise Exception('Unsupported property value')
         propname = propname.encode('utf-8')
@@ -348,18 +348,18 @@ class IMMClient(object):
         cmdlen = len(propname) + 4  # the flags byte, two tlv bytes, and value
         cdata = bytearray([3, 0, cmdlen, 1, proplen]) + propname
         cdata += bytearray([valuelen, value])
-        rsp = self.ipmicmd.xraw_command(netfn=0x3a, command=0xc4, data=cdata)
+        rsp = await self.ipmicmd.raw_command(netfn=0x3a, command=0xc4, data=cdata)
         rsp['data'] = bytearray(rsp['data'])
         if rsp['data'][0] != 0:
             raise Exception('Unknown response setting property: {0}'.format(
                 rsp['data'][0]))
 
-    def get_property(self, propname):
+    async def get_property(self, propname):
         propname = propname.encode('utf-8')
         proplen = len(propname) | 0b10000000
         cmdlen = len(propname) + 1
         cdata = bytearray([0, 0, cmdlen, proplen]) + propname
-        rsp = self.ipmicmd.xraw_command(netfn=0x3a, command=0xc4, data=cdata)
+        rsp = await self.ipmicmd.raw_command(netfn=0x3a, command=0xc4, data=cdata)
         rsp['data'] = bytearray(rsp['data'])
         if rsp['data'][0] != 0:
             return None
@@ -833,7 +833,7 @@ class IMMClient(object):
         self.weblogout()
         return hwmap
 
-    def get_firmware_inventory(self, bmcver, components, category):
+    async def get_firmware_inventory(self, bmcver, components, category):
         # First we fetch the system firmware found in imm properties
         # then check for agentless, if agentless, get adapter info using
         # https, using the caller TLS verification scheme
@@ -841,7 +841,7 @@ class IMMClient(object):
         if 'core' in components:
             category = 'core'        
         if not components or set(('imm', 'xcc', 'bmc', 'core')) & components:
-            rsp = self.ipmicmd.xraw_command(netfn=0x3a, command=0x50)
+            rsp = await self.ipmicmd.raw_command(netfn=0x3a, command=0x50)
             immverdata = self.parse_imm_buildinfo(rsp['data'])
             bmcmajor, bmcminor = [int(x) for x in bmcver.split('.')]
             bmcver = '{0}.{1:02d}'.format(bmcmajor, bmcminor)
@@ -882,7 +882,7 @@ class IMMClient(object):
                 yield ('UEFI Pending Update', bdata)
         if not components or set(('fpga', 'core')) & components:
             try:
-                fpga = self.ipmicmd.xraw_command(netfn=0x3a, command=0x6b,
+                fpga = await self.ipmicmd.raw_command(netfn=0x3a, command=0x6b,
                                                  data=(0,))
                 fpga = '{0}.{1}.{2}'.format(*bytearray(fpga['data']))
                 yield ('FPGA', {'version': fpga})
@@ -1084,7 +1084,7 @@ class XCCClient(IMMClient):
                     mappings.append('{0}:{1}'.format(src, dst))
             settings['usb_forwarded_ports'] = {'value': ','.join(mappings)}
         try:
-            enclosureinfo = await self.ipmicmd.xraw_command(0x3a, 0xf1, data=[0])
+            enclosureinfo = await self.ipmicmd.raw_command(0x3a, 0xf1, data=[0])
         except pygexc.IpmiException:
             return settings
         settings['smm'] = {
@@ -1130,11 +1130,11 @@ class XCCClient(IMMClient):
             currval = changeset[key].get('value', None)
             if 'smm'.startswith(key.lower()):
                 if 'enabled'.startswith(currval.lower()):
-                    await self.ipmicmd.xraw_command(0x3a, 0xf1, data=[1])
+                    await self.ipmicmd.raw_command(0x3a, 0xf1, data=[1])
                 elif 'disabled'.startswith(currval.lower()):
-                    await self.ipmicmd.xraw_command(0x3a, 0xf1, data=[2])
+                    await self.ipmicmd.raw_command(0x3a, 0xf1, data=[2])
                 elif 'ipmi'.startswith(currval.lower()):
-                    await self.ipmicmd.xraw_command(0x3a, 0xf1, data=[4])
+                    await self.ipmicmd.raw_command(0x3a, 0xf1, data=[4])
             elif key.lower() in self.rulemap:
                 ruleset[self.rulemap[key.lower()]] = changeset[key]['value']
                 if key.lower() == 'password_expiration':
@@ -1821,7 +1821,7 @@ class XCCClient(IMMClient):
         components = set(components)
         if category in ('all', 'core') and (not components
                 or set(('core', 'imm', 'bmc', 'xcc')) & components):
-            rsp = await self.ipmicmd.xraw_command(netfn=0x3a, command=0x50)
+            rsp = await self.ipmicmd.raw_command(netfn=0x3a, command=0x50)
             immverdata = self.parse_imm_buildinfo(rsp['data'])
             bmcmajor, bmcminor = [int(x) for x in bmcver.split('.')]
             bmcver = '{0}.{1:02d}'.format(bmcmajor, bmcminor)
@@ -1904,8 +1904,8 @@ class XCCClient(IMMClient):
                         yield ('LXUM', firminfo)
         if category in ('all', 'core') and (not components or set(('core', 'fpga')) in components):
             try:
-                fpga = self.ipmicmd.xraw_command(netfn=0x3a, command=0x6b,
-                                                 data=(0,))
+                fpga = await self.ipmicmd.raw_command(netfn=0x3a, command=0x6b,
+                                                      data=(0,))
                 fpga = '{0}.{1}.{2}'.format(
                     *struct.unpack('BBB', fpga['data']))
                 yield 'FPGA', {'version': fpga}

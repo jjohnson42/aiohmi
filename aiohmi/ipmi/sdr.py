@@ -665,7 +665,7 @@ class SDR(object):
 
     async def read_info(self):
         # first, we want to know the device id
-        rsp = await self.ipmicmd.xraw_command(netfn=6, command=1)
+        rsp = await self.ipmicmd.raw_command(netfn=6, command=1)
         rsp['data'] = bytearray(rsp['data'])
         self.device_id = rsp['data'][0]
         self.device_rev = rsp['data'][1] & 0b111
@@ -701,7 +701,7 @@ class SDR(object):
         return rsp['data'][0] + (rsp['data'][1] << 8)
 
     async def get_sdr(self):
-        repinfo = await self.ipmicmd.xraw_command(netfn=0x0a, command=0x20)
+        repinfo = await self.ipmicmd.raw_command(netfn=0x0a, command=0x20)
         repinfo['data'] = bytearray(repinfo['data'])
         if (repinfo['data'][0] != 0x51):
             # we only understand SDR version 51h, the only version defined
