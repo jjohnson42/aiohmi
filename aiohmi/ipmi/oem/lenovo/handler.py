@@ -1297,7 +1297,7 @@ class OEMHandler(generic.OEMHandler):
             return await self.immhandler.get_health(summary)
         return super(OEMHandler, self).get_health(summary)
 
-    def get_licenses(self):
+    async def get_licenses(self):
         if self.has_xcc:
             async for x in self.immhandler.get_licenses():
                 yield x
