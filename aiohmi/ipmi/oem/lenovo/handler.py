@@ -508,7 +508,7 @@ class OEMHandler(generic.OEMHandler):
             for compname in self.oem_inventory_info:
                 yield (compname, self.oem_inventory_info[compname])
         elif await self.has_imm():
-            for inv in self.immhandler.get_hw_inventory():
+            async for inv in self.immhandler.get_hw_inventory():
                 yield inv
         elif await self.is_fpc():
             async for compname in self.smmhandler.get_inventory_descriptions(
@@ -518,7 +518,7 @@ class OEMHandler(generic.OEMHandler):
 
     async def get_sensor_data(self):
         if await self.has_imm():
-            for name in self.immhandler.get_oem_sensor_names(self.ipmicmd):
+            async for name in self.immhandler.get_oem_sensor_names(self.ipmicmd):
                 yield self.immhandler.get_oem_sensor_reading(name,
                                                              self.ipmicmd)
         elif await self.is_fpc():
