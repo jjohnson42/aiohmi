@@ -1299,8 +1299,10 @@ class OEMHandler(generic.OEMHandler):
 
     def get_licenses(self):
         if self.has_xcc:
-            return self.immhandler.get_licenses()
-        return super(OEMHandler, self).get_licenses()
+            async for x in self.immhandler.get_licenses():
+                yield x
+        async for x in super(OEMHandler, self).get_licenses():
+            yield x
 
     def get_user_expiration(self, uid):
         if self.has_xcc:

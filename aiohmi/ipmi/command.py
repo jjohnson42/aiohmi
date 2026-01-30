@@ -2282,7 +2282,8 @@ class Command(object):
     
     async def get_licenses(self):
         await self.oem_init()
-        return await self._oem.get_licenses()
+        async for x in self._oem.get_licenses():
+            yield x
 
     async def delete_license(self, name):
         await self.oem_init()
