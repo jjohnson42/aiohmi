@@ -253,11 +253,11 @@ class OEMHandler(generic.OEMHandler):
             return self.immhandler.get_storage_configuration()
         return super(OEMHandler, self).get_storage_configuration()
 
-    def get_video_launchdata(self):
-        if self.has_tsm:
-            return self.get_tsm_launchdata()
+    async def get_video_launchdata(self):
+        if await self.has_tsm():
+            return await self.get_tsm_launchdata()
 
-    def get_tsm_launchdata(self):
+    async def get_tsm_launchdata(self):
         pass
 
     def process_event(self, event, ipmicmd, seldata):
@@ -353,7 +353,7 @@ class OEMHandler(generic.OEMHandler):
         return None
 
     async def get_ntp_servers(self):
-        if self.has_tsm or self.has_ami or await self.has_asrock():
+        if await self.has_tsm() or await self.has_ami() or await self.has_asrock():
             srvs = []
             ntpres = await self.ipmicmd.raw_command(netfn=0x32, command=0xa7)
             srvs.append(ntpres['data'][1:129].rstrip('\x00'))
@@ -907,23 +907,23 @@ class OEMHandler(generic.OEMHandler):
         # 0 - Disable power capping
         else:
             statecode = 0
-        if self.has_tsm:
+        if await self.has_tsm():
             await self.ipmicmd.raw_command(netfn=0x3a, command=0x1a,
                                       data=(3, statecode))
             return True
 
     async def get_oem_remote_kvm_available(self):
-        if self.has_tsm:
+        if await self.has_tsm():
             rsp = await self.ipmicmd.raw_command(netfn=0x3a, command=0x13)
             return rsp['data'][0] == 0
         return False
 
     async def _restart_dns(self):
-        if self.has_tsm:
+        if await self.has_tsm():
             await self.ipmicmd.raw_command(netfn=0x32, command=0x6c, data=(7, 0))
 
     async def get_oem_domain_name(self):
-        if self.has_tsm:
+        if await self.has_tsm():
             name = ''
             for i in range(1, 5):
                 rsp = await self.ipmicmd.raw_command(netfn=0x32, command=0x6b,
@@ -931,10 +931,10 @@ class OEMHandler(generic.OEMHandler):
                 name += rsp['data'][:]
             return name.rstrip('\x00')
         elif await self.is_fpc():
-            return self.smmhandler.get_domain()
+            return await self.smmhandler.get_domain()
 
     async def set_oem_domain_name(self, name):
-        if self.has_tsm:
+        if await self.has_tsm():
             # set the domain name length
             data = [3, 0, 0, 0, 0, len(name)]
             await self.ipmicmd.raw_command(netfn=0x32, command=0x6c, data=data)
@@ -1022,7 +1022,7 @@ class OEMHandler(generic.OEMHandler):
                                            self.ipmicmd.ipmi_session.password)
 
     async def add_extra_net_configuration(self, netdata, channel=None):
-        if self.has_tsm:
+        if await self.has_tsm():
             ipv6_addr = await self.ipmicmd.raw_command(
                 netfn=0x0c, command=0x02,
                 data=(0x01, 0xc5, 0x00, 0x00))["data"][1:]
@@ -1161,12 +1161,12 @@ class OEMHandler(generic.OEMHandler):
                                   data=(1, 1))
 
     async def attach_remote_media(self, url, username, password):
-        if self.has_imm:
+        if await self.has_imm():
             await self.immhandler.attach_remote_media(url, username, password)
         elif self.has_tsma:
             return await self.tsmahandler.attach_remote_media(
                 url, username, password, None)
-        elif self.has_megarac:
+        elif await self.has_megarac():
             proto, host, path = util.urlsplit(url)
             if proto == 'smb':
                 proto = 'cifs'
@@ -1188,7 +1188,7 @@ class OEMHandler(generic.OEMHandler):
                     raise
 
     async def get_update_status(self):
-        if self.is_fpc or self.has_tsma:
+        if await self.is_fpc() or self.has_tsma:
             return "ready"
         if await self.has_xcc():
             return await self.immhandler.get_update_status()
@@ -1332,7 +1332,7 @@ class OEMHandler(generic.OEMHandler):
 
         :param uid: User ID.
         """
-        if self.has_tsm:
+        if await self.has_tsm():
             await self.ipmicmd.raw_command(netfn=0x32, command=0xa3, data=(
                 uid, 0x03, 0x00, 0x00, 0x00))
             return True

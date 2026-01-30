@@ -734,24 +734,24 @@ class IMMClient(object):
                 pass
             self._wc = None
 
-    def hardware_inventory_map(self):
+    async def hardware_inventory_map(self):
         hwmap = self.get_cached_data('lenovo_cached_hwmap')
         if hwmap:
             return hwmap
         hwmap = {}
-        enclosureuuid = self.get_property('/v2/ibmc/smm/chassis/uuid')
+        enclosureuuid = await self.get_property('/v2/ibmc/smm/chassis/uuid')
         if enclosureuuid:
-            bay = hex(int(self.get_property('/v2/cmm/sp/7'))).replace(
+            bay = hex(int(await self.get_property('/v2/cmm/sp/7'))).replace(
                 '0x', '')
-            serial = self.get_property('/v2/ibmc/smm/chassis/sn')
-            model = self.get_property('/v2/ibmc/smm/chassis/mtm')
+            serial = await self.get_property('/v2/ibmc/smm/chassis/sn')
+            model = await self.get_property('/v2/ibmc/smm/chassis/mtm')
             hwmap['Enclosure'] = {
                 'UUID': fixup_uuid(enclosureuuid),
                 'Bay': bay,
                 'Model': fixup_str(model),
                 'Serial': fixup_str(serial),
             }
-        for disk in self.disk_inventory(mode=1):  # hardware mode
+        async for disk in self.disk_inventory(mode=1):  # hardware mode
             hwmap[disk[0]] = disk[1]
         adapterdata = self.get_cached_data('lenovo_cached_adapters')
         if not adapterdata:
@@ -759,7 +759,7 @@ class IMMClient(object):
                 raise pygexc.TemporaryError(
                     'Cannot read extended inventory during firmware update')
             if self.wc:
-                adapterdata = self.wc.grab_json_response(
+                adapterdata = await self.wc.grab_json_response(
                     self.ADP_URL, referer=self.adp_referer)
                 if adapterdata:
                     self.datacache['lenovo_cached_adapters'] = (
