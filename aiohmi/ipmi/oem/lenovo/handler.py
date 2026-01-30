@@ -490,7 +490,7 @@ class OEMHandler(generic.OEMHandler):
         return False
 
     async def get_oem_inventory_descriptions(self):
-        if await self.has_tsm() or self.has_ami or await self.has_asrock():
+        if await self.has_tsm() or await self.has_ami() or await self.has_asrock():
             # Thinkserver with TSM
             if not self.oem_inventory_info:
                 await self._collect_tsm_inventory()
@@ -503,7 +503,7 @@ class OEMHandler(generic.OEMHandler):
         return ()
 
     async def get_oem_inventory(self):
-        if await self.has_tsm() or self.has_ami or await self.has_asrock():
+        if await self.has_tsm() or await self.has_ami() or await self.has_asrock():
             await self._collect_tsm_inventory()
             for compname in self.oem_inventory_info:
                 yield (compname, self.oem_inventory_info[compname])
@@ -526,7 +526,7 @@ class OEMHandler(generic.OEMHandler):
                                                    self._fpc_variant):
                 yield nextscale.get_sensor_reading(name, self.ipmicmd,
                                                    self._fpc_variant)
-        elif self.has_ami:
+        elif await self.has_ami():
             self.get_ami_sensor_data()
 
     async def get_sensor_descriptions(self):
@@ -535,7 +535,7 @@ class OEMHandler(generic.OEMHandler):
         elif await self.is_fpc():
             return nextscale.get_sensor_descriptions(
                 self.ipmicmd, self._fpc_variant)
-        elif self.has_ami:
+        elif await self.has_ami():
             self.get_ami_sensor_descriptions()
         return ()
 
@@ -546,12 +546,12 @@ class OEMHandler(generic.OEMHandler):
         elif await self.is_fpc():
             return nextscale.get_sensor_reading(sensorname, self.ipmicmd,
                                                 self._fpc_variant)
-        elif self.has_ami:
+        elif await self.has_ami():
             self.get_ami_sensor_reading(sensorname)
         return ()
 
     async def get_inventory_of_component(self, component):
-        if await self.has_tsm() or self.has_ami or await self.has_asrock():
+        if await self.has_tsm() or await self.has_ami() or await self.has_asrock():
             await self._collect_tsm_inventory()
             return await self.oem_inventory_info.get(component, None)
         if await self.has_imm():
@@ -580,7 +580,7 @@ class OEMHandler(generic.OEMHandler):
                 continue
             if (catspec.get("workaround_bmc_bug", False)
                     and catspec["workaround_bmc_bug"](
-                        "ami" if self.has_ami else "lenovo")):
+                        "ami" if await self.has_ami() else "lenovo")):
                 rsp = None
                 cmd = self.get_cmd_type(catid, catspec)
                 tmp_command = dict(cmd)
@@ -654,8 +654,8 @@ class OEMHandler(generic.OEMHandler):
         led_set = leds
         led_set_status = led_status
 
-        asrock = self.has_asrock
-        if self.has_ami:
+        asrock = await self.has_asrock()
+        if await self.has_ami():
             cmd = 0x05
             led_set = ami_leds
             led_set_status = ami_led_status
@@ -690,7 +690,7 @@ class OEMHandler(generic.OEMHandler):
     async def set_identify(self, on, duration, blink):
         if on and not duration and self.is_sd350:
             await self.ipmicmd.raw_command(netfn=0x3a, command=6, data=(1, 1))
-        elif self.has_xcc:
+        elif await self.has_xcc():
             await self.immhandler.set_identify(on, duration, blink)
         else:
             raise pygexc.UnsupportedFunctionality()
@@ -729,7 +729,7 @@ class OEMHandler(generic.OEMHandler):
             except (AttributeError, KeyError, IndexError):
                 pass
             return fru
-        elif self.has_imm:
+        elif await self.has_imm():
             fru['oem_parser'] = 'lenovo'
             try:
                 bextra = fru['board_extra']
@@ -760,16 +760,16 @@ class OEMHandler(generic.OEMHandler):
                         idx = idx + 6
             except (AttributeError, KeyError, IndexError):
                 pass
-            if self.has_xcc and name and name.startswith('PSU '):
+            if await self.has_xcc() and name and name.startswith('PSU '):
                 self.immhandler.augment_psu_info(fru, name)
-            if (self.has_xcc and 'memory_type' in fru
+            if (await self.has_xcc() and 'memory_type' in fru
                     and fru['memory_type'] == 'Unknown'):
                 await self.immhandler.fetch_dimm(name, fru)
             return fru
         elif await self.is_fpc() and await self.is_fpc() != 6:  # SMM variant
             fru['oem_parser'] = 'lenovo'
             return await self.smmhandler.process_fru(fru)
-        elif self.has_asrock:
+        elif await self.has_asrock():
             fru['oem_parser'] = 'lenovo'
             # ASRock RS160 TS460 lays out specific interpretation of the
             # board extra fields
