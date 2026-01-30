@@ -1303,7 +1303,7 @@ class Command(object):
             self._ipv6support = rsp['code'] == 0
         return self._ipv6support
 
-    def set_alert_destination(self, ip=None, acknowledge_required=None,
+    async def set_alert_destination(self, ip=None, acknowledge_required=None,
                               acknowledge_timeout=None, retries=None,
                               destination=0, channel=None):
         """Configure one or more parameters of an alert destination
@@ -1324,15 +1324,15 @@ class Command(object):
         """
         self.oem_init()
         if hasattr(self._oem, 'set_alert_destination'):
-            self._oem.set_alert_destination(ip)
+            await self._oem.set_alert_destination(ip)
             return
         if channel is None:
-            channel = self.get_network_channel()
+            channel = await self.get_network_channel()
 
         if (acknowledge_required is not None
                 or retries is not None
                 or acknowledge_timeout is not None):
-            currtype = self.raw_command(netfn=0xc, command=2, data=(
+            currtype = await self.raw_command(netfn=0xc, command=2, data=(
                 channel, 18, destination, 0))
             if currtype['data'][0] != b'\x11':
                 raise exc.PyghmiException("Unknown parameter format")
