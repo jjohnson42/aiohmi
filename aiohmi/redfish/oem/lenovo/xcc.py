@@ -1172,7 +1172,7 @@ class OEMHandler(generic.OEMHandler):
         if status == 200:
             nonce = rsp.get('nonce', None)
             headers['Content-Security-Policy'] = 'nonce={0}'.format(nonce)
-        rspdata, status = await wc.grab_json_response_with_status('/api/login', adata, headers)
+        rspdata, status = await wc.grab_json_response_with_status('/api/login', adata, headers=headers)
         if status == 200:
             wc.set_header('Content-Type', 'application/json')
             wc.set_header('Authorization', 'Bearer ' + rspdata['access_token'])
