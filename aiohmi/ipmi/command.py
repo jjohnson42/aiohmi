@@ -2161,7 +2161,7 @@ class Command(object):
 
         return True
 
-    def get_firmware(self, components=(), category=None):
+    async def get_firmware(self, components=(), category=None):
         """Retrieve OEM Firmware information"""
 
         await self.oem_init()
