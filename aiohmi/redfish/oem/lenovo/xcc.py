@@ -1693,10 +1693,12 @@ class OEMHandler(generic.OEMHandler):
             if filename:
                 url = '/download/' + filename
                 savefile = os.path.join(directory, filename)
-                fd = webclient.FileDownloader(wc, url, savefile)
-                fd.start()
-                while fd.isAlive():
-                    fd.join(1)
+                fd = webclient.make_downloader(wc, url, savefile)
+                while fd.dltask and not fd.dltask.done():
+                    try:
+                        await fd.join(1)
+                    except asyncio.TimeoutError:
+                        pass
                     await self._refresh_token()
                 yield savefile
 
