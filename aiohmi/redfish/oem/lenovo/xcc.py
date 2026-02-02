@@ -827,8 +827,9 @@ class OEMHandler(generic.OEMHandler):
 
     async def _refresh_token_wc(self, wc):
         await wc.grab_json_response('/api/providers/identity')
-        if '_csrf_token' in wc.cookies:
-            wc.set_header('X-XSRF-TOKEN', wc.cookies['_csrf_token'])
+        for cookie in wc.cookies:
+            if cookie.name == '_csrf_token':
+                wc.set_header('X-XSRF-TOKEN', cookie.value)
             wc.vintage = util._monotonic_time()
 
     def _make_available(self, disk, realcfg):
@@ -1178,8 +1179,10 @@ class OEMHandler(generic.OEMHandler):
             wc.set_header('Authorization', 'Bearer ' + rspdata['access_token'])
             wc.set_header('Referer', referer)
             wc.set_header('Host', 'xcc')
-            if '_csrf_token' in wc.cookies:
-                wc.set_header('X-XSRF-TOKEN', wc.cookies['_csrf_token'])
+            for cookie in wc.cookies:
+                if cookie.key.lower() == '_csrf_token':
+                    wc.set_header('X-XSRF-TOKEN', cookie.value)
+                    break
             return wc
 
     async def grab_redfish_response_with_status(self, url, body=None, method=None):

@@ -176,7 +176,7 @@ class WebConnection:
             self.ssl = None
         self.verifycallback = verifycallback
         self.stdheaders = {}
-        self.cookies = CookieJar(quote_cookie=False)
+        self.cookies = CookieJar(quote_cookie=False, unsafe=True)
 
     def set_header(self, key, value):
         self.stdheaders[key] = value
@@ -185,7 +185,7 @@ class WebConnection:
         newwc = WebConnection(self.host, self.port,
                               verifycallback=self.verifycallback)
         newwc.stdheaders = self.stdheaders.copy()
-        newwc.cookies = CookieJar(quote_cookie=False)
+        newwc.cookies = CookieJar(quote_cookie=False, unsafe=True)
         for cookie in self.cookies:
             newwc.cookies.update_cookies(
                 {cookie.key: cookie.value}, response_url=f'https://{self.host}:{self.port}/')
