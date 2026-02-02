@@ -1574,7 +1574,8 @@ class Command(object):
                 'Not allowed to overwrite existing file: {0}'.format(
                     directory))
         oem = await self.oem()
-        return await oem.save_licenses(directory, self)
+        async for lic in oem.save_licenses(directory, self):
+            yield lic
 
     async def apply_license(self, filename, progress=None, data=None):
         oem = await self.oem()

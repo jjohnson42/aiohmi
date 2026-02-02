@@ -16,6 +16,7 @@
 # sake of typical internal management devices.  Compatibility back to python
 # 2.6 as is found in commonly used enterprise linux distributions.
 
+import asyncio
 import base64
 import copy
 import gzip
@@ -86,25 +87,56 @@ class FileUploader(threading.Thread):
             except Exception:
                 pass
             raise
+class Downloader:
+    def __init__(self, filehandle):
+        self.contentlen = None
+        self._filehandle = filehandle
+        self.dltask = None
 
+    def get_progress(self):
+        if self.contentlen is None:
+            return -0.5
+        return float(self._filehandle.tell()) / float(self.contentlen)
+    
+    async def join(self, timeout=None):
+        if self.dltask is None:
+            return
+def make_downloader(webconn, url, dlfile):
+        """
+        Create a Downloader and start an asynchronous download task.
 
-class FileDownloader(threading.Thread):
+        This function immediately schedules the download to run in the
+        background using asyncio.create_task(). Callers should perform any
+        necessary setup (e.g., file preparation, callbacks) before invoking
+        this function, and then use the returned Downloader instance to
+        monitor progress or await completion via Downloader.join().
+        """
+            await self.dltask
+        else:
+            await asyncio.wait_for(self.dltask, timeout=timeout)
 
-    def __init__(self, webclient, url, savefile):
-        self.wc = webclient
-        self.url = url
-        self.savefile = savefile
-        self.exc = None
-        super(FileDownloader, self).__init__()
-        if not hasattr(self, 'isAlive'):
-            self.isAlive = self.is_alive
+def make_downloader(webconn, url, dlfile):
+        if isinstance(dlfile, str):
+            dlfile = open(dlfile, 'wb')
+        dler = Downloader(dlfile)
+        dler.dltask = asyncio.create_task(download(webconn, url, dlfile, dler))
+        return dler
 
-    def run(self):
-        try:
-            self.wc.download(self.url, self.savefile)
-        except Exception as e:
-            self.exc = e
-
+async def download(webconn, url, dlfile, downloader):
+    dlheaders = webconn.stdheaders.copy()
+    if 'Accept-Encoding' in dlheaders:
+        del dlheaders['Accept-Encoding']
+    async with aiohttp.ClientSession(f'https://{webconn.host}:{webconn.port}', cookie_jar=webconn.cookies) as session:
+        async with session.get(url, headers=dlheaders) as rsp:
+            content_length = rsp.headers.get('content-length')
+            try:
+                downloader.contentlen = int(content_length) if content_length is not None else None
+            except (TypeError, ValueError):
+                downloader.contentlen = None
+            async for chunk in rsp.content.iter_chunked(16384):
+                dlfile.write(chunk)
+    dlfile.close()
+    
 
 def get_upload_form(filename, data, formname, otherfields, boundary=BND):
     if not boundary:

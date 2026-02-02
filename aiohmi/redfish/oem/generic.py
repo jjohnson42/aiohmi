@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 from fnmatch import fnmatch
 import json
 import os
@@ -1632,10 +1633,8 @@ class OEMHandler(object):
             if dload:
                 filename = os.path.basename(dload)
                 savefile = os.path.join(directory, filename)
-                fd = webclient.FileDownloader(fishclient.wc, dload, savefile)
-                fd.start()
-                while fd.isAlive():
-                    fd.join(1)
+                dler = webclient.make_downloader(fishclient.wc, dload, savefile)
+                await dler.join()
                 yield savefile
 
     async def apply_license(self, filename, fishclient, progress=None, data=None):
