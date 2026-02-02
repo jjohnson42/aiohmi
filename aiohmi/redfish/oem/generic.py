@@ -1589,12 +1589,12 @@ class OEMHandler(object):
         raise exc.UnsupportedFunctionality(
             'Retrieving diagnostic data is not implemented for this platform')
 
-    def _get_license_collection_url(self, fishclient):
-        overview = fishclient._do_web_request('/redfish/v1/')
+    async def _get_license_collection_url(self, fishclient):
+        overview = await fishclient._do_web_request('/redfish/v1/')
         licsrv = overview.get('LicenseService', {}).get('@odata.id', None)
         if not licsrv:
             raise exc.UnsupportedFunctionality()
-        lcs = fishclient._do_web_request(licsrv)
+        lcs = await fishclient._do_web_request(licsrv)
         licenses = lcs.get('Licenses', {}).get('@odata.id',None)
         if not licenses:
             raise exc.UnsupportedFunctionality()
@@ -1604,30 +1604,30 @@ class OEMHandler(object):
         raise exc.UnsupportedFunctionality()
 
 
-    def _get_licenses(self, fishclient):
-        licenses = self._get_license_collection_url(fishclient)
-        collection = fishclient._do_web_request(licenses)
+    async def _get_licenses(self, fishclient):
+        licenses = await self._get_license_collection_url(fishclient)
+        collection = await fishclient._do_web_request(licenses)
         alllic = [x['@odata.id'] for x in collection.get('Members', [])]
         for license in alllic:
-            licdet = fishclient._do_web_request(license)
+            licdet = await fishclient._do_web_request(license)
             state = licdet.get('Status', {}).get('State')
             if state != 'Enabled':
                 continue
             yield licdet
 
-    def get_licenses(self, fishclient):
-        for licdet in self._get_licenses(fishclient):
+    async def get_licenses(self, fishclient):
+        async for licdet in self._get_licenses(fishclient):
             name = licdet['Name']
             yield {'name': name, 'state': 'Active'}
 
-    def delete_license(self, name, fishclient):
-        for licdet in self._get_licenses(fishclient):
+    async def delete_license(self, name, fishclient):
+        async for licdet in self._get_licenses(fishclient):
             lname = licdet['Name']
             if name == lname:
-                fishclient._do_web_request(licdet['@odata.id'], method='DELETE')
+                await fishclient._do_web_request(licdet['@odata.id'], method='DELETE')
 
-    def save_licenses(self, directory, fishclient):
-        for licdet in self._get_licenses(fishclient):
+    async def save_licenses(self, directory, fishclient):
+        async for licdet in self._get_licenses(fishclient):
             dload = licdet.get('DownloadURI', None)
             if dload:
                 filename = os.path.basename(dload)
@@ -1638,14 +1638,14 @@ class OEMHandler(object):
                     fd.join(1)
                 yield savefile
 
-    def apply_license(self, filename, fishclient, progress=None, data=None):
-        licenses = self._get_license_collection_url(fishclient)
+    async def apply_license(self, filename, fishclient, progress=None, data=None):
+        licenses = await self._get_license_collection_url(fishclient)
         if data is None:
             data = open(filename, 'rb')
         licdata = data.read()
         lic64 = base64.b64encode(licdata).decode()
         licinfo = {"LicenseString": lic64}
-        fishclient._do_web_request(licenses, licinfo)
+        await fishclient._do_web_request(licenses, licinfo)
 
 
     def get_user_expiration(self, uid):

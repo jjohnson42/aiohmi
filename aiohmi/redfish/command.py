@@ -1561,7 +1561,8 @@ class Command(object):
 
     async def get_licenses(self):
         oem = await self.oem()
-        return await oem.get_licenses(self)
+        async for lic in oem.get_licenses(self):
+            yield lic
 
     async def delete_license(self, name):
         oem = await self.oem()
