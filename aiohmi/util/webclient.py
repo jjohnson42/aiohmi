@@ -161,7 +161,7 @@ class WebConnection:
     def dupe(self):
         newwc = WebConnection(self.host, self.port,
                               verifycallback=self.verifycallback)
-        newwc.stdheaders = copy.deepcopy(self.stdheaders)
+        newwc.stdheaders = self.stdheaders.copy()
         newwc.cookies = CookieJar(quote_cookie=False)
         for cookie in self.cookies:
             newwc.cookies.update_cookies(
@@ -224,9 +224,9 @@ class WebConnection:
     async def grab_response_with_status(self, url, data=None, referer=None,
                                         headers=None, method=None, expect_type=None):
         if not headers:
-            headers = copy.deepcopy(self.stdheaders)
+            headers = self.stdheaders.copy()
         else:
-            headers = copy.deepcopy(headers)
+            headers = headers.copy()
         if referer:
             headers['referer'] = referer
         if not method:
@@ -254,36 +254,17 @@ class WebConnection:
                 else:
                     return await rsp.read(), rsp.status, rsp.headers
 
-    async def grab_rsp(self, url, data=None, referer=None, headers=None, method=None):
-        webclient = self.dupe()
-        if isinstance(data, dict):
-            data = json.dumps(data)
-        if data:
-            if not method:
-                method = 'POST'
-            await webclient.request(method, url, data, referer=referer,
-                                    headers=headers)
-        else:
-            if not method:
-                method = 'GET'
-            await webclient.request(method, url, referer=referer, headers=headers)
-        rsp = await webclient.getresponse()
-        return rsp
-
     async def download(self, url, file):
         """Download a file to filename or file object
 
         """
         if isinstance(file, str):
             file = open(file, 'wb')
-        webclient = self.dupe()
         dlheaders = self.stdheaders.copy()
         if 'Accept-Encoding' in dlheaders:
             del dlheaders['Accept-Encoding']
-        webclient.request('GET', url, headers=dlheaders)
-        rsp = webclient.getresponse()
         async with aiohttp.ClientSession(f'https://{self.host}:{self.port}', cookie_jar=self.cookies) as session:
-            async with session.get(url, headers=self.stdheaders) as rsp:
+            async with session.get(url, headers=dlheaders) as rsp:
                 self._currdl = rsp
                 self._dlfile = file
                 async for chunk in rsp.content.iter_chunked(16384):
