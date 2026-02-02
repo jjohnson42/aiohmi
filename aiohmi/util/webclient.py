@@ -101,16 +101,7 @@ class Downloader:
     async def join(self, timeout=None):
         if self.dltask is None:
             return
-def make_downloader(webconn, url, dlfile):
-        """
-        Create a Downloader and start an asynchronous download task.
-
-        This function immediately schedules the download to run in the
-        background using asyncio.create_task(). Callers should perform any
-        necessary setup (e.g., file preparation, callbacks) before invoking
-        this function, and then use the returned Downloader instance to
-        monitor progress or await completion via Downloader.join().
-        """
+        if timeout is None:
             await self.dltask
         else:
             await asyncio.wait_for(self.dltask, timeout=timeout)
