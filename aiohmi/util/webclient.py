@@ -110,23 +110,9 @@ def make_downloader(webconn, url, dlfile):
         if isinstance(dlfile, str):
             dlfile = open(dlfile, 'wb')
         dler = Downloader(dlfile)
-        dler.dltask = asyncio.create_task(download(webconn, url, dlfile, dler))
+        dler.dltask = asyncio.create_task(webconn.download(url, dlfile, dler))
         return dler
 
-async def download(webconn, url, dlfile, downloader):
-    dlheaders = webconn.stdheaders.copy()
-    if 'Accept-Encoding' in dlheaders:
-        del dlheaders['Accept-Encoding']
-    async with aiohttp.ClientSession(f'https://{webconn.host}:{webconn.port}', cookie_jar=webconn.cookies) as session:
-        async with session.get(url, headers=dlheaders) as rsp:
-            content_length = rsp.headers.get('content-length')
-            try:
-                downloader.contentlen = int(content_length) if content_length is not None else None
-            except (TypeError, ValueError):
-                downloader.contentlen = None
-            async for chunk in rsp.content.iter_chunked(16384):
-                dlfile.write(chunk)
-    dlfile.close()
     
 
 def get_upload_form(filename, data, formname, otherfields, boundary=BND):
@@ -277,23 +263,26 @@ class WebConnection:
                 else:
                     return await rsp.read(), rsp.status, rsp.headers
 
-    async def download(self, url, file):
+    async def download(self, url, dlfile, downloader=None):
         """Download a file to filename or file object
 
         """
-        if isinstance(file, str):
-            file = open(file, 'wb')
+        if isinstance(dlfile, str):
+            dlfile = open(dlfile, 'wb')
         dlheaders = self.stdheaders.copy()
         if 'Accept-Encoding' in dlheaders:
             del dlheaders['Accept-Encoding']
         async with aiohttp.ClientSession(f'https://{self.host}:{self.port}', cookie_jar=self.cookies) as session:
-            async with session.get(url, headers=dlheaders) as rsp:
-                self._currdl = rsp
-                self._dlfile = file
+            async with session.get(url, headers=dlheaders, ssl=self.ssl) as rsp:
+                if downloader:
+                    downloader.contentlen = rsp.headers.get('content-length', None)
+                    try:
+                        downloader.contentlen = int(downloader.contentlen)
+                    except Exception:
+                        downloader.contentlen = None
                 async for chunk in rsp.content.iter_chunked(16384):
-                    file.write(chunk)
-        self._currdl = None
-        file.close()
+                    dlfile.write(chunk)
+        dlfile.close()
 
     def get_download_progress(self):
         if not self._currdl:

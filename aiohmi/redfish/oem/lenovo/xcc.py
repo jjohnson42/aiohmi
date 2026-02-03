@@ -828,7 +828,7 @@ class OEMHandler(generic.OEMHandler):
     async def _refresh_token_wc(self, wc):
         await wc.grab_json_response('/api/providers/identity')
         for cookie in wc.cookies:
-            if cookie.name == '_csrf_token':
+            if cookie.key.lower() == '_csrf_token':
                 wc.set_header('X-XSRF-TOKEN', cookie.value)
             wc.vintage = util._monotonic_time()
 
