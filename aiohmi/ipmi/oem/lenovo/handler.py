@@ -871,7 +871,7 @@ class OEMHandler(generic.OEMHandler):
         elif self.has_tsma:
             return self.tsmahandler.get_firmware_inventory(
                 components, raisebypass=False, ipmicmd=self.ipmicmd)
-        return super(OEMHandler, self).get_oem_firmware(bmcver, components)
+        return super(OEMHandler, self).get_oem_firmware(bmcver, components, category)
 
     async def get_diagnostic_data(self, savefile, progress, autosuffix=False):
         if await self.has_xcc():
