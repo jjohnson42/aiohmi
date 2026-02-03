@@ -102,6 +102,25 @@ class OEMHandler(generic.OEMHandler):
             url = '/redfish/v1/Chassis/chassis1/Oem/Lenovo/Nodes/{}'.format(nodeid)
             await self._do_web_request(url, parms, method='PATCH')
 
+    async def _get_cpu_inventory(self, withids=False):
+        # Empty generator: no CPU inventory items for this OEM handler.
+        if False:
+            yield None
+
+    async def _get_mem_inventory(self, withids=False):
+        # Empty generator: no memory inventory items for this OEM handler.
+        if False:
+            yield None
+
+    async def _get_adp_inventory(self, withids=False, urls=None):
+        # Empty generator: no adapter inventory items for this OEM handler.
+        if False:
+            yield None
+
+    async def _get_disk_inventory(self, withids=False, urls=None):
+        # Empty generator: no disk inventory items for this OEM handler.
+        if False:
+            yield None
 
     async def get_bmc_configuration(self):
         settings = {}
