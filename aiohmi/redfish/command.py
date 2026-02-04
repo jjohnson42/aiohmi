@@ -1366,7 +1366,8 @@ class Command(object):
 
     async def list_media(self):
         oem = await self.oem()
-        return await oem.list_media(self)
+        async for res in oem.list_media(self):
+            yield res
 
     async def get_storage_configuration(self):
         """"Get storage configuration data

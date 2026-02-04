@@ -1000,13 +1000,13 @@ class OEMHandler(object):
         except AttributeError:
             self.password = password
 
-    def list_media(self, fishclient, cache=True):
-        bmcinfo = fishclient._do_web_request(fishclient._bmcurl, cache=cache)
+    async def list_media(self, fishclient, cache=True):
+        bmcinfo = await fishclient._do_web_request(fishclient._bmcurl, cache=cache)
         vmcoll = bmcinfo.get('VirtualMedia', {}).get('@odata.id', None)
         if vmcoll:
-            vmlist = fishclient._do_web_request(vmcoll, cache=cache)
+            vmlist = await fishclient._do_web_request(vmcoll, cache=cache)
             vmurls = [x['@odata.id'] for x in vmlist.get('Members', [])]
-            for vminfo in fishclient._do_bulk_requests(vmurls, cache=cache):
+            async for vminfo in fishclient._do_bulk_requests(vmurls, cache=cache):
                 vminfo = vminfo[0]
                 if vminfo.get('Image', None):
                     imageurl = vminfo['Image'].replace(
