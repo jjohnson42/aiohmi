@@ -1576,7 +1576,7 @@ class OEMHandler(object):
             }
         return res[0]
 
-    def get_diagnostic_data(self, savefile, progress=None, autosuffix=None):
+    async def get_diagnostic_data(self, savefile, progress=None, autosuffix=None):
         """Download diagnostic data about target to a file
 
         This should be a payload that the vendor's support team can use

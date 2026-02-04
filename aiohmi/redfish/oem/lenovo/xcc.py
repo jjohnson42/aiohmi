@@ -1645,16 +1645,16 @@ class OEMHandler(generic.OEMHandler):
         url = '/ffdc/{0}'.format(result['FileName'])
         if autosuffix and not savefile.endswith('.tzz'):
             savefile += '-{0}'.format(result['FileName'])
-        fd = webclient.FileDownloader(self.wc, url, savefile)
-        fd.start()
-        while fd.isAlive():
-            fd.join(1)
-            if progress and wc.get_download_progress():
+        fd = webclient.make_downloader(wc, url, savefile)
+        while fd.dltask and not fd.dltask.done():
+            try:
+                await fd.join(1)
+            except asyncio.TimeoutError:
+                pass
+            if progress and fd.get_progress() > 0:
                 progress({'phase': 'download',
-                          'progress': 100 * wc.get_download_progress()})
+                            'progress': 100 * fd.get_progress()})
             await self._refresh_token()
-        if fd.exc:
-            raise fd.exc
         if progress:
             progress({'phase': 'complete'})
         return savefile
