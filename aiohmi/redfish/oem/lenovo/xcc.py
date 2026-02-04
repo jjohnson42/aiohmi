@@ -1231,7 +1231,7 @@ class OEMHandler(generic.OEMHandler):
     async def upload_media(self, filename, progress=None, data=None):
         wc = await self.wc()
         numrdocs = 0
-        self._refresh_token()
+        await self._refresh_token()
         async for rdoc in self._list_rdoc():
             numrdocs += 1
             if rdoc.name == os.path.basename(filename):
