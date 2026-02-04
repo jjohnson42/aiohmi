@@ -38,7 +38,6 @@ import http.client as httplib
 import http.cookies as Cookie
 
 # Used as the separator for form data
-BND = b'TbqbLUSn0QFjx9gxiQLtgBK4Zu6ehLqtLs4JOBS50EgxXJ2yoRMhTrmRXxO1lkoAQdZx16'
 
 # We will frequently be dealing with the same data across many instances,
 # consolidate forms to single memory location to get benefits..
@@ -87,35 +86,83 @@ class FileUploader(threading.Thread):
             except Exception:
                 pass
             raise
+
+class Uploader:
+    def __init__(self, filename, data=None, formname=None,
+                 otherfields=(), formwrap=True):
+        self.uptask = None
+        self.rsp = ''
+        self.rspstatus = 500
+        self.filename = filename
+        if data:
+            self.data = data
+        else:
+            self.data = open(filename, 'rb')
+        self.formname = formname
+        self.otherfields = otherfields
+        self.ulheaders = {}
+        if formwrap:
+            guf = get_upload_form(
+                filename, self.data, formname, otherfields)
+            self._upbuffer = io.BytesIO(guf[0])
+            self._boundary = guf[1]
+            self.ulsize = len(uploadforms[filename][0])
+            self.ulheaders['Content-Type'] = 'multipart/form-data; boundary={0}'.format(
+                self._boundary.decode('utf-8'))
+            self.ulheaders['Content-Size'] = str(self.ulsize)
+        else:
+            canseek = True
+            try:
+                curroff = self.data.tell()
+            except Exception:
+                canseek = False
+                databtyes = self.data.read()
+                self.ulsize = len(databtyes)
+                self._upbuffer = io.BytesIO(databtyes)
+            if canseek:
+                self.data.seek(0, 2)
+                self.ulsize = self.data.tell() - curroff
+                self.data.seek(curroff, 0)
+                self._upbuffer = self.data
+        self.ulheaders['Content-Length'] = str(self.ulsize)
+        self.ulheaders['Content-Type'] = 'application/octet-stream'
+
 class Downloader:
     def __init__(self, filehandle):
         self.contentlen = None
+        self._completed = False
         self._filehandle = filehandle
         self.dltask = None
 
     def get_progress(self):
+        if self._completed:
+            return 1.0
         if self.contentlen is None:
             return -0.5
         return float(self._filehandle.tell()) / float(self.contentlen)
     
+    def mark_completed(self, fut):
+        self._completed = True
+
     async def join(self, timeout=None):
         if self.dltask is None:
             return
         if timeout is None:
             await self.dltask
         else:
-            await asyncio.wait_for(self.dltask, timeout=timeout)
+            await asyncio.wait_for(asyncio.shield(self.dltask), timeout=timeout)
 
 def make_downloader(webconn, url, dlfile):
         if isinstance(dlfile, str):
             dlfile = open(dlfile, 'wb')
         dler = Downloader(dlfile)
         dler.dltask = asyncio.create_task(webconn.download(url, dlfile, dler))
+        dler.dltask.add_done_callback(dler.mark_completed)
         return dler
 
     
 
-def get_upload_form(filename, data, formname, otherfields, boundary=BND):
+def get_upload_form(filename, data, formname, otherfields, boundary=None):
     if not boundary:
         boundary = base64.urlsafe_b64encode(os.urandom(54))[:66] 
     ffilename = filename.split('/')[-1]
