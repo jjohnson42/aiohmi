@@ -1250,7 +1250,10 @@ class OEMHandler(generic.OEMHandler):
             uploadtask = webclient.make_uploader(
                 wc, '/rdocupload', filename, data)
         while not uploadtask.completed():
-            await uploadtask.join(3)
+            try:
+                await uploadtask.join(3)
+            except asyncio.TimeoutError:
+                pass
             if newmode:
                 if progress:
                     progress({'phase': 'upload',
@@ -1262,12 +1265,12 @@ class OEMHandler(generic.OEMHandler):
                     progress({'phase': 'upload',
                             'progress': 100.0 * rsp['received'] / rsp['size']})
             await self._refresh_token()
-        statu, rsp, headers = uploadtask.get_response()    
+        rspstatus, rsp, headers = uploadtask.get_response()    
         if progress:
             progress({'phase': 'upload',
                       'progress': 100.0})
         if 'items' not in rsp or len(rsp['items']) == 0:
-            errmsg = repr(rsp) if rsp else repr(statu)
+            errmsg = repr(rsp) if rsp else repr(rspstatus)
             raise pygexc.PyghmiException('Failed to upload image: ' + errmsg)
         thepath = rsp['items'][0]['path']
         thename = rsp['items'][0]['name']
@@ -1338,31 +1341,33 @@ class OEMHandler(generic.OEMHandler):
                     {'HttpPushUriTargets':
                         ['/redfish/v1/UpdateService'
                          '/FirmwareInventory/BMC-Backup']}, method='PATCH')
-            uploadthread = webclient.FileUploader(
+            uploadtask = webclient.Uploader(
                 self.webclient, upurl, filename, data, formwrap=False,
                 excepterror=False)
-            uploadthread.start()
             wc = self.webclient
-            while uploadthread.isAlive():
-                uploadthread.join(3)
+            while not uploadtask.completed():
+                try:
+                    await uploadtask.join(3)
+                except asyncio.TimeoutError:
+                    pass
                 if progress:
                     progress(
                         {'phase': 'upload',
                          'progress': 100 * wc.get_upload_progress()})
-            if (uploadthread.rspstatus >= 300
-                    or uploadthread.rspstatus < 200):
-                rsp = uploadthread.rsp
-                errmsg = f'Update attempt resulted in response status {uploadthread.rspstatus}'
+            rspstatus, rsp, headers = uploadtask.get_response()
+            if not isinstance(rsp, dict):
+                rsp = json.loads(rsp)
+            if (rspstatus >= 300
+                    or rspstatus < 200):
+                errmsg = f'Update attempt resulted in response status {rspstatus}'
                 try:
-                    rsp = json.loads(rsp)
                     errmsg = (
                         rsp['error'][
                             '@Message.ExtendedInfo'][0]['Message'])
                 except Exception:
-                    errmsg = f'Update attempt resulted in response status {uploadthread.rspstatus}: "{repr(rsp)}"'
+                    errmsg = f'Update attempt resulted in response status {rspstatus}: "{repr(rsp)}"'
                     raise Exception(errmsg)
                 raise Exception(errmsg)
-            rsp = json.loads(uploadthread.rsp)
             monitorurl = rsp['@odata.id']
             complete = False
             phase = "apply"

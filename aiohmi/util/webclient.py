@@ -129,8 +129,8 @@ class Uploader(Downloader):
                 self.ulsize = self.data.tell() - curroff
                 self.data.seek(curroff, 0)
                 self._upbuffer = self.data
-        self.ulheaders['Content-Length'] = str(self.ulsize)
-        self.ulheaders['Content-Type'] = 'application/octet-stream'
+            self.ulheaders['Content-Length'] = str(self.ulsize)
+            self.ulheaders['Content-Type'] = 'application/octet-stream'
     
     def set_response(self, statuscode, response, headers):
         self._statuscode = statuscode
