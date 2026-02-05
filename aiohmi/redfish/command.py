@@ -496,7 +496,8 @@ class Command(object):
             return {}
 
     async def bmcinfo(self):
-        return await self._do_web_request(self._bmcurl)
+        bmcurl = await self._bmcurl()
+        return await self._do_web_request(bmcurl)
 
     async def get_power(self):
         currinfo = await self._do_web_request(self.sysurl, cache=False)
