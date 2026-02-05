@@ -124,7 +124,6 @@ class SensorReading(object):
                 'Status', {}).get('Health', None), const.Health.Warning)
             self.states = [healthinfo.get('Status', {}).get('Health',
                                                             'Unknown')]
-            self.health = _healthmap[healthinfo['Status']['Health']]
             if self.health == const.Health.Ok:
                 self.states = []
         self.value = value
