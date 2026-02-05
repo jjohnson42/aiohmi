@@ -55,42 +55,47 @@ class CustomVerifier(aiohttp.Fingerprint):
             raise pygexc.UnrecognizedCertificate('Unknown certificate',
                                                  cert)
 
-class FileUploader(threading.Thread):
 
-    def __init__(self, webclient, url, filename, data=None, formname=None,
-                 otherfields=(), formwrap=True, excepterror=True):
-        self.wc = webclient
-        self.url = url
-        self.filename = filename
-        self.data = data
-        self.otherfields = otherfields
-        self.formname = formname
-        self.rsp = ''
-        self.rspstatus = 500
-        self.formwrap = formwrap
-        self.excepterror = excepterror
-        super(FileUploader, self).__init__()
-        if not hasattr(self, 'isAlive'):
-            self.isAlive = self.is_alive
 
-    def run(self):
-        try:
-            self.rsp = self.wc.upload(
-                self.url, self.filename, self.data, self.formname,
-                otherfields=self.otherfields, formwrap=self.formwrap,
-                excepterror=self.excepterror)
-            self.rspstatus = self.wc.rspstatus
-        except Exception:
-            try:
-                self.rspstatus = self.wc.rspstatus
-            except Exception:
-                pass
-            raise
+class Downloader:
+    def __init__(self, filehandle):
+        self.contentlen = None
+        self._completed = False
+        self._filehandle = filehandle
+        self._xfertask = None
 
-class Uploader:
+    def get_progress(self):
+        if self._completed:
+            return 1.0
+        if self.contentlen is None:
+            return -0.5
+        return float(self._filehandle.tell()) / float(self.contentlen)
+    
+    def mark_completed(self, fut):
+        self._completed = True
+
+    def set_task(self, task):
+        self._xfertask = task
+
+    def completed(self):
+        return self._completed
+
+    async def join(self, timeout=None):
+        if self._xfertask is None:
+            return
+        if timeout is None:
+            await self._xfertask
+        else:
+            await asyncio.wait_for(asyncio.shield(self._xfertask), timeout=timeout)
+
+class Uploader(Downloader):
     def __init__(self, filename, data=None, formname=None,
                  otherfields=(), formwrap=True):
-        self.uptask = None
+        self._response = None
+        self._statuscode = None
+        self._xfertask = None
+        self._completed = False
+        self._rspheaders = None
         self.rsp = ''
         self.rspstatus = 500
         self.filename = filename
@@ -126,39 +131,64 @@ class Uploader:
                 self._upbuffer = self.data
         self.ulheaders['Content-Length'] = str(self.ulsize)
         self.ulheaders['Content-Type'] = 'application/octet-stream'
+    
+    def set_response(self, statuscode, response, headers):
+        self._statuscode = statuscode
+        self._response = response
+        self._rspheaders = headers
 
-class Downloader:
-    def __init__(self, filehandle):
-        self.contentlen = None
-        self._completed = False
-        self._filehandle = filehandle
-        self.dltask = None
+    def get_response(self):
+        return self._statuscode, self._response, self._rspheaders
+    
+    def get_buffer(self):
+        return self._upbuffer
+    
+    def get_headers(self):
+        return self.ulheaders
+    
+    def get_size(self):
+        return self.ulsize
+    
+    def close(self):
+        if self.filename in uploadforms:
+            try:
+                del uploadforms[self.filename]
+            except KeyError:
+                pass
+        try:
+            self.data.close()
+        except Exception:
+            pass
 
     def get_progress(self):
         if self._completed:
             return 1.0
-        if self.contentlen is None:
-            return -0.5
-        return float(self._filehandle.tell()) / float(self.contentlen)
-    
-    def mark_completed(self, fut):
-        self._completed = True
+        if self._xfertask is None:
+            return 0.0
 
-    async def join(self, timeout=None):
-        if self.dltask is None:
-            return
-        if timeout is None:
-            await self.dltask
-        else:
-            await asyncio.wait_for(asyncio.shield(self.dltask), timeout=timeout)
+        totalen = self.get_size()
+        if totalen is None:
+            return -0.5
+        return float(self._upbuffer.tell()) / float(totalen)
 
 def make_downloader(webconn, url, dlfile):
-        if isinstance(dlfile, str):
-            dlfile = open(dlfile, 'wb')
-        dler = Downloader(dlfile)
-        dler.dltask = asyncio.create_task(webconn.download(url, dlfile, dler))
-        dler.dltask.add_done_callback(dler.mark_completed)
-        return dler
+    if isinstance(dlfile, str):
+        dlfile = open(dlfile, 'wb')
+    dler = Downloader(dlfile)
+    tsk = asyncio.create_task(webconn.download(url, dlfile, dler))
+    dler.set_task(tsk)
+    tsk.add_done_callback(dler.mark_completed)
+    return dler
+
+def make_uploader(webconn, url, filename, data=None, formname=None,
+                 otherfields=(), formwrap=True):
+    uler = Uploader(filename, data, formname, otherfields, formwrap)
+    tsk = asyncio.create_task(webconn.upload(
+        url, filename, uler.get_buffer(), uploader=uler))
+    uler.set_task(tsk)
+    tsk.add_done_callback(uler.mark_completed)
+    return uler
+    
 
     
 
@@ -330,6 +360,29 @@ class WebConnection:
                 async for chunk in rsp.content.iter_chunked(16384):
                     dlfile.write(chunk)
         dlfile.close()
+
+    async def upload(self, url, ulfile, data=None, uploader=None):
+        upheaders = self.stdheaders.copy()
+        if uploader:
+            upheaders.update(uploader.get_headers())
+            data = uploader.get_buffer()
+        else:
+            raise Exception("Not implemented without uploader handler")
+        async with aiohttp.ClientSession(f'https://{self.host}:{self.port}', cookie_jar=self.cookies) as session:
+            async with session.post(url, headers=upheaders, ssl=self.ssl, data=data) as rsp:
+                if rsp.status >= 200 and rsp.status < 300:
+                    expect_type = rsp.headers.get('Content-Type', '')
+                    if 'json' in expect_type:
+                        uploader.set_response(rsp.status, await rsp.json(content_type=''), rsp.headers)
+                    elif 'text' in expect_type:
+                        uploader.set_response(rsp.status, await rsp.text(), rsp.headers)
+                    else:
+                        uploader.set_response(rsp.status, await rsp.read(), rsp.headers)
+                else:
+                    uploader.set_response(rsp.status, await rsp.read(), rsp.headers)
+        if uploader:
+            uploader.close()
+            return uploader._statuscode
 
     def get_download_progress(self):
         if not self._currdl:

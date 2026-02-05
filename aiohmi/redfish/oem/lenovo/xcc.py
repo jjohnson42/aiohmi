@@ -1244,19 +1244,17 @@ class OEMHandler(generic.OEMHandler):
         newmode = False
         if statu == 404:
             xid = random.randint(0, 1000000000)
-            uploadthread = webclient.FileUploader(
-                wc, '/upload?X-Progress-ID={0}'.format(xid), filename, data)
+            uploadtask = webclient.make_uploader(wc, '/upload?X-Progress-ID={0}'.format(xid), filename, data)
         else:
             newmode = True
-            uploadthread = webclient.FileUploader(
+            uploadtask = webclient.make_uploader(
                 wc, '/rdocupload', filename, data)
-        uploadthread.start()
-        while uploadthread.isAlive():
-            uploadthread.join(3)
+        while not uploadtask.completed():
+            await uploadtask.join(3)
             if newmode:
                 if progress:
                     progress({'phase': 'upload',
-                          'progress': 100 * wc.get_upload_progress()})
+                          'progress': 100 * uploadtask.get_progress()})
             else:
                 rsp = await wc.grab_json_response(
                     '/upload/progress?X-Progress-ID={0}'.format(xid))
@@ -1264,15 +1262,12 @@ class OEMHandler(generic.OEMHandler):
                     progress({'phase': 'upload',
                             'progress': 100.0 * rsp['received'] / rsp['size']})
             await self._refresh_token()
-        if uploadthread.rsp:
-            rsp = json.loads(uploadthread.rsp)
-        else:
-            rsp = {}        
+        statu, rsp, headers = uploadtask.get_response()    
         if progress:
             progress({'phase': 'upload',
                       'progress': 100.0})
         if 'items' not in rsp or len(rsp['items']) == 0:
-            errmsg = repr(rsp) if rsp else wc.lastjsonerror if wc.lastjsonerror else repr(uploadthread.rspstatus)
+            errmsg = repr(rsp) if rsp else repr(statu)
             raise pygexc.PyghmiException('Failed to upload image: ' + errmsg)
         thepath = rsp['items'][0]['path']
         thename = rsp['items'][0]['name']
@@ -1288,12 +1283,13 @@ class OEMHandler(generic.OEMHandler):
             raise pygexc.PyghmiException('Failed to upload image: ' + errmsg)
         ready = False
         while not ready:
-            await asyncio.sleep(3)
             rsp = await wc.grab_json_response('/api/providers/rp_rdoc_getfiles')
             if 'items' not in rsp or len(rsp['items']) == 0:
                 raise Exception(
                     'Image upload was not accepted, it may be too large')
             ready = rsp['items'][0]['size'] != 0
+            if not ready:
+                await asyncio.sleep(2)
         await self._refresh_token()
         rsp = await wc.grab_json_response('/api/providers/rp_rdoc_mountall',
                                          {})
@@ -1646,7 +1642,7 @@ class OEMHandler(generic.OEMHandler):
         if autosuffix and not savefile.endswith('.tzz'):
             savefile += '-{0}'.format(result['FileName'])
         fd = webclient.make_downloader(wc, url, savefile)
-        while fd.dltask and not fd.dltask.done():
+        while not fd.completed():
             try:
                 await fd.join(1)
             except asyncio.TimeoutError:
@@ -1697,7 +1693,7 @@ class OEMHandler(generic.OEMHandler):
                 url = '/download/' + filename
                 savefile = os.path.join(directory, filename)
                 fd = webclient.make_downloader(wc, url, savefile)
-                while fd.dltask and not fd.dltask.done():
+                while not fd.completed():
                     try:
                         await fd.join(1)
                     except asyncio.TimeoutError:
