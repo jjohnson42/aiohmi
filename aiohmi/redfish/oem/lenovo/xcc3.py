@@ -723,7 +723,16 @@ class OEMHandler(generic.OEMHandler):
                 data={'Image': url, 'Inserted': True},
                 method='PATCH')
             if code == 500:
-                raise Exception("Unexpected response when attaching remote media: " + repr(msg))
+                errmsg = "Unexpected response when attaching remote media: " + repr(msg)
+                try:
+                    if url.startswith('https://'):
+                        dmsg = json.loads(msg.decode('utf-8'))
+                        if dmsg.get('error', {}).get('code', '') == 'Base.1.16.0.InternalError':
+                            errmsg = 'XCC3 reported an internal error while attaching https media, check the certificate authorities on the XCC3'
+                except Exception:
+                    pass
+                raise Exception(errmsg)
+            self._invalidate_url_cache(vmurl)                
             raise pygexc.BypassGenericBehavior()
             break
         else:
