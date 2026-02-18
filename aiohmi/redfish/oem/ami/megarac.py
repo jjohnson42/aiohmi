@@ -24,7 +24,7 @@ class OEMHandler(generic.OEMHandler):
             systems, status = await webclient.grab_json_response_with_status('/redfish/v1/Systems')
             if status == 200:
                 for system in systems.get('Members', []):
-                    if system.get('@odata.id', '').endswith('/Self'):
+                    if system.get('@odata.id', '').endswith('/Self') or system.get('@odata.id', '').endswith('/System_0'):
                         sysurl = system['@odata.id']
                         break
             self._varsysurl = sysurl
