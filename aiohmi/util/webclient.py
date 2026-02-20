@@ -227,7 +227,7 @@ def get_upload_form(filename, data, formname, otherfields, boundary=None):
 
 
 class WebConnection:
-    def __init__(self, host, port, verifycallback=None):
+    def __init__(self, host, port, verifycallback=None, timeout=None):
         self.port = port
         if ':' in host:
             self.host = f'[{host}]'
@@ -238,6 +238,10 @@ class WebConnection:
         else:
             self.ssl = None
         self.verifycallback = verifycallback
+        if isinstance(timeout, (int, float)):
+            self.timeout = aiohttp.ClientTimeout(total=timeout)
+        else:
+            self.timeout = timeout 
         self.stdheaders = {}
         self.cookies = CookieJar(quote_cookie=False, unsafe=True)
 
@@ -246,7 +250,7 @@ class WebConnection:
 
     def dupe(self):
         newwc = WebConnection(self.host, self.port,
-                              verifycallback=self.verifycallback)
+                              verifycallback=self.verifycallback, timeout=self.timeout)
         newwc.stdheaders = self.stdheaders.copy()
         newwc.cookies = CookieJar(quote_cookie=False, unsafe=True)
         for cookie in self.cookies:
@@ -270,7 +274,7 @@ class WebConnection:
             headers['referer'] = referer
         method = method.lower()
         async with aiohttp.ClientSession(
-                f'https://{self.host}:{self.port}', cookie_jar=self.cookies) as session:
+                f'https://{self.host}:{self.port}', cookie_jar=self.cookies, timeout=self.timeout) as session:
             thefunc = getattr(session, method)
             kwargs = {}
             if isinstance(body, dict):
@@ -320,7 +324,7 @@ class WebConnection:
         method = method.lower()
         if 'Content-Type' in headers and method.lower() in ('get', 'delete'):
             del headers['Content-Type']
-        async with aiohttp.ClientSession(f'https://{self.host}:{self.port}', cookie_jar=self.cookies) as session:
+        async with aiohttp.ClientSession(f'https://{self.host}:{self.port}', cookie_jar=self.cookies, timeout=self.timeout) as session:
             thefunc = getattr(session, method)
             kwargs = {}
             if isinstance(data, dict):
@@ -349,7 +353,7 @@ class WebConnection:
         dlheaders = self.stdheaders.copy()
         if 'Accept-Encoding' in dlheaders:
             del dlheaders['Accept-Encoding']
-        async with aiohttp.ClientSession(f'https://{self.host}:{self.port}', cookie_jar=self.cookies) as session:
+        async with aiohttp.ClientSession(f'https://{self.host}:{self.port}', cookie_jar=self.cookies, timeout=self.timeout) as session:
             async with session.get(url, headers=dlheaders, ssl=self.ssl) as rsp:
                 if downloader:
                     downloader.contentlen = rsp.headers.get('content-length', None)
@@ -368,7 +372,7 @@ class WebConnection:
             data = uploader.get_buffer()
         else:
             raise Exception("Not implemented without uploader handler")
-        async with aiohttp.ClientSession(f'https://{self.host}:{self.port}', cookie_jar=self.cookies) as session:
+        async with aiohttp.ClientSession(f'https://{self.host}:{self.port}', cookie_jar=self.cookies, timeout=self.timeout) as session:
             async with session.post(url, headers=upheaders, ssl=self.ssl, data=data) as rsp:
                 if rsp.status >= 200 and rsp.status < 300:
                     expect_type = rsp.headers.get('Content-Type', '')
