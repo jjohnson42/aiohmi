@@ -1149,7 +1149,7 @@ class OEMHandler(generic.OEMHandler):
                 if not self.updating and self._wc:
                     # in case the existing session is still valid
                     # dispose of the session
-                    self.weblogout()
+                    await self.weblogout()
                 self._wc = await self.get_webclient()
         finally:
             self.weblogging = False

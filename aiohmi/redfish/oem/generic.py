@@ -341,9 +341,10 @@ class OEMHandler(object):
                 'ManagedBy', [{}])[0].get('@odata.id', None)
         return self._varbmcurl
 
-    @property
-    def sysinfo(self):
-        return self._do_web_request(self._varsysurl)
+    
+    async def sysinfo(self):
+        sysurl = self.get_default_sysurl()
+        return await self._do_web_request(sysurl)
     
     def get_bmc_csr(self, keytype=None, keylength=None, cn=None, city=None,
                     state=None, country=None, org=None, orgunit=None):
@@ -636,7 +637,8 @@ class OEMHandler(object):
 
 
     async def get_health(self, fishclient, verbose=True):
-        health = fishclient.sysinfo.get('Status', {})
+        sysinfo = await self.sysinfo()
+        health = sysinfo.get('Status', {})
         health = health.get('HealthRollup', health.get('Health', 'Unknown'))
         warnunknown = health == 'Unknown'
         health = _healthmap[health]
@@ -644,15 +646,15 @@ class OEMHandler(object):
         if health > 0 and verbose:
             # now have to manually peruse all psus, fans, processors, ram,
             # storage
-            procsumstatus = fishclient.sysinfo.get('ProcessorSummary', {}).get(
+            procsumstatus = sysinfo.get('ProcessorSummary', {}).get(
                 'Status', {})
             procsumstatus = procsumstatus.get('HealthRollup',
                                               procsumstatus.get('Health',
                                                                 None))
             if procsumstatus != 'OK':
                 procfound = False
-                procurl = fishclient.sysinfo.get('Processors', {}).get('@odata.id',
-                                                                 None)
+                procurl = sysinfo.get('Processors', {}).get('@odata.id',
+                                                          None)
                 if procurl:
                     for cpu in await fishclient._do_web_request(procurl).get(
                             'Members', []):
@@ -665,10 +667,10 @@ class OEMHandler(object):
                             procfound = True
                             summary['badreadings'].append(SensorReading(cinfo))
                 if not procfound:
-                    procinfo = fishclient.sysinfo['ProcessorSummary']
+                    procinfo = sysinfo['ProcessorSummary']
                     procinfo['Name'] = 'Processors'
                     summary['badreadings'].append(SensorReading(procinfo))
-            memsumstatus = fishclient.sysinfo.get(
+            memsumstatus = sysinfo.get(
                 'MemorySummary', {}).get('Status', {})
             memsumstatus = memsumstatus.get('HealthRollup',
                                             memsumstatus.get('Health', None))
@@ -684,14 +686,14 @@ class OEMHandler(object):
                         summary['badreadings'].append(SensorReading(dimminfo))
                         dimmfound = True
                 if not dimmfound:
-                    meminfo = fishclient.sysinfo['MemorySummary']
+                    meminfo = sysinfo['MemorySummary']
                     meminfo['Name'] = 'Memory'
                     summary['badreadings'].append(SensorReading(meminfo))
-            for adapter in fishclient.sysinfo['PCIeDevices']:
+            for adapter in sysinfo['PCIeDevices']:
                 adpinfo = await fishclient._do_web_request(adapter['@odata.id'])
                 if adpinfo['Status']['Health'] not in ('OK', None):
                     summary['badreadings'].append(SensorReading(adpinfo))
-            for fun in fishclient.sysinfo['PCIeFunctions']:
+            for fun in sysinfo['PCIeFunctions']:
                 funinfo = await fishclient._do_web_request(fun['@odata.id'])
                 if funinfo['Status']['Health'] not in ('OK', None):
                     summary['badreadings'].append(SensorReading(funinfo))
@@ -702,19 +704,19 @@ class OEMHandler(object):
             summary['badreadings'].append(unkinf)
         return summary
 
-    def user_delete(self, uid, fishclient):
+    async def user_delete(self, uid, fishclient):
         # Redfish doesn't do so well with Deleting users either...
         # Blanking the username seems to be the convention
         # First, set a bogus password in case the implementation does honor
         # blank user, at least render such an account harmless
         try:
-            accinfo = fishclient._account_url_info_by_id(uid)
+            accinfo = await fishclient._account_url_info_by_id(uid)
             if not accinfo:
                 raise Exception("No such account found")
-            self._do_web_request(accinfo[0], method='DELETE')
+            await self._do_web_request(accinfo[0], method='DELETE')
         except Exception: # fall back to old ipmi-like behavior for such implementations
-            fishclient.set_user_password(uid, base64.b64encode(os.urandom(15)))
-            fishclient.set_user_name(uid, '')        
+            await fishclient.set_user_password(uid, base64.b64encode(os.urandom(15)))
+            await fishclient.set_user_name(uid, '')        
         return True
 
     def set_bootdev(self, bootdev, persist=False, uefiboot=None,
