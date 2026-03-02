@@ -493,14 +493,16 @@ class OEMHandler(generic.OEMHandler):
         if await self.has_tsm() or await self.has_ami() or await self.has_asrock():
             # Thinkserver with TSM
             if not self.oem_inventory_info:
-                await self._collect_tsm_inventory()
+                async for desc in self._collect_tsm_inventory():
+                    yield desc
             return iter(self.oem_inventory_info)
         elif await self.has_imm():
-            return await self.immhandler.get_hw_descriptions()
+            async for desc in self.immhandler.get_hw_descriptions():
+                yield desc
         elif await self.is_fpc():
-            return await self.smmhandler.get_inventory_descriptions(self.ipmicmd,
-                                                                     await self.is_fpc())
-        return ()
+            async for desc in self.smmhandler.get_inventory_descriptions(self.ipmicmd,
+                                                                         await self.is_fpc()):
+                yield desc
 
     async def get_oem_inventory(self):
         if await self.has_tsm() or await self.has_ami() or await self.has_asrock():

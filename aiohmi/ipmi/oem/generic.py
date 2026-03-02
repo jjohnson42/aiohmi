@@ -157,7 +157,7 @@ class OEMHandler(object):
         raise exc.UnsupportedFunctionality(
             'Clearing BMC configuration not implemented for this platform')
 
-    def get_oem_inventory_descriptions(self):
+    async def get_oem_inventory_descriptions(self):
         """Get descriptions of available additional inventory items
 
         OEM implementation may provide additional records not indicated
@@ -166,9 +166,10 @@ class OEMHandler(object):
         OEM behavior beyond the specification.  It should return an iterable
         of names
         """
-        return ()
+        if False:
+            yield None
 
-    def get_sensor_reading(self, sensorname):
+    async def get_sensor_reading(self, sensorname):
         """Get an OEM sensor
 
         If software wants to model some OEM behavior as a 'sensor' without
@@ -177,14 +178,15 @@ class OEMHandler(object):
         """
         raise Exception('Sensor not found: ' + sensorname)
 
-    def get_sensor_descriptions(self):
+    async def get_sensor_descriptions(self):
         """Get list of OEM sensor names and types
 
         Iterate over dicts describing a label and type for OEM 'sensors'.  This
         should mimic the behavior of the get_sensor_descriptions function
         in command.py.
         """
-        return ()
+        if False:
+            yield None
 
     def get_diagnostic_data(self, savefile, progress=None):
         """Download diagnostic data about target to a file
@@ -205,7 +207,8 @@ class OEMHandler(object):
         normal sensors.  This should mimic the behavior of the get_sensor_data
         function in command.py.
         """
-        return ()
+        if False:
+            yield None
 
     async def get_oem_inventory(self):
         """Get tuples of component names and inventory data.
@@ -214,7 +217,7 @@ class OEMHandler(object):
         is a string description of the inventory item.  The second member
         is a dict of inventory information about the component.
         """
-        for desc in self.get_oem_inventory_descriptions():
+        async for desc in self.get_oem_inventory_descriptions():
             yield (desc, await self.get_inventory_of_component(desc))
 
     async def get_inventory_of_component(self, component):
@@ -231,7 +234,8 @@ class OEMHandler(object):
         Each category contains a category name and a dicionary of LED names
         with their status as values.
         """
-        return ()
+        if False:
+            yield None
 
     def get_ntp_enabled(self):
         """Get whether ntp is enabled or not

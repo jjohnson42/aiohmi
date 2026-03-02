@@ -653,7 +653,7 @@ class Command(object):
         returns an iterable of string descriptions
         """
         yield "System"
-        self.init_sdr()
+        await self.init_sdr()
         for fruid in sorted(self._sdr.fru):
             yield self._sdr.fru[fruid].fru_name
         await self.oem_init()
@@ -775,19 +775,19 @@ class Command(object):
             summary['badreadings'] = fallbackreadings
         return summary
 
-    def get_system_power_watts(self):
-        self.oem_init()
-        return self._oem.get_system_power_watts(self)
+    async def get_system_power_watts(self):
+        await self.oem_init()
+        return await self._oem.get_system_power_watts(self)
     
-    def get_inlet_temperature(self):
-        self.oem_init()
-        return self._oem.get_inlet_temperature(self)
+    async def get_inlet_temperature(self):
+        await self.oem_init()
+        return await self._oem.get_inlet_temperature(self)
 
-    def get_average_processor_temperature(self):
-        self.oem_init()
-        return self._oem.get_average_processor_temperature(self)
+    async def get_average_processor_temperature(self.init_sdrself):
+        await self.oem_init()
+        return await self._oem.get_average_processor_temperature(self)
 
-    def get_sensor_reading(self, sensorname):
+    async def get_sensor_reading(self, sensorname):
         """Get a sensor reading by name
 
         Returns a single decoded sensor reading per the name
@@ -796,7 +796,7 @@ class Command(object):
         :param sensorname:  Name of the desired sensor
         :returns: sdr.SensorReading object
         """
-        self.init_sdr()
+        await self.init_sdr()
         for sensor in self._sdr.get_sensor_numbers():
             if self._sdr.sensors[sensor].name == sensorname:
                 currsensor = self._sdr.sensors[sensor]
@@ -805,8 +805,8 @@ class Command(object):
                                        data=(currsensor.sensor_number,))
                 return self._sdr.sensors[sensor].decode_sensor_reading(
                     self, rsp['data'])
-        self.oem_init()
-        return self._oem.get_sensor_reading(sensorname)
+        await self.oem_init()
+        return await self._oem.get_sensor_reading(sensorname)
 
     def _fetch_lancfg_param(self, channel, param, prefixlen=False):
         """Internal helper for fetching lan cfg parameters
@@ -1079,7 +1079,7 @@ class Command(object):
 
         :returns: Iterator of sdr.SensorReading objects
         """
-        self.init_sdr()
+        await self.init_sdr()
         for sensor in self._sdr.get_sensor_numbers():
             currsensor = self._sdr.sensors[sensor]
             rsp = await self.raw_command(command=0x2d, netfn=4,
