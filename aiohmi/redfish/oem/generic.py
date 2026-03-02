@@ -1399,9 +1399,9 @@ class OEMHandler(object):
         return 'unavailable'
 
 
-    def update_firmware(self, filename, data=None, progress=None, bank=None, otherfields=()):
+    async def update_firmware(self, filename, data=None, progress=None, bank=None, otherfields=()):
         # disable cache to make sure we trigger the token renewal logic if needed
-        usd, upurl, ismultipart = self.retrieve_firmware_upload_url()
+        usd, upurl, ismultipart = await self.retrieve_firmware_upload_url()
         try:
             uploadthread = webclient.FileUploader(
                 self.webclient, upurl, filename, data, formwrap=ismultipart,
