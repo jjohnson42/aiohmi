@@ -1132,8 +1132,8 @@ class OEMHandler(object):
                     yieldinf = {}
                     macidx = 1
                     if 'Ports' in nadinfo:
-                        for portinfo in self._get_expanded_data(
-                                nadinfo['Ports']['@odata.id']).get('Members', []):
+                        for portinfo in (await self._get_expanded_data(
+                                nadinfo['Ports']['@odata.id'])).get('Members', []):
                             ethinfo = portinfo.get('Ethernet', {})
                             if ethinfo:
                                 macs = [x for x in ethinfo.get('AssociatedMACAddresses', [])]
@@ -1156,7 +1156,7 @@ class OEMHandler(object):
                             porturls = [x['@odata.id'] for x in ctrlr.get(
                                 'Links', {}).get('Ports', [])]
                             for porturl in porturls:
-                                portinfo = self._do_web_request(porturl)
+                                portinfo = await self._do_web_request(porturl)
                                 macs = [x for x in portinfo.get(
                                     'Ethernet', {}).get(
                                         'AssociatedMACAddresses', [])]
@@ -1167,8 +1167,8 @@ class OEMHandler(object):
                                     foundmacs = True
                         macinfobyadpname[nicname] = yieldinf
         if not urls:
-            urls = self._get_adp_urls()
-        for inf in self._do_bulk_requests(urls):
+            urls = await self._get_adp_urls()
+        async for inf in self._do_bulk_requests(urls):
             adpinfo, url = inf
             aname = adpinfo.get('Name', 'Unknown')
             if aname in self._hwnamemap:
@@ -1254,7 +1254,7 @@ class OEMHandler(object):
             urls = []
         return urls
 
-    def _get_adp_urls(self):
+    async def _get_adp_urls(self):
         adpurls = self._varsysinfo.get('PCIeDevices', [])
         if adpurls:
             urls = [x['@odata.id'] for x in adpurls]
@@ -1352,7 +1352,7 @@ class OEMHandler(object):
             return topdata
         if not expand:
             return await self._do_web_request(url)
-        elif self.supports_expand(url):
+        elif await self.supports_expand(url):
             return await self._do_web_request(url + '?$expand=' + expand)
         else:  # emulate expand behavior
             topdata = await self._do_web_request(url)

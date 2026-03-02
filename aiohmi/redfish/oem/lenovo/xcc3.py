@@ -117,8 +117,10 @@ class OEMHandler(generic.OEMHandler):
             #     raise pygexc.TemporaryError(
             #         'Cannot read extended inventory during firmware update')
             if self.webclient:
-                adapterdata = list(self._do_bulk_requests([i['@odata.id'] for i in await self.webclient.grab_json_response(
-                        '/redfish/v1/Chassis/1')['Links']['PCIeDevices']]))               
+                adapterdata = []
+                async for adata in self._do_bulk_requests([i['@odata.id'] for i in (await self.webclient.grab_json_response(
+                        '/redfish/v1/Chassis/1'))['Links']['PCIeDevices']]):
+                    adapterdata.append(adata)           
                 if adapterdata:
                     self.datacache['lenovo_cached_adapters'] = (
                         adapterdata, util._monotonic_time())
@@ -150,7 +152,7 @@ class OEMHandler(generic.OEMHandler):
                 partnum = adata.get('PartNumber', '')
                 if partnum and partnum != 'N/A':
                     bdata['Part Number'] = partnum
-                fundata = self._get_expanded_data(adata['PCIeFunctions']['@odata.id'])
+                fundata = await self._get_expanded_data(adata['PCIeFunctions']['@odata.id'])
                 venid = fundata['Members'][0].get('VendorId', None)
                 if venid is not None:
                     bdata['PCI Vendor ID'] = venid.lower().split('0x')[-1]
@@ -167,7 +169,7 @@ class OEMHandler(generic.OEMHandler):
 
                 # Could be identified also through Oem->Lenovo->FunctionClass
                 if fundata['Members'][0]['DeviceClass'] == 'NetworkController':
-                    ports_data = self._get_expanded_data('{0}/Ports'.format(adata['@odata.id'].replace('PCIeDevices','NetworkAdapters')))
+                    ports_data = await self._get_expanded_data('{0}/Ports'.format(adata['@odata.id'].replace('PCIeDevices','NetworkAdapters')))
                     macidx = 1
                     for port in ports_data['Members']:
                         if port.get('Ethernet', None):
@@ -218,13 +220,15 @@ class OEMHandler(generic.OEMHandler):
         bdata['Description'] = diskent['Oem']['Lenovo']['TypeString'].rstrip()
         return (diskname, bdata)
 
-    def disk_inventory(self, mode=0):
+    async def disk_inventory(self, mode=0):
         # mode 0 is firmware, 1 is hardware
         storagedata = self.get_cached_data('lenovo_cached_storage')
         if not storagedata:
                 if self.webclient:
-                    storagedata = self._do_bulk_requests([i['@odata.id'] for i in self.webclient.grab_json_response(
-                        '/redfish/v1/Chassis/1')['Links']['Drives']])
+                    chassisinfo = await self.webclient.grab_json_response('/redfish/v1/Chassis/1')
+                    storagedata = []
+                    async for data in self._do_bulk_requests([i['@odata.id'] for i in chassisinfo['Links']['Drives']]):
+                        storagedata.append(data)
                     if storagedata:
                         self.datacache['lenovo_cached_storage'] = (
                             storagedata, util._monotonic_time())
@@ -236,8 +240,8 @@ class OEMHandler(generic.OEMHandler):
                 elif mode == 1:
                     yield self.get_disk_hardware(diskent)
 
-    def get_storage_configuration(self, logout=True):
-        rsp = self._get_expanded_data("/redfish/v1/Systems/1/Storage")
+    async def get_storage_configuration(self, logout=True):
+        rsp = await self._get_expanded_data("/redfish/v1/Systems/1/Storage")
         standalonedisks = []
         pools = []
         for item in rsp.get('Members',[]):
@@ -251,9 +255,9 @@ class OEMHandler(generic.OEMHandler):
                         item['StorageControllers'][0]['Location']['PartLocation'].get('LocationOrdinalValue', -1))
             if item['Id'].lower() == 'vroc':
                 cid = 'vroc,0'            
-            storage_pools = self._get_expanded_data(item['StoragePools']['@odata.id'])
+            storage_pools = await self._get_expanded_data(item['StoragePools']['@odata.id'])
             for p in storage_pools['Members']:
-                vols = self._get_expanded_data(p['AllocatedVolumes']['@odata.id'])
+                vols = await self._get_expanded_data(p['AllocatedVolumes']['@odata.id'])
                 for vol in vols['Members']:
                     volumes=[]
                     disks=[]
@@ -268,7 +272,7 @@ class OEMHandler(generic.OEMHandler):
                             for disk in disk_ids:
                                 if disk['@odata.id'] in cdisks:
                                     cdisks.remove(disk['@odata.id'])
-                                disk_data = self.webclient.grab_json_response(disk['@odata.id'])
+                                disk_data = await self.webclient.grab_json_response(disk['@odata.id'])
                                 (spares if disk_data['Oem']['Lenovo']['DriveStatus']=="DedicatedHotspare" else disks).append(
                                     storage.Disk(
                                         name=disk_data['Name'], description=disk_data['Oem']['Lenovo']['TypeString'],
@@ -282,7 +286,7 @@ class OEMHandler(generic.OEMHandler):
                     id=(cid, p['Id']), hotspares=spares,
                     capacity=totalsize, available_capacity=freesize))
             for d in cdisks:
-                disk_data = self.webclient.grab_json_response(d)
+                disk_data = await self.webclient.grab_json_response(d)
                 standalonedisks.append(
                     storage.Disk(
                         name=disk_data['Name'], description=disk_data['Oem']['Lenovo']['TypeString'],
@@ -290,8 +294,8 @@ class OEMHandler(generic.OEMHandler):
                         serial=disk_data['SerialNumber'], fru=disk_data['SKU']))
         return storage.ConfigSpec(disks=standalonedisks, arrays=pools)
 
-    def check_storage_configuration(self, cfgspec=None):
-        rsp = self.webclient.grab_json_response(
+    async def check_storage_configuration(self, cfgspec=None):
+        rsp = await self.webclient.grab_json_response(
             '/api/providers/raidlink_GetStatus')
         if rsp['return'] != 0 or rsp['status'] != 1:
             raise pygexc.TemporaryError('Storage configuration unavailable in '
@@ -299,21 +303,21 @@ class OEMHandler(generic.OEMHandler):
                                         'an OS)')
         return True
 
-    def apply_storage_configuration(self, cfgspec):
-        realcfg = self.get_storage_configuration(False)
+    async def apply_storage_configuration(self, cfgspec):
+        realcfg = await self.get_storage_configuration(False)
         for disk in cfgspec.disks:
             if disk.status.lower() == 'jbod':
-                self._make_jbod(disk, realcfg)
+                await self._make_jbod(disk, realcfg)
             elif disk.status.lower() == 'hotspare':
-                self._make_global_hotspare(disk, realcfg)
+                await self._make_global_hotspare(disk, realcfg)
             elif disk.status.lower() in ('unconfigured', 'available', 'ugood',
                                          'unconfigured good'):
-                self._make_available(disk, realcfg)
+                await self._make_available(disk, realcfg)
         for pool in cfgspec.arrays:
             if pool.disks:
-                self._create_array(pool)
+                await self._create_array(pool)
 
-    def _make_available(self, disk, realcfg):
+    async def _make_available(self, disk, realcfg):
         currstatus = self._get_status(disk, realcfg)
         newstate = None
         if currstatus.lower() == 'unconfiguredgood':
@@ -322,24 +326,24 @@ class OEMHandler(generic.OEMHandler):
             newstate = "None"
         elif currstatus.lower() == 'jbod':
             newstate = "MakeUnconfiguredGood"
-        self._set_drive_state(disk, newstate)
+        await self._set_drive_state(disk, newstate)
 
-    def _make_jbod(self, disk, realcfg):
+    async def _make_jbod(self, disk, realcfg):
         currstatus = self._get_status(disk, realcfg)
         if currstatus.lower() == 'jbod':
             return
-        self._make_available(disk, realcfg)
-        self._set_drive_state(disk, "MakeJBOD")
+        await self._make_available(disk, realcfg)
+        await self._set_drive_state(disk, "MakeJBOD")
 
-    def _make_global_hotspare(self, disk, realcfg):
+    async def _make_global_hotspare(self, disk, realcfg):
         currstatus = self._get_status(disk, realcfg)
         if currstatus.lower() == 'globalhotspare':
             return
-        self._make_available(disk, realcfg)
-        self._set_drive_state(disk, "Global")
+        await self._make_available(disk, realcfg)
+        await self._set_drive_state(disk, "Global")
     
-    def _set_drive_state(self, disk, state):
-        raid_alldevices = self.webclient.grab_json_response(
+    async def _set_drive_state(self, disk, state):
+        raid_alldevices = await self.webclient.grab_json_response(
             '/api/providers/raid_alldevices')
         if raid_alldevices.get('return', -1) != 0:
             raise Exception(
@@ -366,21 +370,21 @@ class OEMHandler(generic.OEMHandler):
                                 "drive_operation": state,
                                 "drive_resource_ids": [d_resid]}
                             raidlink_url = '/api/providers/raidlink_DiskStateAction'
-                        msg = self._do_web_request(raidlink_url, method='POST', 
+                        msg = await self._do_web_request(raidlink_url, method='POST', 
                                                    payload=data, cache=False)
                         if msg.get('return', -1) != 0:
                             raise Exception(
                                 'Unexpected return to set disk state: {0}'.format(
                                 msg.get('return', -1)))
                         set_state_token = msg.get('token', '')
-                        msg = self._do_web_request(
+                        msg = await self._do_web_request(
                             '/api/providers/raidlink_QueryAsyncStatus',
                             method='POST',
                             payload={"token": set_state_token},
                             cache=False)
                         while msg['status'] == 2:
-                            time.sleep(1)
-                            msg = self._do_web_request(
+                            await asyncio.sleep(1)
+                            msg = await self._do_web_request(
                             '/api/providers/raidlink_QueryAsyncStatus',
                             method='POST',
                             payload={"token": set_state_token},
@@ -390,12 +394,12 @@ class OEMHandler(generic.OEMHandler):
                                 'Unexpected return to set disk state: {0}'.format(
                                 msg.get('return', -1)))
                         disk_url=f"/redfish/v1/Systems/1/Storage/{disk.id[0].split(',')[0]}/Drives/{disk.id[1]}"
-                        newstatus = self.webclient.grab_json_response(disk_url)
+                        newstatus = await self.webclient.grab_json_response(disk_url)
                         disk_converted = False
                         for _ in range(60):
                             if currstatus == newstatus['Oem']['Lenovo']['DriveStatus']:
-                                time.sleep(1)
-                                newstatus = self.webclient.grab_json_response(disk_url)
+                                await asyncio.sleep(1)
+                                newstatus = await self.webclient.grab_json_response(disk_url)
                             else:
                                 disk_converted = True
                                 break
@@ -412,20 +416,20 @@ class OEMHandler(generic.OEMHandler):
             raise pygexc.InvalidParameterValue('Requested disk not found')
         return currstatus
     
-    def remove_storage_configuration(self, cfgspec):
-        realcfg = self.get_storage_configuration(False)
+    async def remove_storage_configuration(self, cfgspec):
+        realcfg = await self.get_storage_configuration(False)
         for pool in cfgspec.arrays:
             for volume in pool.volumes:
                 cid = volume.id[0].split(',')[0]
                 vid = volume.id[1]
-                msg, code = self.webclient.grab_json_response_with_status(
+                msg, code = await self.webclient.grab_json_response_with_status(
                     f'/redfish/v1/Systems/1/Storage/{cid}/Volumes/{vid}',
                     method='DELETE')
                 if code == 500:
                     raise Exception(
                         'Unexpected return to volume deletion: ' + repr(msg))
         for disk in cfgspec.disks:
-            self._make_available(disk, realcfg)
+            await self._make_available(disk, realcfg)
 
     def _parse_array_spec(self, arrayspec):
         controller = None
