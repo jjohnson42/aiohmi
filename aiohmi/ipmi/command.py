@@ -783,7 +783,7 @@ class Command(object):
         await self.oem_init()
         return await self._oem.get_inlet_temperature(self)
 
-    async def get_average_processor_temperature(self.init_sdrself):
+    async def get_average_processor_temperature(self):
         await self.oem_init()
         return await self._oem.get_average_processor_temperature(self)
 
