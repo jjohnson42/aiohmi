@@ -1183,7 +1183,8 @@ class Command(object):
 
     async def get_inventory_descriptions(self, withids=False):
         oem = await self.oem()
-        return await oem.get_inventory_descriptions(withids)
+        async for desc in oem.get_inventory_descriptions(withids):
+            yield desc
 
     async def get_inventory_of_component(self, component):
         oem = await self.oem()
