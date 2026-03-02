@@ -322,10 +322,10 @@ class OEMHandler(object):
             raise exc.UnsupportedFunctionality("System does not provide Power under redfish EnvironmentMetrics")
         return totalwatts
 
-    def _get_cpu_temps(self, fishclient):
+    async def _get_cpu_temps(self, fishclient):
         cputemps = []
         for chassis in fishclient.sysinfo.get('Links', {}).get('Chassis', []):
-            thermals = fishclient._get_thermals(chassis)
+            thermals = await fishclient._get_thermals(chassis)
             for temp in thermals:
                 if temp.get('PhysicalContext', '') != 'CPU':
                     continue
@@ -624,10 +624,10 @@ class OEMHandler(object):
                     log.get('Severity', 'Warning'), const.Health.Ok)
                 yield record
 
-    def get_average_processor_temperature(self, fishclient):
-        cputemps = self._get_cpu_temps(fishclient)
+    async def get_average_processor_temperature(self, fishclient):
+        cputemps = await self._get_cpu_temps(fishclient)
         if not cputemps:
-            return  SensorReading(
+            return SensorReading(
             None, {'name': 'Average Processor Temperature'}, value=None, units='°C',
                    unavailable=True)
         cputemps = [x['ReadingCelsius'] for x in cputemps]
@@ -719,7 +719,7 @@ class OEMHandler(object):
             await fishclient.set_user_name(uid, '')        
         return True
 
-    def set_bootdev(self, bootdev, persist=False, uefiboot=None,
+    async def set_bootdev(self, bootdev, persist=False, uefiboot=None,
                     fishclient=None):
         """Set boot device to use on next reboot
 
@@ -757,13 +757,13 @@ class OEMHandler(object):
                 uefiboot = 'UEFI' if uefiboot else 'Legacy'
                 payload['BootSourceOverrideMode'] = uefiboot
                 try:
-                    fishclient._do_web_request(self.sysurl, payload,
+                    await fishclient._do_web_request(self.sysurl, payload,
                                                method='PATCH')
                     return {'bootdev': reqbootdev}
                 except Exception:
                     del payload['BootSourceOverrideMode']
         #thetag = fishclient.sysinfo.get('@odata.etag', None)
-        fishclient._do_web_request(fishclient.sysurl, payload, method='PATCH',
+        await fishclient._do_web_request(fishclient.sysurl, payload, method='PATCH',
                                    etag='*') # thetag)
         return {'bootdev': reqbootdev}
 
@@ -774,10 +774,10 @@ class OEMHandler(object):
             return cachent['contents']
         return None
 
-    def get_bmc_configuration(self):
+    async def get_bmc_configuration(self):
         return {}
 
-    def set_bmc_configuration(self, changeset):
+    async def set_bmc_configuration(self, changeset):
         raise exc.UnsupportedFunctionality(
             'Platform does not support setting bmc attributes')
 
@@ -815,8 +815,8 @@ class OEMHandler(object):
             }
         return addon, valtodisplay, displaytoval, reg
 
-    def get_system_configuration(self, hideadvanced=True, fishclient=None):
-        return self._getsyscfg(fishclient)[0]
+    async def get_system_configuration(self, hideadvanced=True, fishclient=None):
+        return (await self._getsyscfg(fishclient))[0]
 
     async def _get_attrib_registry(self, fishclient, attribreg):
         overview = await fishclient._do_web_request('/redfish/v1/')
@@ -1018,14 +1018,14 @@ class OEMHandler(object):
                         'ImageName', None):
                     yield media.Media(vminfo['ImageName'])
 
-    def get_inventory_descriptions(self, withids=False):
+    async def get_inventory_descriptions(self, withids=False):
         yield "System"
         self._hwnamemap = {}
-        for cpu in self._get_cpu_inventory(True, withids):
+        async for cpu in self._get_cpu_inventory(True, withids):
             yield cpu
-        for mem in self._get_mem_inventory(True, withids):
+        async for mem in self._get_mem_inventory(True, withids):
             yield mem
-        for adp in self._get_adp_inventory(True, withids):
+        async for adp in self._get_adp_inventory(True, withids):
             yield adp
 
     async def _get_node_info(self):
@@ -1062,7 +1062,7 @@ class OEMHandler(object):
 
             return sysinfo
         else:
-            for invpair in self.get_inventory():
+            async for invpair in self.get_inventory():
                 if invpair[0].lower() == component.lower():
                     return invpair[1]
 
@@ -1123,7 +1123,7 @@ class OEMHandler(object):
                 nadurl = nifinfo.get(
                     'Links', {}).get('NetworkAdapter', {}).get("@odata.id")
                 if nadurl:
-                    nadinfo = self._do_web_request(nadurl)
+                    nadinfo = await self._do_web_request(nadurl)
                     if 'Name' not in nadinfo:
                         continue
                     nicname = nadinfo['Name']
@@ -1283,7 +1283,7 @@ class OEMHandler(object):
             storurl = await self._do_web_request(storurl)
             for url in storurl.get('Members', []):
                 url = url['@odata.id']
-                ctldata = self._do_web_request(url)
+                ctldata = await self._do_web_request(url)
                 for durl in ctldata.get('Drives', []):
                     urls.append(durl['@odata.id'])
         return urls
@@ -1293,14 +1293,13 @@ class OEMHandler(object):
         return [x['@odata.id'] for x in md]
 
     async def _get_cpu_data(self, expand='.'):
-        cpumembers = []
         for sysurl in self._allsysurls:
             currsysdata = await self._do_web_request(sysurl)
             currcpuurl = currsysdata.get('Processors', {}).get('@odata.id', None)
             if currcpuurl:
                 currcpudata = await self._get_expanded_data(currcpuurl, expand)
-                cpumembers.extend(currcpudata.get('Members', []))
-        return cpumembers
+                for memb in currcpudata.get('Members', []):
+                    yield memb
 
     async def _get_mem_inventory(self, onlyname=False, withids=False, urls=None):
         memdata = await self._get_mem_data()
@@ -1431,16 +1430,16 @@ class OEMHandler(object):
             return self.continue_update(uploadthread, progress)
         finally:
             if 'HttpPushUriTargetsBusy' in usd:
-                self._do_web_request(
+                await self._do_web_request(
                     '/redfish/v1/UpdateService',
                     {'HttpPushUriTargetsBusy': False}, method='PATCH')
 
-    def continue_update(self, uploadthread, progress):
+    async def continue_update(self, uploadthread, progress):
             rsp = json.loads(uploadthread.rsp)
             monitorurl = rsp['@odata.id']
-            return self.monitor_update_progress(monitorurl, progress)
+            return await self.monitor_update_progress(monitorurl, progress)
 
-    def monitor_update_progress(self, monitorurl, progress):
+    async def monitor_update_progress(self, monitorurl, progress):
             complete = False
             phase = "apply"
             statetype = 'TaskState'
@@ -1450,12 +1449,12 @@ class OEMHandler(object):
             pct = 0.0
             while not complete and retry > 0:
                 try:
-                    pgress = self._do_web_request(monitorurl, cache=False)
+                    pgress = await self._do_web_request(monitorurl, cache=False)
                 except socket.timeout:
                     pgress = None
                 if not pgress:
                     retry -= 1
-                    time.sleep(3)
+                    await asyncio.sleep(3)
                     continue
                 retry = 3
                 for msg in pgress.get('Messages', []):
@@ -1479,16 +1478,16 @@ class OEMHandler(object):
                         phase = 'validating'
                         statetype = 'JobState'
                         complete = False
-                        time.sleep(3)
+                        await asyncio.sleep(3)
                 else:
-                    time.sleep(3)
+                    await asyncio.sleep(3)
             if not retry:
-                raise Exception('Falied to monitor update progress due to excessive timeouts')
+                raise Exception('Failed to monitor update progress due to excessive timeouts')
             return 'pending'
 
 
-    def retrieve_firmware_upload_url(self):
-        usd = self._do_web_request('/redfish/v1/UpdateService', cache=False)
+    async def retrieve_firmware_upload_url(self):
+        usd = await self._do_web_request('/redfish/v1/UpdateService', cache=False)
         upurl = usd.get('MultipartHttpPushUri', None)
         ismultipart = True
         if not upurl:
@@ -1501,7 +1500,7 @@ class OEMHandler(object):
             except KeyError:
                 raise exc.UnsupportedFunctionality('Redfish firmware update only supported for implementations with push update support')
             if 'HttpPushUriTargetsBusy' in usd:
-                self._do_web_request('/redfish/v1/UpdateService',
+                await self._do_web_request('/redfish/v1/UpdateService',
                     {'HttpPushUriTargetsBusy': True}, method='PATCH')
                     
         return usd,upurl,ismultipart
@@ -1652,6 +1651,6 @@ class OEMHandler(object):
     def get_user_expiration(self, uid):
         return None
 
-    def reseat_bay(self, bay):
+    async def reseat_bay(self, bay):
         raise exc.UnsupportedFunctionality(
             'Reseat not supported on this platform')

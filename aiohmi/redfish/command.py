@@ -745,12 +745,12 @@ class Command(object):
         for subchassis in chassisinfo.get('Links', {}).get('Contains', []):
             await self._mapchassissensors(subchassis)
 
-    def _get_thermals(self, chassis):
+    async def _get_thermals(self, chassis):
         chassisurl = chassis['@odata.id']
-        chassisinfo = self._do_web_request(chassisurl)
+        chassisinfo = await self._do_web_request(chassisurl)
         thermurl = chassisinfo.get('Thermal', {}).get('@odata.id', '')
         if thermurl:
-            therminf = self._do_web_request(thermurl, cache=1)
+            therminf = await self._do_web_request(thermurl, cache=1)
             return therminf.get('Temperatures', [])
 
     async def _bmcurl(self):
@@ -767,7 +767,7 @@ class Command(object):
 
     async def list_network_interface_names(self):
         bmcurl = await self._bmcurl()
-        bmcinfo = self._do_web_request(bmcurl)
+        bmcinfo = await self._do_web_request(bmcurl)
         nicurl = bmcinfo.get('EthernetInterfaces', {}).get('@odata.id', None)
         if not nicurl:
             return
