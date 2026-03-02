@@ -495,7 +495,8 @@ class OEMHandler(generic.OEMHandler):
             if not self.oem_inventory_info:
                 async for desc in self._collect_tsm_inventory():
                     yield desc
-            return iter(self.oem_inventory_info)
+            for compname in self.oem_inventory_info:
+                yield compname
         elif await self.has_imm():
             async for desc in self.immhandler.get_hw_descriptions():
                 yield desc
