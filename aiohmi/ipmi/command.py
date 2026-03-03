@@ -212,14 +212,14 @@ class Command(object):
             await session.Session.wait_for_rsp()
 
     @classmethod
-    def wait_for_rsp(cls, timeout):
+    async def wait_for_rsp(cls, timeout):
         """Delay for no longer than timeout for next response.
 
         This acts like a sleep that exits on activity.
 
         :param timeout: Maximum number of seconds before returning
         """
-        return session.Session.wait_for_rsp(timeout=timeout)
+        return await session.Session.wait_for_rsp(timeout=timeout)
 
     async def _get_device_id(self):
         response = await self.raw_command(netfn=0x06, command=0x01)
@@ -253,7 +253,7 @@ class Command(object):
         self._oem, self._oemknown = await get_oem_handler(await self._get_device_id(),
                                                     self)
 
-    def get_bootdev(self):
+    async def get_bootdev(self):
         """Get current boot device override information.
 
         Provides the current requested boot device.  Be aware that not all IPMI
@@ -264,7 +264,7 @@ class Command(object):
         :raises: IpmiException on an error.
         :returns: dict --The response will be provided in the return as a dict
         """
-        response = self.raw_command(netfn=0, command=9, data=(5, 0, 0))
+        response = await self.raw_command(netfn=0, command=9, data=(5, 0, 0))
         # interpret response per 'get system boot options'
         # this should only be invoked for get system boot option complying to
         # ipmi spec and targeting the 'boot flags' parameter
@@ -293,7 +293,7 @@ class Command(object):
                         'persistent': persistent,
                         'uefimode': uefimode}
 
-    def reseat_bay(self, bay):
+    async def reseat_bay(self, bay):
         """Request the reseat of a bay
 
         Request the enclosure manager to reseat the system in a particular
@@ -302,8 +302,8 @@ class Command(object):
         :param bay: The bay identifier to reseat
         :return:
         """
-        self.oem_init()
-        self._oem.reseat_bay(bay)
+        await self.oem_init()
+        await self._oem.reseat_bay(bay)
 
     async def set_power(self, powerstate, wait=False, bridge_request=None):
         """Request power state change (helper)
@@ -377,19 +377,19 @@ class Command(object):
         curr_power_state = 'on' if (response['data'][0] & 1) else 'off'
         return curr_power_state
 
-    def get_video_launchdata(self):
+    async def get_video_launchdata(self):
         """Get data required to launch a remote video session to target.
 
         This is a highly proprietary scenario, the return data may vary greatly
         host to host.  The return should be a dict describing the type of data
         and the data.  For example {'jnlp': jnlpstring}
         """
-        self.oem_init()
-        return self._oem.get_video_launchdata()
+        await self.oem_init()
+        return await self._oem.get_video_launchdata()
 
-    def reset_bmc(self):
+    async def reset_bmc(self):
         """Do a cold reset in BMC"""
-        response = self.raw_command(netfn=6, command=2, retry=False)
+        response = await self.raw_command(netfn=6, command=2, retry=False)
         if response and 'error' in response:
             raise exc.IpmiException(response['error'])
 
@@ -531,13 +531,13 @@ class Command(object):
         """
         await self.oem_init()
         if hasattr(self._oem, 'get_power'):
-            return {'powerstate': self._oem.get_power(
+            return {'powerstate': await self._oem.get_power(
                 bridge_request=bridge_request)}
 
         return {'powerstate': await self._get_power_state(
             bridge_request=bridge_request)}
 
-    def set_identify(self, on=True, duration=None, blink=False):
+    async def set_identify(self, on=True, duration=None, blink=False):
         """Request identify light
 
         Request the identify light to turn off, on for a duration,
@@ -547,9 +547,9 @@ class Command(object):
         :param duration: Set if wanting to request turn on for a duration
                          rather than indefinitely on
         """
-        self.oem_init()
+        await self.oem_init()
         try:
-            self._oem.set_identify(on, duration, blink)
+            await self._oem.set_identify(on, duration, blink)
             return
         except exc.BypassGenericBehavior:
              return
@@ -563,7 +563,7 @@ class Command(object):
                 duration = 255
             if duration < 0:
                 duration = 0
-            response = self.raw_command(netfn=0, command=4, data=[duration])
+            response = await self.raw_command(netfn=0, command=4, data=[duration])
             return
         forceon = 0
         if on:
@@ -574,7 +574,7 @@ class Command(object):
             identifydata = [255 * forceon]
         else:
             identifydata = [0, forceon]
-        response = self.raw_command(netfn=0, command=4, data=identifydata)
+        response = await self.raw_command(netfn=0, command=4, data=identifydata)
 
     async def init_sdr(self):
         """Initialize SDR
@@ -599,7 +599,7 @@ class Command(object):
 
     async def get_event_constants(self):
         await self.oem_init()
-        return self._oem.get_oem_event_const()
+        return await self._oem.get_oem_event_const()
 
     async def get_event_log(self, clear=False):
         """Retrieve the log of events, optionally clearing
@@ -735,23 +735,23 @@ class Command(object):
         This provides a detailed view of the LEDs of the managed system.
         """
         await self.oem_init()
-        return self._oem.get_leds()
+        return await self._oem.get_leds()
 
-    def get_ntp_enabled(self):
-        self.oem_init()
-        return self._oem.get_ntp_enabled()
+    async def get_ntp_enabled(self):
+        await self.oem_init()
+        return await self._oem.get_ntp_enabled()
 
-    def set_ntp_enabled(self, enable):
-        self.oem_init()
-        return self._oem.set_ntp_enabled(enable)
+    async def set_ntp_enabled(self, enable):
+        await self.oem_init()
+        return await self._oem.set_ntp_enabled(enable)
 
-    def get_ntp_servers(self):
-        self.oem_init()
-        return self._oem.get_ntp_servers()
+    async def get_ntp_servers(self):
+        await self.oem_init()
+        return await self._oem.get_ntp_servers()
 
-    def set_ntp_server(self, server, index=0):
-        self.oem_init()
-        return self._oem.set_ntp_server(server, index)
+    async def set_ntp_server(self, server, index=0):
+        await self.oem_init()
+        return await self._oem.set_ntp_server(server, index)
 
     async def get_health(self):
         """Summarize health of managed system
@@ -808,7 +808,7 @@ class Command(object):
         await self.oem_init()
         return await self._oem.get_sensor_reading(sensorname)
 
-    def _fetch_lancfg_param(self, channel, param, prefixlen=False):
+    async def _fetch_lancfg_param(self, channel, param, prefixlen=False):
         """Internal helper for fetching lan cfg parameters
 
         If the parameter revison != 0x11, bail.  Further, if 4 bytes, return
@@ -817,7 +817,7 @@ class Command(object):
         """
         fetchcmd = bytearray((channel, param, 0, 0))
         try:
-            fetched = self.oldraw_command(0xc, 2, data=fetchcmd)
+            fetched = await self.oldraw_command(0xc, 2, data=fetchcmd)
         except exc.IpmiException as ie:
             if ie.ipmicode == 0x80:
                 return None
@@ -854,39 +854,39 @@ class Command(object):
         self.oem_init()
         return self._oem.get_extended_bmc_configuration()
 
-    def get_bmc_configuration(self):
-        self.oem_init()
-        return self._oem.get_bmc_configuration()
+    async def get_bmc_configuration(self):
+        await self.oem_init()
+        return await self._oem.get_bmc_configuration()
 
-    def set_bmc_configuration(self, changeset):
-        self.oem_init()
-        return self._oem.set_bmc_configuration(changeset)
+    async def set_bmc_configuration(self, changeset):
+        await self.oem_init()
+        return await self._oem.set_bmc_configuration(changeset)
 
-    def clear_bmc_configuration(self):
-        self.oem_init()
-        return self._oem.clear_bmc_configuration()
+    async def clear_bmc_configuration(self):
+        await self.oem_init()
+        return await self._oem.clear_bmc_configuration()
 
     async def get_system_configuration(self, hideadvanced=True):
         await self.oem_init()
         return await self._oem.get_system_configuration(hideadvanced)
 
-    def set_system_configuration(self, changeset):
-        self.oem_init()
-        return self._oem.set_system_configuration(changeset)
+    async def set_system_configuration(self, changeset):
+        await self.oem_init()
+        return await self._oem.set_system_configuration(changeset)
 
-    def clear_system_configuration(self):
+    async def clear_system_configuration(self):
         """Clear the Bios/UEFI configuration
 
         This requests the system revert to factory default settings
         """
-        self.oem_init()
-        self._oem.clear_system_configuration()
+        await self.oem_init()
+        return await self._oem.clear_system_configuration()
 
-    def set_net6_configuration(self, static_addresses=None, static_gateway=None, channel=None):
+    async def set_net6_configuration(self, static_addresses=None, static_gateway=None, channel=None):
         if static_addresses is None and static_gateway is None:
             return
         if channel is None:
-            channel = self.get_network_channel()
+            channel = await self.get_network_channel()
         if static_addresses is not None:
             i = 0
             for va in static_addresses:
@@ -897,17 +897,17 @@ class Command(object):
                 plen = int(plen)
                 vab = bytearray(socket.inet_pton(socket.AF_INET6, va))
                 cmddata = bytearray([channel, 56, 0, 0x80]) + vab + bytearray([plen, 0])
-                self.raw_command(netfn=0xc, command=1, data=cmddata)
+                await self.raw_command(netfn=0xc, command=1, data=cmddata)
         if static_gateway is not None:
             gwb = bytearray(socket.inet_pton(socket.AF_INET6, static_gateway))
             cmddata = bytearray([channel, 65]) + gwb
-            self.raw_command(netfn=0xc, command=1, data=cmddata)
+            await self.raw_command(netfn=0xc, command=1, data=cmddata)
     
-    def get_net6_configuration(self, channel=None):
+    async def get_net6_configuration(self, channel=None):
         if channel is None:
-            channel = self.get_network_channel()
+            channel = await self.get_network_channel()
         retdata = {}
-        ip6a = self.raw_command(netfn=0xc, command=2, data=(channel, 56, 0, 0))
+        ip6a = await self.raw_command(netfn=0xc, command=2, data=(channel, 56, 0, 0))
         ip6d = bytearray(ip6a['data'])
         if ip6d[0] != 0x11:
             raise Exception('Unsupported reply')
@@ -916,7 +916,7 @@ class Command(object):
             ip6addr = socket.inet_ntop(socket.AF_INET6, ip6b)
             plen = ip6d[19]
             retdata['static_addrs'] = ['{}/{}'.format(ip6addr, plen)]
-        ip6g = self.raw_command(netfn=0xc, command=2, data=(channel, 65, 0, 0))
+        ip6g = await self.raw_command(netfn=0xc, command=2, data=(channel, 65, 0, 0))
         ip6gd = bytearray(ip6g['data'])
         if ip6gd[0] != 0x11:
             raise Exception('Unsupported reply')
@@ -942,7 +942,7 @@ class Command(object):
                 and ipv4_gateway is None and vlan_id is None):
             return
         if channel is None:
-            channel = self.get_network_channel()
+            channel = await self.get_network_channel()
         if ipv4_configuration is not None:
             cmddata = [channel, 4, 0]
             if ipv4_configuration.lower() == 'dhcp':
@@ -952,7 +952,7 @@ class Command(object):
             else:
                 raise Exception('Unrecognized ipv4cfg parameter {0}'.format(
                     ipv4_configuration))
-            self.raw_command(netfn=0xc, command=1, data=cmddata)
+            await self.raw_command(netfn=0xc, command=1, data=cmddata)
         if ipv4_address is not None:
             netmask = None
             if '/' in ipv4_address:
@@ -973,7 +973,7 @@ class Command(object):
             cmddata = bytearray((channel, 0x14)) + struct.pack('<H', int(vlan_id) | 0x8000)
             await self.raw_command(netfn=0xc, command=1, data=cmddata)        
 
-    def get_storage_configuration(self):
+    async def get_storage_configuration(self):
         """"Get storage configuration data
 
         Retrieves the storage configuration from the target.  Data is given
@@ -984,27 +984,27 @@ class Command(object):
 
         :return: A aiohmi.storage.ConfigSpec object describing current config
         """
-        self.oem_init()
-        return self._oem.get_storage_configuration()
+        await self.oem_init()
+        return await self._oem.get_storage_configuration()
 
-    def clear_storage_arrays(self):
+    async def clear_storage_arrays(self):
         """Remove all array and dependent volumes from the system
 
         :return:
         """
-        self.oem_init()
-        self._oem.clear_storage_arrays()
+        await self.oem_init()
+        await self._oem.clear_storage_arrays()
 
-    def remove_storage_configuration(self, cfgspec):
+    async def remove_storage_configuration(self, cfgspec):
         """Remove specified storage configuration from controller.
 
         :param cfgspec: A aiohmi.storage.ConfigSpec describing what to remove
         :return:
         """
-        self.oem_init()
-        return self._oem.remove_storage_configuration(cfgspec)
+        await self.oem_init()
+        return await self._oem.remove_storage_configuration(cfgspec)
 
-    def apply_storage_configuration(self, cfgspec=None):
+    async def apply_storage_configuration(self, cfgspec=None):
         """Evaluate a configuration for validity
 
         This will check if configuration is currently available and, if given,
@@ -1012,10 +1012,10 @@ class Command(object):
         :param cfgspec: A aiohmi.storage.ConfigSpec describing desired oonfig
         :return:
         """
-        self.oem_init()
-        return self._oem.apply_storage_configuration(cfgspec)
+        await self.oem_init()
+        return await self._oem.apply_storage_configuration(cfgspec)
 
-    def check_storage_configuration(self, cfgspec=None):
+    async def check_storage_configuration(self, cfgspec=None):
         """Evaluate a configuration for validity
 
         This will check if configuration is currently available and, if given,
@@ -1023,10 +1023,10 @@ class Command(object):
         :param cfgspec: A aiohmi.storage.ConfigSpec describing desired oonfig
         :return:
         """
-        self.oem_init()
-        return self._oem.check_storage_configuration(cfgspec)
+        await self.oem_init()
+        return await self._oem.check_storage_configuration(cfgspec)
 
-    def get_net_configuration(self, channel=None, gateway_macs=True):
+    async def get_net_configuration(self, channel=None, gateway_macs=True):
         """Get network configuration data
 
         Retrieve network configuration from the target
@@ -1035,20 +1035,20 @@ class Command(object):
         :param gateway_macs: Whether to retrieve mac addresses for gateways
         :returns: A dictionary of network configuration data
         """
-        self.oem_init()
+        await self.oem_init()
 
         # support for huawei 2288H server
         if hasattr(self._oem, 'get_oem_net_configuration'):
-            return self._oem.get_oem_net_configuration()
+            return await self._oem.get_oem_net_configuration()
 
         if channel is None:
-            channel = self.get_network_channel()
+            channel = await self.get_network_channel()
         retdata = {}
-        v4addr = self._fetch_lancfg_param(channel, 3)
+        v4addr = await self._fetch_lancfg_param(channel, 3)
         if v4addr is None:
             retdata['ipv4_address'] = None
         else:
-            v4masklen = self._fetch_lancfg_param(channel, 6, prefixlen=True)
+            v4masklen = await self._fetch_lancfg_param(channel, 6, prefixlen=True)
             retdata['ipv4_address'] = '{0}/{1}'.format(v4addr, v4masklen)
         v4cfgmethods = {
             0: 'Unspecified',
@@ -1057,18 +1057,17 @@ class Command(object):
             3: 'BIOS',
             4: 'Other',
         }
-        retdata['ipv4_configuration'] = v4cfgmethods[self._fetch_lancfg_param(
+        retdata['ipv4_configuration'] = v4cfgmethods[await self._fetch_lancfg_param(
             channel, 4)]
-        retdata['mac_address'] = self._fetch_lancfg_param(channel, 5)
-        retdata['ipv4_gateway'] = self._fetch_lancfg_param(channel, 12)
-        retdata['ipv4_backup_gateway'] = self._fetch_lancfg_param(channel, 14)
+        retdata['mac_address'] = await self._fetch_lancfg_param(channel, 5)
+        retdata['ipv4_gateway'] = await self._fetch_lancfg_param(channel, 12)
+        retdata['ipv4_backup_gateway'] = await self._fetch_lancfg_param(channel, 14)
         if gateway_macs:
-            retdata['ipv4_gateway_mac'] = self._fetch_lancfg_param(channel, 13)
-            retdata['ipv4_backup_gateway_mac'] = self._fetch_lancfg_param(
+            retdata['ipv4_gateway_mac'] = await self._fetch_lancfg_param(channel, 13)
+            retdata['ipv4_backup_gateway_mac'] = await self._fetch_lancfg_param(
                 channel, 15)
-        retdata['vlan_id'] = self._fetch_lancfg_param(channel, 0x14)
-        self.oem_init()
-        self._oem.add_extra_net_configuration(retdata, channel)
+        retdata['vlan_id'] = await self._fetch_lancfg_param(channel, 0x14)
+        await self._oem.add_extra_net_configuration(retdata, channel)
         return retdata
 
     async def get_sensor_data(self):
@@ -1091,8 +1090,8 @@ class Command(object):
                 raise exc.IpmiException(rsp['error'], code=rsp['code'])
             yield self._sdr.sensors[sensor].\
                 decode_sensor_reading(self, rsp['data'])
-        self.oem_init()
-        for reading in self._oem.get_sensor_data():
+        await self.oem_init()
+        async for reading in self._oem.get_sensor_data():
             yield reading
 
     def get_sensor_descriptions(self):
@@ -1322,7 +1321,7 @@ class Command(object):
         :param channel: The channel to configure the alert on.  Defaults to
                 current
         """
-        self.oem_init()
+        await self.oem_init()
         if hasattr(self._oem, 'set_alert_destination'):
             await self._oem.set_alert_destination(ip)
             return
@@ -1364,7 +1363,7 @@ class Command(object):
                 destdata.extend(parsedip)
             await self.raw_command(netfn=0xc, command=1, data=destdata)
         if not ip == '0.0.0.0':
-            self._assure_alert_policy(channel, destination)
+            await self._assure_alert_policy(channel, destination)
 
     async def get_hostname(self):
         """Get the hostname used by the BMC in various contexts
@@ -1383,20 +1382,20 @@ class Command(object):
             # thing in the IPMI Spec for this
             return await self.get_mci()
 
-    def get_mci(self):
+    async def get_mci(self):
         """Set the management controller identifier.
 
         Try the OEM command first,if False, then set it per DCMI specification
 
         :returns: The identifier as a string
         """
-        self.oem_init()
-        identifier = self._oem.get_oem_identifier()
+        await self.oem_init()
+        identifier = await self._oem.get_oem_identifier()
         if identifier:
             return identifier
-        return self._chunkwise_dcmi_fetch(9)
+        return await self._chunkwise_dcmi_fetch(9)
 
-    def set_hostname(self, hostname):
+    async def set_hostname(self, hostname):
         """Set the hostname to be used by the BMC in various contexts.
 
         See get_hostname for details
@@ -1404,43 +1403,43 @@ class Command(object):
         :param hostname: The hostname to set
         :return: Nothing
         """
-        self.oem_init()
+        await self.oem_init()
         try:
-            return self._oem.set_hostname(hostname)
+            return await self._oem.set_hostname(hostname)
         except exc.UnsupportedFunctionality:
-            return self.set_mci(hostname)
+            return await self.set_mci(hostname)
 
-    def set_mci(self, mci):
+    async def set_mci(self, mci):
         """Set the management controller identifier.
 
         Try the OEM command first, if False, then set it per DCMI specification
         """
-        self.oem_init()
+        await self.oem_init()
         if not isinstance(mci, bytes):
             mci = mci.encode('utf8')
-        ret = self._oem.set_oem_identifier(mci)
+        ret = await self._oem.set_oem_identifier(mci)
         if ret:
             return
-        return self._chunkwise_dcmi_set(0xa, mci + b'\x00')
+        return await self._chunkwise_dcmi_set(0xa, mci + b'\x00')
 
-    def get_asset_tag(self):
+    async def get_asset_tag(self):
         """Get the system asset tag, per DCMI specification
 
         :returns: The asset tag
         """
-        self.oem_init()
+        await self.oem_init()
         if hasattr(self._oem, 'get_asset_tag'):
-            return self._oem.get_asset_tag()
-        return self._chunkwise_dcmi_fetch(6)
+            return await self._oem.get_asset_tag()
+        return await self._chunkwise_dcmi_fetch(6)
 
-    def set_asset_tag(self, tag):
+    async def set_asset_tag(self, tag):
         """Set the asset tag value
 
         """
-        self.oem_init()
+        await self.oem_init()
         if hasattr(self._oem, 'set_asset_tag'):
-            return self._oem.set_asset_tag(tag)
-        return self._chunkwise_dcmi_set(8, tag)
+            return await self._oem.set_asset_tag(tag)
+        return await self._chunkwise_dcmi_set(8, tag)
 
     async def _chunkwise_dcmi_fetch(self, command):
         szdata = await self.raw_command(
@@ -2036,7 +2035,7 @@ class Command(object):
                 names[uid] = await self.get_user(uid=uid, channel=channel)
         return names
 
-    def create_user(self, uid, name, password, channel=None, callback=False,
+    async def create_user(self, uid, name, password, channel=None, callback=False,
                     link_auth=True, ipmi_msg=True,
                     privilege_level='user'):
         """create/ensure a user is created with provided settings (helper)
@@ -2054,16 +2053,16 @@ class Command(object):
         # current user might be trying to update.. dont disable
         # set_user_password(uid, password, mode='disable')
         if channel is None:
-            channel = self.get_network_channel()
-        self.set_user_name(uid, name)
-        self.set_user_password(uid, password=password)
-        self.set_user_password(uid, mode='enable', password=password)
-        self.set_user_access(uid, channel, callback=callback,
+            channel = await self.get_network_channel()
+        await self.set_user_name(uid, name)
+        await self.set_user_password(uid, password=password)
+        await self.set_user_password(uid, mode='enable', password=password)
+        await self.set_user_access(uid, channel, callback=callback,
                              link_auth=link_auth, ipmi_msg=ipmi_msg,
                              privilege_level=privilege_level)
         return True
 
-    def user_delete(self, uid, channel=None):
+    async def user_delete(self, uid, channel=None):
         """Delete user (helper)
 
         Note that in IPMI, user 'deletion' isn't a concept.  This function
@@ -2074,35 +2073,35 @@ class Command(object):
         :param channel: number [1:7]
         """
         # TODO(jjohnson2): Provide OEM extensibility to cover user deletion
-        self.oem_init()
+        await self.oem_init()
         if hasattr(self._oem, 'user_delete'):
             try:
-                self._oem.user_delete(uid, channel)
+                await self._oem.user_delete(uid, channel)
             except exc.BypassGenericBehavior:
                 return
         if hasattr(self._oem, 'user_delete_privilege_level'):
-            privilege_level = self._oem.user_delete_privilege_level()
+            privilege_level = await self._oem.user_delete_privilege_level()
         else:
             privilege_level = 'no_access'
 
         if channel is None:
-            channel = self.get_network_channel()
-        self.set_user_password(uid, mode='disable', password=None)
+            channel = await self.get_network_channel()
+        await self.set_user_password(uid, mode='disable', password=None)
         # TODO(steveweber) perhaps should set user access on all channels
         # so new users dont get extra access
-        self.set_user_access(uid, channel=channel, callback=False,
+        await self.set_user_access(uid, channel=channel, callback=False,
                              link_auth=False, ipmi_msg=False,
                              privilege_level=privilege_level)
         try:
             # First try to set name to all \x00 explicitly
             # Fix bug-174389, don't try to send \xff command,
             # will cause IMM1 can't login
-            self.set_user_name(uid, '')
+            await self.set_user_name(uid, '')
         except exc.IpmiException:
             raise
         return True
 
-    def disable_user(self, uid, mode):
+    async def disable_user(self, uid, mode):
         """Disable User
 
         Just disable the User.
@@ -2113,10 +2112,10 @@ class Command(object):
             disable       = disable user connections
             enable        = enable user connections
         """
-        self.set_user_password(uid, mode)
+        await self.set_user_password(uid, mode)
         return True
 
-    def update_user(self, user):
+    async def update_user(self, user):
         """Update User
 
         Update user attributes, include name, password, access
@@ -2124,40 +2123,40 @@ class Command(object):
         :param user: user attributes
         """
         if 'username' in user:
-            self.set_user_name(uid=user['uid'], name=user['username'])
+            await self.set_user_name(uid=user['uid'], name=user['username'])
 
         privilege_level = None
         if 'privilege_level' in user:
             privilege_level = user['privilege_level']
 
         if privilege_level and privilege_level == 'no_access':
-            return self.upate_user_no_access(user, privilege_level)
+            return await self.upate_user_no_access(user, privilege_level)
         else:
-            return self.update_user_default(user, privilege_level)
+            return await self.update_user_default(user, privilege_level)
 
-    def upate_user_no_access(self, user, privilege_level):
+    async def upate_user_no_access(self, user, privilege_level):
         # if set to no_access, modify password first
         if 'password' in user:
-            self.set_user_password(uid=user['uid'], password=user['password'])
-        self.set_user_access(uid=user['uid'], privilege_level=privilege_level)
+            await self.set_user_password(uid=user['uid'], password=user['password'])
+        await self.set_user_access(uid=user['uid'], privilege_level=privilege_level)
 
         return True
 
-    def update_user_default(self, user, privilege_level):
+    async def update_user_default(self, user, privilege_level):
         if privilege_level:
-            self.set_user_access(uid=user['uid'],
+            await self.set_user_access(uid=user['uid'],
                                  privilege_level=privilege_level)
         if 'password' in user:
-            self.set_user_password(uid=user['uid'],
+            await self.set_user_password(uid=user['uid'],
                                    password=user['password'])
-            self.set_user_password(uid=user['uid'], mode='enable',
+            await self.set_user_password(uid=user['uid'], mode='enable',
                                    password=user['password'])
         if 'enabled' in user:
             if user['enabled'] == 'yes':
                 mode = 'enable'
             else:
                 mode = 'disable'
-            self.disable_user(user['uid'], mode)
+            await self.disable_user(user['uid'], mode)
 
         return True
 

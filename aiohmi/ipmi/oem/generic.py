@@ -32,10 +32,10 @@ class OEMHandler(object):
         self = cls()
         return self
 
-    def get_video_launchdata(self):
+    async def get_video_launchdata(self):
         return {}
 
-    def get_description(self):
+    async def get_description(self):
         """Get a description of descriptive attributes of a node.
 
         Height describes, in U how tall the system is, and slot is 0 if
@@ -45,7 +45,7 @@ class OEMHandler(object):
         """
         return {}
     
-    def get_screenshot(self, outfile):
+    async def get_screenshot(self, outfile):
         return {}    
 
     async def get_system_power_watts(self, ipmicmd):
@@ -61,7 +61,7 @@ class OEMHandler(object):
         # no standard ikvm behavior, must be oem defined
         return {}
 
-    def get_average_processor_temperature(self, ipmicmd):
+    async def get_average_processor_temperature(self, ipmicmd):
         # DCMI suggests preferrence for 0x37 ('Air inlet')
         # If not that, then 0x40 ('Air inlet')
         # in practice, some implementations use 0x27 ('External environment')
@@ -69,7 +69,7 @@ class OEMHandler(object):
             self._processor_names = []
         readings = []
         if not self._processor_names:
-            sdr = ipmicmd.init_sdr()
+            sdr = await ipmicmd.init_sdr()
             for sensename in sdr.sensors:
                 sensor = sdr.sensors[sensename]
                 if sensor.reading_type != 1:
@@ -83,7 +83,7 @@ class OEMHandler(object):
         readingvalues = []
         for procsensor in self._processor_names:
             try:
-                reading = ipmicmd.get_sensor_reading(procsensor)
+                reading = await ipmicmd.get_sensor_reading(procsensor)
             except exc.IpmiException:
                 continue
             if reading.value is not None:
@@ -97,15 +97,15 @@ class OEMHandler(object):
         return tmplreading
 
 
-    def get_inlet_temperature(self, ipmicmd):
+    async def get_inlet_temperature(self, ipmicmd):
         # DCMI suggests preferrence for 0x37 ('Air inlet')
         # If not that, then 0x40 ('Air inlet')
         # in practice, some implementations use 0x27 ('External environment')
         if not hasattr(self, '_inlet_name'):
             self._inlet_name = None
         if self._inlet_name:
-            return ipmicmd.get_sensor_reading(self._inlet_name)
-        sdr = ipmicmd.init_sdr()
+            return await ipmicmd.get_sensor_reading(self._inlet_name)
+        sdr = await ipmicmd.init_sdr()
         extenv = []
         airinlets = []
         for sensename in sdr.sensors:
@@ -133,9 +133,9 @@ class OEMHandler(object):
         if not self._inlet_name:
             raise exc.UnsupportedFunctionality(
                 'Unable to detect inlet sensor name for this platform')
-        return ipmicmd.get_sensor_reading(self._inlet_name)
+        return await ipmicmd.get_sensor_reading(self._inlet_name)
 
-    def process_event(self, event, ipmicmd, seldata):
+    async def process_event(self, event, ipmicmd, seldata):
         """Modify an event according with OEM understanding.
 
         Given an event, allow an OEM module to augment it.  For example,
@@ -149,11 +149,11 @@ class OEMHandler(object):
         if evdata[0] & 0b110000 == 0b100000:
             event['oem_byte3'] = evdata[2]
 
-    def clear_system_configuration(self):
+    async def clear_system_configuration(self):
         raise exc.UnsupportedFunctionality(
             'Clearing system configuration not implemented for this platform')
 
-    def clear_bmc_configuration(self):
+    async def clear_bmc_configuration(self):
         raise exc.UnsupportedFunctionality(
             'Clearing BMC configuration not implemented for this platform')
 
@@ -188,7 +188,7 @@ class OEMHandler(object):
         if False:
             yield None
 
-    def get_diagnostic_data(self, savefile, progress=None):
+    async def get_diagnostic_data(self, savefile, progress=None):
         """Download diagnostic data about target to a file
 
         This should be a payload that the vendor's support team can use
@@ -228,7 +228,7 @@ class OEMHandler(object):
         """
         return None
 
-    def get_leds(self):
+    async def get_leds(self):
         """Get tuples of LED categories.
 
         Each category contains a category name and a dicionary of LED names
@@ -237,28 +237,28 @@ class OEMHandler(object):
         if False:
             yield None
 
-    def get_ntp_enabled(self):
+    async def get_ntp_enabled(self):
         """Get whether ntp is enabled or not
 
         :returns: True if enabled, False if disabled, None if unsupported
         """
         return None
 
-    def set_ntp_enabled(self, enabled):
+    async def set_ntp_enabled(self, enabled):
         """Set whether NTP should be enabled
 
         :returns: True on success
         """
         return None
 
-    def get_ntp_servers(self):
+    async def get_ntp_servers(self):
         """Get current set of configured NTP servers
 
         :returns iterable of configured NTP servers:
         """
         return ()
 
-    def set_ntp_server(self, server, index=0):
+    async def set_ntp_server(self, server, index=0):
         """Set an ntp server
 
         :param server:  Destination address of server to reach
@@ -286,7 +286,7 @@ class OEMHandler(object):
         fru['oem_parser'] = None
         return fru
 
-    def get_oem_firmware(self, bmcver, components, category):
+    async def get_oem_firmware(self, bmcver, components, category):
         """Get Firmware information."""
 
         # Here the bmc version is passed into the OEM handler, to allow
@@ -300,72 +300,72 @@ class OEMHandler(object):
         # optimizations can be performed.
         yield 'BMC Version', {'version': bmcver}
 
-    def get_oem_capping_enabled(self):
+    async def get_oem_capping_enabled(self):
         """Get PSU based power capping status
 
         :return: True if enabled and False if disabled
         """
         return ()
 
-    def set_oem_capping_enabled(self, enable):
+    async def set_oem_capping_enabled(self, enable):
         """Set PSU based power capping
 
         :param enable: True for enable and False for disable
         """
         return ()
 
-    def get_oem_remote_kvm_available(self):
+    async def get_oem_remote_kvm_available(self):
         """Get remote KVM availability"""
         return False
 
-    def get_oem_domain_name(self):
+    async def get_oem_domain_name(self):
         """Get Domain name"""
         return ()
 
-    def set_oem_domain_name(self, name):
+    async def set_oem_domain_name(self, name):
         """Set Domain name
 
         :param name: domain name to be set
         """
         return ()
 
-    def clear_storage_arrays(self):
+    async def clear_storage_arrays(self):
         raise exc.UnsupportedFunctionality(
             'Remote storage configuration not supported on this platform')
 
-    def remove_storage_configuration(self, cfgspec):
+    async def remove_storage_configuration(self, cfgspec):
         raise exc.UnsupportedFunctionality(
             'Remote storage configuration not supported on this platform')
 
-    def apply_storage_configuration(self, cfgspec):
+    async def apply_storage_configuration(self, cfgspec):
         raise exc.UnsupportedFunctionality(
             'Remote storage configuration not supported on this platform')
 
-    def check_storage_configuration(self, cfgspec):
+    async def check_storage_configuration(self, cfgspec):
         raise exc.UnsupportedFunctionality(
             'Remote storage configuration not supported on this platform')
 
-    def get_storage_configuration(self):
+    async def get_storage_configuration(self):
         raise exc.UnsupportedFunctionality(
             'Remote storage configuration not supported on this platform')
 
-    def get_update_status(self):
+    async def get_update_status(self):
         raise exc.UnsupportedFunctionality(
             'Firmware update not supported on this platform')
 
-    def update_firmware(self, filename, data=None, progress=None, bank=None):
+    async def update_firmware(self, filename, data=None, progress=None, bank=None):
         raise exc.UnsupportedFunctionality(
             'Firmware update not supported on this platform')
 
-    def reseat_bay(self, bay):
+    async def reseat_bay(self, bay):
         raise exc.UnsupportedFunctionality(
             'Reseat not supported on this platform')
 
-    def get_graphical_console(self):
+    async def get_graphical_console(self):
         """Get graphical console launcher"""
         return ()
 
-    def add_extra_net_configuration(self, netdata, channel=None):
+    async def add_extra_net_configuration(self, netdata, channel=None):
         """Add additional network configuration data
 
         Given a standard netdata struct, add details as relevant from
@@ -374,33 +374,33 @@ class OEMHandler(object):
         """
         return
 
-    def get_oem_identifier(self):
+    async def get_oem_identifier(self):
         """Get host name
 
         """
         return None
 
-    def set_oem_identifier(self, name):
+    async def set_oem_identifier(self, name):
         """Set host name
 
         :param name: host name to be set
         """
         return False
 
-    def detach_remote_media(self):
+    async def detach_remote_media(self):
         raise exc.UnsupportedFunctionality()
 
-    def attach_remote_media(self, imagename, username, password):
+    async def attach_remote_media(self, imagename, username, password):
         raise exc.UnsupportedFunctionality()
 
-    def upload_media(self, filename, progress, data):
+    async def upload_media(self, filename, progress, data):
         raise exc.UnsupportedFunctionality(
             'Remote media upload not supported on this system')
 
-    def list_media(self):
+    async def list_media(self):
         raise exc.UnsupportedFunctionality()
 
-    def set_identify(self, on, duration, blink):
+    async def set_identify(self, on, duration, blink):
         """Provide an OEM override for set_identify
 
         Some systems may require an override for set identify.
@@ -408,7 +408,7 @@ class OEMHandler(object):
         """
         raise exc.UnsupportedFunctionality()
 
-    def get_health(self, summary):
+    async def get_health(self, summary):
         """Provide an alternative or augmented health assessment
 
         An OEM handler can preprocess the summary and extend it with OEM
@@ -421,7 +421,7 @@ class OEMHandler(object):
         """
         return []
 
-    def set_hostname(self, hostname):
+    async def set_hostname(self, hostname):
         """OEM specific hook to specify name information"""
         raise exc.UnsupportedFunctionality()
 
@@ -429,13 +429,13 @@ class OEMHandler(object):
         """OEM specific hook to specify name information"""
         raise exc.UnsupportedFunctionality()
 
-    def set_user_access(self, uid, channel, callback, link_auth, ipmi_msg,
+    async def set_user_access(self, uid, channel, callback, link_auth, ipmi_msg,
                         privilege_level):
         if privilege_level.startswith('custom.'):
             raise exc.UnsupportedFunctionality()
         return  # Nothing to do
 
-    def set_alert_ipv6_destination(self, ip, destination, channel):
+    async def set_alert_ipv6_destination(self, ip, destination, channel):
         """Set an IPv6 alert destination
 
         If and only if an implementation does not support standard
@@ -450,7 +450,7 @@ class OEMHandler(object):
         """
         return False
 
-    def get_extended_bmc_configuration(self):
+    async def get_extended_bmc_configuration(self):
         """Get extended bmc configuration
 
         In the case of potentially redundant/slow
@@ -459,14 +459,14 @@ class OEMHandler(object):
         """
         return {}
 
-    def get_bmc_configuration(self):
+    async def get_bmc_configuration(self):
         """Get additional BMC parameters
 
         This allows a bmc to return arbitrary key-value pairs.
         """
         return {}
 
-    def set_bmc_configuration(self, changeset):
+    async def set_bmc_configuration(self, changeset):
         raise exc.UnsupportedFunctionality(
             'Platform does not support setting bmc attributes')
 
@@ -481,7 +481,7 @@ class OEMHandler(object):
         """
         return {}
 
-    def set_system_configuration(self, changeset):
+    async def set_system_configuration(self, changeset):
         """Apply a changeset to system configuration
 
         Takes a key value pair and applies it against the system configuration
@@ -491,22 +491,22 @@ class OEMHandler(object):
     async def get_licenses(self):
         raise exc.UnsupportedFunctionality()
 
-    def delete_license(self, name):
+    async def delete_license(self, name):
         raise exc.UnsupportedFunctionality()
 
-    def save_licenses(self, directory):
+    async def save_licenses(self, directory):
         raise exc.UnsupportedFunctionality()
 
-    def apply_license(self, filename, progress=None, data=None):
+    async def apply_license(self, filename, progress=None, data=None):
         raise exc.UnsupportedFunctionality()
 
-    def get_user_expiration(self, uid):
+    async def get_user_expiration(self, uid):
         return None
     
-    def get_user_privilege_level(self, uid):
+    async def get_user_privilege_level(self, uid):
         return None
 
-    def set_oem_extended_privilleges(self, uid):
+    async def set_oem_extended_privilleges(self, uid):
         """Set user extended privillege as 'KVM & VMedia Allowed'
 
         |KVM & VMedia Not Allowed	0x00 0x00 0x00 0x00
@@ -521,25 +521,25 @@ class OEMHandler(object):
     async def process_zero_fru(self, zerofru):
         return await self.process_fru(zerofru)
 
-    def is_valid(self, name):
+    async def is_valid(self, name):
         return name is not None
 
-    def process_password(self, password, data):
+    async def process_password(self, password, data):
         return data
 
-    def set_server_capping(self, value):
+    async def set_server_capping(self, value):
         """Set power capping for server
 
         :param value: power capping value to set.
         """
         pass
 
-    def get_server_capping(self):
+    async def get_server_capping(self):
         """Get power capping for server
 
         :return: power capping value.
         """
         return None
 
-    def get_oem_event_const(self):
+    async def get_oem_event_const(self):
         return event_const

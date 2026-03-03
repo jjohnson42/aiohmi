@@ -414,16 +414,16 @@ class IMMClient(object):
                 if not self.updating and self._wc:
                     # in case the existing session is still valid
                     # dispose of the session
-                    self.weblogout()
+                    await self.weblogout()
                 self._wc = await self.get_webclient()
         finally:
             self.weblogging = False
         return self._wc
 
-    def fetch_grouped_properties(self, groupinfo):
+    async def fetch_grouped_properties(self, groupinfo):
         retdata = {}
         for keyval in groupinfo:
-            retdata[keyval] = self.get_property(groupinfo[keyval])
+            retdata[keyval] = await self.get_property(groupinfo[keyval])
             if keyval == 'date':
                 retdata[keyval] = self.datefromprop(retdata[keyval])
         returnit = False
@@ -439,10 +439,10 @@ class IMMClient(object):
         data = self.get_cached_data(url, age)
         wc = await self.wc()
         if not data:
-            data, status = wc.grab_json_response_with_status(url)
+            data, status = await wc.grab_json_response_with_status(url)
             if status == 401:
                 self._wc = None
-                data, status = wc.grab_json_response_with_status(url)
+                data, status = await wc.grab_json_response_with_status(url)
             if status != 200:
                 data = {}
             self.datacache[url] = (data, util._monotonic_time())
@@ -693,13 +693,14 @@ class IMMClient(object):
         except KeyError:
             return None
 
-    def get_oem_sensor_names(self, ipmicmd):
+    async def get_oem_sensor_names(self, ipmicmd):
         try:
             if self._energymanager is None:
                 self._energymanager = energy.EnergyManager(ipmicmd)
-            return self._energymanager.supportedmeters
+            for meter in self._energymanager.supportedmeters:
+                yield meter
         except pygexc.UnsupportedFunctionality:
-            return ()
+            return
 
     async def get_oem_sensor_descriptions(self, ipmicmd):
         desc = []
@@ -710,15 +711,15 @@ class IMMClient(object):
             })
         return desc
 
-    def get_oem_sensor_reading(self, name, ipmicmd):
+    async def get_oem_sensor_reading(self, name, ipmicmd):
         if self._energymanager is None:
             self._energymanager = energy.EnergyManager(ipmicmd)
         if name == 'AC Energy':
-            kwh = self._energymanager.get_ac_energy(ipmicmd)
+            kwh = await self._energymanager.get_ac_energy(ipmicmd)
         elif name == 'DC Energy':
-            kwh = self._energymanager.get_dc_energy(ipmicmd)
+            kwh = await self._energymanager.get_dc_energy(ipmicmd)
         elif self._energymanager.supports(name):
-            value, units = self._energymanager.get_sensor(name, ipmicmd)
+            value, units = await self._energymanager.get_sensor(name, ipmicmd)
             return sdr.SensorReading({
                 'name': name, 'imprecision': None,
                 'value': value,
@@ -937,10 +938,10 @@ class XCCClient(IMMClient):
         fd.start()
         fd.join()
 
-    def get_user_privilege_level(self, uid):
+    async def get_user_privilege_level(self, uid):
         uid = uid - 1
         accurl = '/redfish/v1/AccountService/Accounts/{0}'.format(uid)
-        accinfo, status = self.grab_redfish_response_with_status(accurl)
+        accinfo, status = await self.grab_redfish_response_with_status(accurl)
         if status == 200:
             return accinfo.get('RoleId', None)
         return None
@@ -957,7 +958,7 @@ class XCCClient(IMMClient):
             return accessinfo
         return {}
     
-    def set_user_access(self, uid, privilege_level):
+    async def set_user_access(self, uid, privilege_level):
         uid = uid - 1
         role = None
         if privilege_level == 'administrator':
@@ -969,7 +970,7 @@ class XCCClient(IMMClient):
         elif privilege_level.startswith('custom.'):
             role = privilege_level.replace('custom.', '')
         if role:
-            self.grab_redfish_response_with_status(
+            await self.grab_redfish_response_with_status(
                 '/redfish/v1/AccountService/Accounts/{0}'.format(uid),
                 {'RoleId': role}, method='PATCH')
 
@@ -2210,11 +2211,11 @@ class XCCClient(IMMClient):
                 '/redfish/v1/UpdateService',
                 {'HttpPushUriTargets': []}, method='PATCH')
 
-    def set_custom_user_privilege(self, uid, privilege):
-        return self.set_user_access(self, uid, privilege)
+    async def set_custom_user_privilege(self, uid, privilege):
+        return await self.set_user_access(uid, privilege)
 
-    def get_update_status(self):
-        upd = self.grab_redfish_response_emptyonerror('/redfish/v1/UpdateService')
+    async def get_update_status(self):
+        upd = await self.grab_redfish_response_emptyonerror('/redfish/v1/UpdateService')
         health = upd.get('Status', {}).get('Health', 'bod')
         if health == 'OK':
             return 'ready'

@@ -195,8 +195,8 @@ class OEMHandler(generic.OEMHandler):
             self.immhandler = imm.IMMClient(ipmicmd)
         elif await self.is_fpc():
             self.smmhandler = nextscale.SMMClient(ipmicmd, await self.is_fpc())
-        elif self.has_tsma:
-            conn = wc.SecureHTTPConnection(
+        elif await self.has_tsma():
+            conn = wc.WebConnection(
                 ipmicmd.bmc, 443,
                 verifycallback=self.ipmicmd.certverify)
             self.tsmahandler = tsma.TsmHandler(None, None, conn,
@@ -214,44 +214,44 @@ class OEMHandler(generic.OEMHandler):
             self._mrethidx = rsp['data'][0]
         return self._mrethidx
  
-    def get_screenshot(self, outfile):
-        if self.has_xcc:
-            return self.immhandler.get_screenshot(outfile)
+    async def get_screenshot(self, outfile):
+        if await self.has_xcc():
+            return await self.immhandler.get_screenshot(outfile)
         return {}
 
-    def remove_storage_configuration(self, cfgspec):
-        if self.has_xcc:
-            return self.immhandler.remove_storage_configuration(cfgspec)
-        return super(OEMHandler, self).remove_storage_configuration()
+    async def remove_storage_configuration(self, cfgspec):
+        if await self.has_xcc():
+            return await self.immhandler.remove_storage_configuration(cfgspec)
+        return await super(OEMHandler, self).remove_storage_configuration()
 
     async def get_ikvm_methods(self):
-        if self.has_xcc:
+        if await self.has_xcc():
             return ['url']
 
     async def get_ikvm_launchdata(self):
-        if self.has_xcc:
+        if await self.has_xcc():
             return await self.immhandler.get_ikvm_launchdata()
         return {}
 
-    def clear_storage_arrays(self):
-        if self.has_xcc:
-            return self.immhandler.clear_storage_arrays()
-        return super(OEMHandler, self).clear_storage_ararys()
+    async def clear_storage_arrays(self):
+        if await self.has_xcc():
+            return await self.immhandler.clear_storage_arrays()
+        return await super(OEMHandler, self).clear_storage_arrays()
 
-    def apply_storage_configuration(self, cfgspec):
-        if self.has_xcc:
-            return self.immhandler.apply_storage_configuration(cfgspec)
-        return super(OEMHandler, self).apply_storage_configuration()
+    async def apply_storage_configuration(self, cfgspec):
+        if await self.has_xcc():
+            return await self.immhandler.apply_storage_configuration(cfgspec)
+        return await super(OEMHandler, self).apply_storage_configuration()
 
-    def check_storage_configuration(self, cfgspec):
-        if self.has_xcc:
-            return self.immhandler.check_storage_configuration(cfgspec)
-        return super(OEMHandler, self).get_storage_configuration()
+    async def check_storage_configuration(self, cfgspec):
+        if await self.has_xcc():
+            return await self.immhandler.check_storage_configuration(cfgspec)
+        return await super(OEMHandler, self).get_storage_configuration()
 
-    def get_storage_configuration(self):
-        if self.has_xcc:
-            return self.immhandler.get_storage_configuration()
-        return super(OEMHandler, self).get_storage_configuration()
+    async def get_storage_configuration(self):
+        if await self.has_xcc():
+            return await self.immhandler.get_storage_configuration()
+        return await super(OEMHandler, self).get_storage_configuration()
 
     async def get_video_launchdata(self):
         if await self.has_tsm():
@@ -260,7 +260,7 @@ class OEMHandler(generic.OEMHandler):
     async def get_tsm_launchdata(self):
         pass
 
-    def process_event(self, event, ipmicmd, seldata):
+    async def process_event(self, event, ipmicmd, seldata):
         if 'oemdata' in event:
             oemtype = seldata[2]
             oemdata = event['oemdata']
@@ -401,9 +401,9 @@ class OEMHandler(generic.OEMHandler):
             return await self.tsmahandler.set_ntp_server(server, index)
         return None
     
-    def user_delete(self, uid, channel):
-        if self.has_xcc:
-            return self.immhandler.user_delete(uid)
+    async def user_delete(self, uid, channel):
+        if await self.has_xcc():
+            return await self.immhandler.user_delete(uid)
 
     async def set_user_access(self, uid, channel, callback, link_auth, ipmi_msg,
                         privilege_level):
@@ -973,12 +973,12 @@ class OEMHandler(generic.OEMHandler):
 
     Returns a tuple: (content type, launcher) or None if the launcher could
     not be retrieved."""
-    def _get_ts_remote_console(self, bmc, username, password):
+    async def _get_ts_remote_console(self, bmc, username, password):
         # We don't establish non-secure connections without checking
         # certificates
         if not self.ipmicmd.certverify:
             return
-        conn = wc.SecureHTTPConnection(bmc, 443,
+        conn = wc.WebConnection(bmc, 443,
                                        verifycallback=self.ipmicmd.certverify)
         conn.connect()
         params = urlencode({
@@ -988,11 +988,11 @@ class OEMHandler(generic.OEMHandler):
         headers = {
             'Connection': 'keep-alive'
         }
-        conn.request('POST', '/rpc/WEBSES/create.asp', params, headers)
-        rsp = conn.getresponse()
-        if rsp.status == 200:
+        rsp = await conn.grab_response_with_status('/rpc/WEBSES/create.asp', params, headers=headers)
+
+        if rsp[1] == 200:
             conn.cookies = {}
-            body = rsp.read().split('\n')
+            body = rsp[0].decode().split('\n')
             session_line = None
             for line in body:
                 if 'SESSION_COOKIE' in line:
@@ -1009,20 +1009,15 @@ class OEMHandler(generic.OEMHandler):
                 'Connection': 'keep-alive',
                 'Cookie': 'SessionCookie=' + session_id,
             }
-            conn.request(
-                'GET',
-                '/Java/jviewer.jnlp?EXTRNIP=' + bmc + '&JNLPSTR=JViewer',
-                None, headers)
-            rsp = conn.getresponse()
-            if rsp.status == 200:
-                return rsp.getheader('Content-Type'), base64.b64encode(
-                    rsp.read())
-        conn.close()
+            rsp = await conn.grab_response_with_status('/Java/jviewer.jnlp?EXTRNIP=' + bmc + '&JNLPSTR=JViewer', headers=headers)
+            if rsp[1] == 200:
+                return rsp[2]['Content-Type'], base64.b64encode(
+                    rsp[0])
 
-    def get_graphical_console(self):
-        return self._get_ts_remote_console(self.ipmicmd.bmc,
-                                           self.ipmicmd.ipmi_session.userid,
-                                           self.ipmicmd.ipmi_session.password)
+    async def get_graphical_console(self):
+        return await self._get_ts_remote_console(self.ipmicmd.bmc,
+                                                 self.ipmicmd.ipmi_session.userid,
+                                                 self.ipmicmd.ipmi_session.password)
 
     async def add_extra_net_configuration(self, netdata, channel=None):
         if await self.has_tsm():
@@ -1218,19 +1213,19 @@ class OEMHandler(generic.OEMHandler):
             return {'height': self._fpc_variant & 0xf, 'slot': 0}
         return await super(OEMHandler, self).get_description()
 
-    def get_extended_bmc_configuration(self):
-        if self.has_xcc:
-            return self.immhandler.get_extended_bmc_configuration()
-        return super(OEMHandler, self).get_extended_bmc_configuration()
+    async def get_extended_bmc_configuration(self):
+        if await self.has_xcc():
+            return await self.immhandler.get_extended_bmc_configuration()
+        return await super(OEMHandler, self).get_extended_bmc_configuration()
 
     async def get_bmc_configuration(self):
         if await self.has_xcc():
             return await self.immhandler.get_bmc_configuration()
         if await self.is_fpc():
             return await self.smmhandler.get_bmc_configuration(self._fpc_variant)
-        if self.has_tsma:
+        if await self.has_tsma():
             return await self.tsmahandler.get_bmc_configuration()
-        return super(OEMHandler, self).get_bmc_configuration()
+        return await super(OEMHandler, self).get_bmc_configuration()
 
     async def set_bmc_configuration(self, changeset):
         if await self.has_xcc():
@@ -1238,7 +1233,7 @@ class OEMHandler(generic.OEMHandler):
         if await self.is_fpc():
             return await self.smmhandler.set_bmc_configuration(
                 changeset, self._fpc_variant)
-        if self.has_tsma:
+        if await self.has_tsma():
             return await self.tsmahandler.set_bmc_configuration(
                 changeset)
         return await super(OEMHandler, self).set_bmc_configuration(changeset)
@@ -1246,14 +1241,14 @@ class OEMHandler(generic.OEMHandler):
     async def get_system_configuration(self, hideadvanced):
         if await self.has_imm() or await self.has_xcc():
             return await self.immhandler.get_system_configuration(hideadvanced)
-        if self.has_tsma:
+        if await self.has_tsma():
             return await self.tsmahandler.get_uefi_configuration(hideadvanced)
         return await super(OEMHandler, self).get_system_configuration(hideadvanced)
 
     async def set_system_configuration(self, changeset):
         if await self.has_imm() or await self.has_xcc():
             return await self.immhandler.set_system_configuration(changeset)
-        if self.has_tsma:
+        if await self.has_tsma():
             return await self.tsmahandler.set_uefi_configuration(changeset)
         return await super(OEMHandler, self).set_system_configuration(changeset)
 
@@ -1262,70 +1257,70 @@ class OEMHandler(generic.OEMHandler):
             return await self.immhandler.clear_bmc_configuration()
         elif await self.is_fpc():
             return await self.smmhandler.clear_bmc_configuration()
-        elif self.has_tsma:
+        elif await self.has_tsma():
             return await self.tsmahandler.clear_bmc_configuration()
         return await super(OEMHandler, self).clear_system_configuration()
 
     async def clear_system_configuration(self):
         if await self.has_xcc():
             return await self.immhandler.clear_system_configuration()
-        if self.has_tsma:
+        if await self.has_tsma():
             return await self.tsmahandler.clear_uefi_configuration()
         return await super(OEMHandler, self).clear_system_configuration()
 
     async def detach_remote_media(self):
         if await self.has_imm():
             await self.immhandler.detach_remote_media()
-        elif self.has_tsma:
+        elif await self.has_tsma():
             await self.tsmahandler.detach_remote_media()
         elif await self.has_megarac():
             await self.ipmicmd.raw_command(
                 netfn=0x32, command=0x9f, data=(8, 10, 0, 0))
             await self.ipmicmd.raw_command(netfn=0x32, command=0x9f, data=(8, 11))
 
-    def upload_media(self, filename, progress, data):
-        if self.has_xcc or self.has_imm:
-            return self.immhandler.upload_media(filename, progress, data)
-        return super(OEMHandler, self).upload_media(filename, progress, data)
+    async def upload_media(self, filename, progress, data):
+        if await self.has_xcc() or await self.has_imm():
+            return await self.immhandler.upload_media(filename, progress, data)
+        return await super(OEMHandler, self).upload_media(filename, progress, data)
 
-    def list_media(self):
-        if self.has_xcc or self.has_imm:
-            return self.immhandler.list_media()
-        if self.has_tsma:
-            return self.tsmahandler.list_media()
-        return super(OEMHandler, self).list_media()
+    async def list_media(self):
+        if await self.has_xcc() or await self.has_imm():
+            return await self.immhandler.list_media()
+        if await self.has_tsma():
+            return await self.tsmahandler.list_media()
+        return await super(OEMHandler, self).list_media()
 
     async def get_health(self, summary):
-        if self.has_xcc:
+        if await self.has_xcc():
             return await self.immhandler.get_health(summary)
-        return super(OEMHandler, self).get_health(summary)
+        return await super(OEMHandler, self).get_health(summary)
 
     async def get_licenses(self):
-        if self.has_xcc:
+        if await self.has_xcc():
             async for x in self.immhandler.get_licenses():
                 yield x
         async for x in super(OEMHandler, self).get_licenses():
             yield x
 
-    def get_user_expiration(self, uid):
-        if self.has_xcc:
-            return self.immhandler.get_user_expiration(uid)
+    async def get_user_expiration(self, uid):
+        if await self.has_xcc():
+            return await self.immhandler.get_user_expiration(uid)
         return None
 
-    def delete_license(self, name):
-        if self.has_xcc:
-            return self.immhandler.delete_license(name)
-        return super(OEMHandler, self).delete_license(name)
+    async def delete_license(self, name):
+        if await self.has_xcc():
+            return await self.immhandler.delete_license(name)
+        return await super(OEMHandler, self).delete_license(name)
 
-    def save_licenses(self, directory):
-        if self.has_xcc:
-            return self.immhandler.save_licenses(directory)
-        return super(OEMHandler, self).save_licenses(directory)
+    async def save_licenses(self, directory):
+        if await self.has_xcc():
+            return await self.immhandler.save_licenses(directory)
+        return await super(OEMHandler, self).save_licenses(directory)
 
-    def apply_license(self, filename, progress=None, data=None):
-        if self.has_xcc:
-            return self.immhandler.apply_license(filename, progress, data)
-        return super(OEMHandler, self).apply_license(filename, progress, data)
+    async def apply_license(self, filename, progress=None, data=None):
+        if await self.has_xcc():
+            return await self.immhandler.apply_license(filename, progress, data)
+        return await super(OEMHandler, self).apply_license(filename, progress, data)
 
     async def set_oem_extended_privilleges(self, uid):
         """Set user extended privillege as 'KVM & VMedia Allowed'
@@ -1343,14 +1338,14 @@ class OEMHandler(generic.OEMHandler):
             return True
         return False
 
-    def get_user_privilege_level(self, uid):
-        if self.has_xcc:
-            return self.immhandler.get_user_privilege_level(uid)
+    async def get_user_privilege_level(self, uid):
+        if await self.has_xcc():
+            return await self.immhandler.get_user_privilege_level(uid)
         return None
 
-    def set_user_access(self, uid, channel, callback, link_auth, ipmi_msg, privilege_level):
-        if self.has_xcc:
-            self.immhandler.set_user_access(uid, privilege_level)
+    async def set_user_access(self, uid, channel, callback, link_auth, ipmi_msg, privilege_level):
+        if await self.has_xcc():
+            await self.immhandler.set_user_access(uid, privilege_level)
 
     async def process_zero_fru(self, zerofru):
         if (self.oemid['manufacturer_id'] == 19046
@@ -1388,14 +1383,14 @@ class OEMHandler(generic.OEMHandler):
             await self.smmhandler.augment_zerofru(zerofru, self._fpc_variant)
         return await self.process_fru(zerofru)
 
-    def get_ami_sensor_reading(self, sensorname):
+    async def get_ami_sensor_reading(self, sensorname):
         """Get an OEM sensor
 
         If software wants to model some OEM behavior as a 'sensor' without
         doing SDR, this hook provides that ability.  It should mimic
         the behavior of 'get_sensor_reading' in command.py.
         """
-        for sensor in self.get_sensor_data():
+        async for sensor in self.get_sensor_data():
             if sensor.name == sensorname:
                 return sensor
 
@@ -1408,7 +1403,7 @@ class OEMHandler(generic.OEMHandler):
         """
         if await self.has_ami():
             energy_sensor = energy.Energy(self.ipmicmd)
-            for sensor in energy_sensor.get_energy_sensor():
+            async for sensor in energy_sensor.get_energy_sensor():
                 yield {'name': sensor.name,
                        'type': sensor.type}
 
