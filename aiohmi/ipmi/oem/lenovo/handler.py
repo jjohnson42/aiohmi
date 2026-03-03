@@ -1285,10 +1285,13 @@ class OEMHandler(generic.OEMHandler):
 
     async def list_media(self):
         if await self.has_xcc() or await self.has_imm():
-            return await self.immhandler.list_media()
+            async for x in self.immhandler.list_media():
+                yield x
         if await self.has_tsma():
-            return await self.tsmahandler.list_media()
-        return await super(OEMHandler, self).list_media()
+            async for x in self.tsmahandler.list_media():
+                yield x
+        async for x in super(OEMHandler, self).list_media():
+            yield x
 
     async def get_health(self, summary):
         if await self.has_xcc():

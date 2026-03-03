@@ -2277,7 +2277,8 @@ class Command(object):
         :returns: An iterable list of attached media
         """
         await self.oem_init()
-        return await self._oem.list_media()
+        async for m in self._oem.list_media():
+            yield m
     
     async def get_licenses(self):
         await self.oem_init()

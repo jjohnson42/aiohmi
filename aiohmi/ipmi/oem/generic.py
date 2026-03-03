@@ -398,6 +398,8 @@ class OEMHandler(object):
             'Remote media upload not supported on this system')
 
     async def list_media(self):
+        if False:
+            yield None
         raise exc.UnsupportedFunctionality()
 
     async def set_identify(self, on, duration, blink):
