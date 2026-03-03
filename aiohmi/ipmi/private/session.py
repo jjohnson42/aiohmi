@@ -827,7 +827,7 @@ class Session(object):
                     rslun=0):
         while (self.logging and not self.logged
                 and _monotonic_time() < self.logoutexpiry):
-            self.pause(1)
+            await self.pause(1)
         if not self.logged:
             if (self.logoutexpiry is not None
                     and _monotonic_time() > self.logoutexpiry):
