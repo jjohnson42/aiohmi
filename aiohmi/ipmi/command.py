@@ -1656,7 +1656,7 @@ class Command(object):
         return r
 
     async def get_screenshot(self, outfile):
-        self.oem_init()
+        await self.oem_init()
         return await self._oem.get_screenshot(outfile)
 
     async def get_channel_info(self, channel=None):

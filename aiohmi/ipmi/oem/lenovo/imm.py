@@ -934,9 +934,8 @@ class XCCClient(IMMClient):
         wc = await self.wc()
         await wc.grab_json_response('/api/providers/rp_screenshot')
         url = '/download/HostScreenShot.png'
-        fd = webclient.FileDownloader(self.wc, url, outfile)
-        fd.start()
-        fd.join()
+        fd = webclient.make_downloader(wc, url, outfile)
+        await fd.join()
 
     async def get_user_privilege_level(self, uid):
         uid = uid - 1
