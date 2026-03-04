@@ -156,9 +156,8 @@ class OEMHandler(generic.OEMHandler):
         wc = await self.wc()
         await wc.grab_json_response('/api/providers/rp_screenshot')
         url = '/download/HostScreenShot.png'
-        fd = webclient.FileDownloader(wc, url, outfile)
-        fd.start()
-        fd.join()
+        fd = webclient.make_downloader(wc, url, outfile)
+        await fd.join()
 
     async def get_extended_bmc_configuration(self, fishclient, hideadvanced=True):
         immsettings = await self.get_system_configuration(fetchimm=True, hideadvanced=hideadvanced)

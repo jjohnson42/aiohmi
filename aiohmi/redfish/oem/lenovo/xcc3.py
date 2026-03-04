@@ -748,11 +748,10 @@ class OEMHandler(generic.OEMHandler):
 
     async def get_screenshot(self, outfile):
         wc = self.webclient.dupe()
-        self._get_session_token(wc)
+        await self._get_session_token(wc)
         url = '/web_download/Mini_ScreenShot.jpg'
-        fd = webclient.FileDownloader(wc, url, outfile)
-        fd.start()
-        fd.join()
+        fd = webclient.make_downloader(wc, url, outfile)
+        await fd.join()
 
     async def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
         tsk = await self._do_web_request(
