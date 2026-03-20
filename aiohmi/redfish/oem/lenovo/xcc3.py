@@ -71,10 +71,10 @@ class OEMHandler(generic.OEMHandler):
         self.datacache = {}
         return self
 
-    def weblogout(self):
+    async def weblogout(self):
         if self.webclient:
             try:
-                self.webclient.grab_json_response('/logout')
+                await self.webclient.grab_json_response('/logout')
             except Exception:
                 pass
     
@@ -495,10 +495,10 @@ class OEMHandler(generic.OEMHandler):
             #  existing array would be here
             pass
     
-    def _raid_number_map(self, controller):
+    async def _raid_number_map(self, controller):
         themap = {}
         cid = controller.split(',')
-        rsp = self.webclient.grab_json_response(
+        rsp = await self.webclient.grab_json_response(
             '/redfish/v1/Systems/1/Storage/{0}'.format(cid[0]))
         for rt in rsp['StorageControllers'][0]['SupportedRAIDTypes']:
             rt_lower = rt.lower()
@@ -509,13 +509,13 @@ class OEMHandler(generic.OEMHandler):
             themap[rt_lower.replace('raid','')] = mapdata
         return themap
 
-    def _create_array(self, pool):
+    async def _create_array(self, pool):
         params = self._parse_array_spec(pool)
         cid = params['controller'].split(',')[0]
-        c_capabilities, code = self.webclient.grab_json_response_with_status(
+        c_capabilities, code = await self.webclient.grab_json_response_with_status(
             f'/redfish/v1/Systems/1/Storage/{cid}/Volumes/Capabilities')
         if code == 404:
-            c_capabilities, code = self.webclient.grab_json_response_with_status(
+            c_capabilities, code = await self.webclient.grab_json_response_with_status(
             f'/redfish/v1/Systems/1/Storage/{cid}/Volumes/Oem/Lenovo/Capabilities')
             if code == 404:
                 # If none of the endpoints exist, maybe it should be printed that
@@ -528,7 +528,7 @@ class OEMHandler(generic.OEMHandler):
         raidlevel = params['raidlevel']
         nameappend = 1
         currvolnames = None
-        currcfg = self.get_storage_configuration(False)
+        currcfg = await self.get_storage_configuration(False)
         for vol in volumes:
             if vol.name is None:
                 # need to iterate while there exists a volume of that name
@@ -641,8 +641,8 @@ class OEMHandler(generic.OEMHandler):
                 else:
                     disks_capacities = {}
                     for d in spec_disks:
-                        disks_capacities[d] = self.webclient.grab_json_response(
-                            f'/redfish/v1/Systems/1/Storage/{cid}/Drives/{d}')["CapacityBytes"]
+                        disks_capacities[d] = (await self.webclient.grab_json_response(
+                            f'/redfish/v1/Systems/1/Storage/{cid}/Drives/{d}'))["CapacityBytes"]
                     max_capacity = sum(v for k,v in disks_capacities.items())
                     min_disk = min([v for k,v in disks_capacities.items()])
                     disk_count = len(disks_capacities)
@@ -701,28 +701,28 @@ class OEMHandler(generic.OEMHandler):
                 data=request_data)
             if code == 500:
                 raise Exception("Unexpected response to volume creation: " + repr(msg))
-            time.sleep(60)
+            await asyncio.sleep(60)
             #Even if in web the volume appears immediately, get_storage_configuration does not see it that fast
-            newcfg = self.get_storage_configuration(False)
+            newcfg = await self.get_storage_configuration(False)
             newvols = [v.id for p in newcfg.arrays for v in p.volumes]
             currvols = [v.id for p in currcfg.arrays for v in p.volumes]
             newvol = list(set(newvols) - set(currvols))[0]
             if default_init:
-                msg, code = self.webclient.grab_json_response_with_status(
+                msg, code = await self.webclient.grab_json_response_with_status(
                     f'/redfish/v1/Systems/1/Storage/{cid}/Volumes/{newvol[1]}/Actions/Volume.Initialize',
                     method='POST',
                     data = {"InitializeType": default_init})
                 if code == 500:
                     raise Exception("Unexpected response to volume initialization: " + repr(msg))
 
-    def attach_remote_media(self, url, user, password, vmurls):
+    async def attach_remote_media(self, url, user, password, vmurls):
         for vmurl in vmurls:
             if 'EXT' not in vmurl:
                 continue
-            vminfo = self._do_web_request(vmurl, cache=False)
+            vminfo = await self._do_web_request(vmurl, cache=False)
             if vminfo['ConnectedVia'] != 'NotConnected':
                 continue
-            msg,code = self.webclient.grab_json_response_with_status(
+            msg,code = await self.webclient.grab_json_response_with_status(
                 vmurl,
                 data={'Image': url, 'Inserted': True},
                 method='PATCH')
@@ -839,22 +839,22 @@ class OEMHandler(generic.OEMHandler):
         summary['badreadings'] = fallbackdata
         return summary   
 
-    def _get_cpu_temps(self, fishclient):
+    async def _get_cpu_temps(self, fishclient):
         cputemps = []
-        for reading in super()._get_cpu_temps(fishclient):
+        for reading in await super()._get_cpu_temps(fishclient):
             if 'Margin' in reading['Name']:
                 continue
             cputemps.append(reading)
         return cputemps
 
-    def get_system_configuration(self, hideadvanced=True, fishclient=None):
-        stgs = self._getsyscfg(fishclient)[0]
+    async def get_system_configuration(self, hideadvanced=True, fishclient=None):
+        stgs = (await self._getsyscfg(fishclient))[0]
         outstgs = {}
         for stg in stgs:
             outstgs[f'UEFI.{stg}'] = stgs[stg]
         return outstgs
 
-    def set_system_configuration(self, changeset, fishclient):
+    async def set_system_configuration(self, changeset, fishclient):
         bmchangeset = {}
         vpdchangeset = {}
         for stg in list(changeset):
@@ -868,22 +868,22 @@ class OEMHandler(generic.OEMHandler):
                 vpdchangeset[stg.replace('VPD.', '')] = changeset[stg]
                 del changeset[stg]
         if changeset:
-            super().set_system_configuration(changeset, fishclient)
+            await super().set_system_configuration(changeset, fishclient)
         if bmchangeset:
-            self._set_xcc3_settings(bmchangeset, fishclient)
+            await self._set_xcc3_settings(bmchangeset, fishclient)
         if vpdchangeset:
-            self._set_xcc3_vpd(vpdchangeset, fishclient)
+            await self._set_xcc3_vpd(vpdchangeset, fishclient)
 
-    def _set_xcc3_vpd(self, changeset, fishclient):
+    async def _set_xcc3_vpd(self, changeset, fishclient):
         newvpd = {'Attributes': changeset}
-        fishclient._do_web_request(
+        await fishclient._do_web_request(
             '/redfish/v1/Chassis/1/Oem/Lenovo/SysvpdSettings/Actions/LenovoSysVpdSettings.SetVpdSettings',
             newvpd)
 
 
-    def _set_xcc3_settings(self, changeset, fishclient):
-        currsettings, reginfo = self._get_lnv_bmcstgs(fishclient)
-        rawsettings = fishclient._do_web_request('/redfish/v1/Managers/1/Oem/Lenovo/BMCSettings',
+    async def _set_xcc3_settings(self, changeset, fishclient):
+        currsettings, reginfo = await self._get_lnv_bmcstgs(fishclient)
+        rawsettings = await fishclient._do_web_request('/redfish/v1/Managers/1/Oem/Lenovo/BMCSettings',
                                                  cache=False)
         rawsettings = rawsettings.get('Attributes', {})
         pendingsettings = {}
@@ -891,7 +891,7 @@ class OEMHandler(generic.OEMHandler):
             changeset, fishclient, currsettings, rawsettings,
             pendingsettings, self.lenovobmcattrdeps, reginfo,
             '/redfish/v1/Managers/1/Oem/Lenovo/BMCSettings')
-        fishclient._do_web_request('/redfish/v1/Managers/1/Oem/Lenovo/BMCSettings', cache=False)
+        await fishclient._do_web_request('/redfish/v1/Managers/1/Oem/Lenovo/BMCSettings', cache=False)
         return ret
 
     oemacctmap = {
@@ -964,12 +964,12 @@ class OEMHandler(generic.OEMHandler):
             src, dst = currval.split(',')
             mappings.append('{}:{}'.format(src,dst))
         settings['usb_forwarded_ports'] = {'value': ','.join(mappings)}
-        cfgin = self._get_lnv_bmcstgs(self)[0]
+        cfgin = await self._get_lnv_bmcstgs(self)[0]
         for stgname in cfgin:
             settings[f'{stgname}'] = cfgin[stgname]        
         return settings
 
-    def set_bmc_configuration(self, changeset):
+    async def set_bmc_configuration(self, changeset):
         acctattribs = {}
         usbsettings = {}
         bmchangeset = {}
@@ -1014,18 +1014,18 @@ class OEMHandler(generic.OEMHandler):
             else:
                 bmchangeset[key.replace('bmc.', '')] = rawchangeset[key]
         if acctattribs:
-            self._do_web_request(
+            await self._do_web_request(
                 '/redfish/v1/AccountService', acctattribs, method='PATCH')
-            self._do_web_request('/redfish/v1/AccountService', cache=False)
+            await self._do_web_request('/redfish/v1/AccountService', cache=False)
         if usbsettings:
-            self.apply_usb_configuration(usbsettings)
+            await self.apply_usb_configuration(usbsettings)
         if bmchangeset:
             self._set_xcc3_settings(bmchangeset, self)        
 
-    def apply_usb_configuration(self, usbsettings):
+    async def apply_usb_configuration(self, usbsettings):
         bmcattribs = {}
         if not hasattr(self, 'ethoverusb'):
-            self.get_bmc_configuration()
+            await self.get_bmc_configuration()
         if 'usb_forwarded_ports' in usbsettings:
             pairs = usbsettings['usb_forwarded_ports'].split(',')
             idx = 1
@@ -1053,43 +1053,43 @@ class OEMHandler(generic.OEMHandler):
             keyname = 'EthOverUSBPortForwardingEnabled' if self.ethoverusb else 'NetMgrUsb0PortForwardingEnabled'
             bmcattribs[keyname] = usbsettings[
                     'usb_ethernet_port_forwarding']
-        self._do_web_request(
+        await self._do_web_request(
             '/redfish/v1/Managers/1/Oem/Lenovo/BMCSettings',
             {'Attributes': bmcattribs}, method='PATCH')
-        self._do_web_request(
+        await self._do_web_request(
             '/redfish/v1/Managers/1/Oem/Lenovo/BMCSettings', cache=False)
 
-    def get_extended_bmc_configuration(self, fishclient, hideadvanced=True):
-        cfgin = self._get_lnv_bmcstgs(fishclient)[0]
+    async def get_extended_bmc_configuration(self, fishclient, hideadvanced=True):
+        cfgin = await self._get_lnv_bmcstgs(fishclient)[0]
         cfgout = {}
         for stgname in cfgin:
             cfgout[f'BMC.{stgname}'] = cfgin[stgname]
-        vpdin = self._get_lnv_vpd(fishclient)[0]
+        vpdin = await self._get_lnv_vpd(fishclient)[0]
         for stgname in vpdin:
             cfgout[f'VPD.{stgname}'] = vpdin[stgname]
         return cfgout
 
-    def _get_lnv_vpd(self, fishclient):
-        currsettings, reginfo = self._get_lnv_stgs(
+    async def _get_lnv_vpd(self, fishclient):
+        currsettings, reginfo = await self._get_lnv_stgs(
             fishclient, '/redfish/v1/Chassis/1/Oem/Lenovo/SysvpdSettings')
         self.lenovobmcattrdeps = reginfo[3]
         return currsettings, reginfo
 
-    def _get_lnv_bmcstgs(self, fishclient):
-        currsettings, reginfo = self._get_lnv_stgs(
+    async def _get_lnv_bmcstgs(self, fishclient):
+        currsettings, reginfo = await self._get_lnv_stgs(
             fishclient, '/redfish/v1/Managers/1/Oem/Lenovo/BMCSettings')
         self.lenovobmcattrdeps = reginfo[3]
         return currsettings, reginfo
 
-    def _get_lnv_stgs(self, fishclient, url):
-        bmcstgs = fishclient._do_web_request(url)
+    async def _get_lnv_stgs(self, fishclient, url):
+        bmcstgs = await fishclient._do_web_request(url)
         bmcreg = bmcstgs.get('AttributeRegistry', None)
         extrainfo = {}
         valtodisplay = {}
         currsettings = {}
         reginfo = {}, {}, {}, {}
         if bmcreg:
-            reginfo = self._get_attrib_registry(fishclient, bmcreg)
+            reginfo = await self._get_attrib_registry(fishclient, bmcreg)
             if reginfo:
                 extrainfo, valtodisplay, _, _ = reginfo
         for setting in bmcstgs.get('Attributes', {}):
@@ -1120,7 +1120,7 @@ class OEMHandler(generic.OEMHandler):
                     continue
         return {}
 
-    def upload_media(self, filename, progress=None, data=None):
+    async def upload_media(self, filename, progress=None, data=None):
         wc = self.webclient
         uploadthread = webclient.FileUploader(
             wc, '/rdoc_upload', filename, data,
@@ -1139,7 +1139,7 @@ class OEMHandler(generic.OEMHandler):
         if progress:
             progress({'phase': 'upload',
                       'progress': 100.0})
-        self._do_web_request(
+        await self._do_web_request(
             '/redfish/v1/Systems/1/VirtualMedia/RDOC1',
             {'Image':'file:///gpx/rdocupload/' + remfilename,
              'WriteProtected': False}, method='PATCH')
