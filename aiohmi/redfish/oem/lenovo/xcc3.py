@@ -964,7 +964,7 @@ class OEMHandler(generic.OEMHandler):
             src, dst = currval.split(',')
             mappings.append('{}:{}'.format(src,dst))
         settings['usb_forwarded_ports'] = {'value': ','.join(mappings)}
-        cfgin = await self._get_lnv_bmcstgs(self)[0]
+        cfgin = (await self._get_lnv_bmcstgs(self))[0]
         for stgname in cfgin:
             settings[f'{stgname}'] = cfgin[stgname]        
         return settings
@@ -1060,11 +1060,11 @@ class OEMHandler(generic.OEMHandler):
             '/redfish/v1/Managers/1/Oem/Lenovo/BMCSettings', cache=False)
 
     async def get_extended_bmc_configuration(self, fishclient, hideadvanced=True):
-        cfgin = await self._get_lnv_bmcstgs(fishclient)[0]
+        cfgin = (await self._get_lnv_bmcstgs(fishclient))[0]
         cfgout = {}
         for stgname in cfgin:
             cfgout[f'BMC.{stgname}'] = cfgin[stgname]
-        vpdin = await self._get_lnv_vpd(fishclient)[0]
+        vpdin = (await self._get_lnv_vpd(fishclient))[0]
         for stgname in vpdin:
             cfgout[f'VPD.{stgname}'] = vpdin[stgname]
         return cfgout
