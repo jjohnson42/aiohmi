@@ -496,7 +496,7 @@ class Command(object):
             return {}
 
     async def bmcinfo(self):
-        bmcurl = await self._bmcurl()
+        bmcurl = await self.get_bmcurl()
         return await self._do_web_request(bmcurl)
 
     async def get_power(self):
@@ -753,20 +753,20 @@ class Command(object):
             therminf = await self._do_web_request(thermurl, cache=1)
             return therminf.get('Temperatures', [])
 
-    async def _bmcurl(self):
+    async def get_bmcurl(self):
         if not self._varbmcurl:
             sysinfo = await self.sysinfo()
             self._varbmcurl = sysinfo.get('Links', {}).get(
                 'ManagedBy', [{}])[0].get('@odata.id', None)
         return self._varbmcurl
 
-    async def _bmcnicurl(self):
+    async def get_bmcnicurl(self):
         if not self._varbmcnicurl:
             self._varbmcnicurl = await self._get_bmc_nic_url()
         return self._varbmcnicurl
 
     async def list_network_interface_names(self):
-        bmcurl = await self._bmcurl()
+        bmcurl = await self.get_bmcurl()
         bmcinfo = await self._do_web_request(bmcurl)
         nicurl = bmcinfo.get('EthernetInterfaces', {}).get('@odata.id', None)
         if not nicurl:
@@ -779,7 +779,7 @@ class Command(object):
             yield curl.rsplit('/', 1)[1]
 
     async def _get_bmc_nic_url(self, name=None):
-        bmcinfo = await self._do_web_request(await self._bmcurl())
+        bmcinfo = await self._do_web_request(await self.get_bmcurl())
         nicurl = bmcinfo.get('EthernetInterfaces', {}).get('@odata.id', None)
         niclist = await self._do_web_request(nicurl)
         foundnics = 0
@@ -823,7 +823,7 @@ class Command(object):
 
     async def _bmcresetinfo(self):
         if not self._varresetbmcurl:
-            bmcinfo = await self._do_web_request(await self._bmcurl())
+            bmcinfo = await self._do_web_request(await self.get_bmcurl())
             resetinf = bmcinfo.get('Actions', {}).get('#Manager.Reset', {})
             url = resetinf.get('target', '')
             valid = resetinf.get('ResetType@Redfish.AllowableValues', [])
@@ -920,7 +920,7 @@ class Command(object):
         return await oem.set_system_configuration(changeset, self)
 
     async def get_ntp_enabled(self):
-        bmcinfo = await self._do_web_request(self._bmcurl)
+        bmcinfo = await self._do_web_request(await self.get_bmcurl())
         netprotocols = bmcinfo.get('NetworkProtocol', {}).get('@odata.id', None)
         if netprotocols:
             netprotoinfo = await self._do_web_request(netprotocols)
@@ -929,7 +929,7 @@ class Command(object):
         return False
 
     async def set_ntp_enabled(self, enable):
-        bmcinfo = await self._do_web_request(self._bmcurl)
+        bmcinfo = await self._do_web_request(await self.get_bmcurl())
         netprotocols = bmcinfo.get('NetworkProtocol', {}).get('@odata.id', None)
         if netprotocols:
             request = {'NTP':{'ProtocolEnabled': enable}}
@@ -937,7 +937,7 @@ class Command(object):
             await self._do_web_request(netprotocols, cache=0)
 
     async def get_ntp_servers(self):
-        bmcinfo = await self._do_web_request(self._bmcurl)
+        bmcinfo = await self._do_web_request(await self.get_bmcurl())
         netprotocols = bmcinfo.get('NetworkProtocol', {}).get('@odata.id', None)
         if not netprotocols:
             return []
@@ -945,7 +945,7 @@ class Command(object):
         return netprotoinfo.get('NTP', {}).get('NTPServers', [])
 
     async def set_ntp_server(self, server, index=None):
-        bmcinfo = await self._do_web_request(self._bmcurl)
+        bmcinfo = await self._do_web_request(await self.get_bmcurl())
         netprotocols = bmcinfo.get('NetworkProtocol', {}).get('@odata.id', None)
         currntpservers = await self.get_ntp_servers()
         if index is None:
@@ -973,13 +973,13 @@ class Command(object):
         In many cases, this may render remote network access impracticle or
         impossible."
         """
-        bmcinfo = await self._do_web_request(self._bmcurl)
+        bmcinfo = await self._do_web_request(await self.get_bmcurl())
         rc = bmcinfo.get('Actions', {}).get('#Manager.ResetToDefaults', {})
         actinf = rc.get('ResetType@Redfish.AllowableValues', [])
         if 'ResetAll' in actinf: 
             acturl = rc.get('target', None)
             if acturl:
-                self._do_web_request(acturl, {'ResetType': 'ResetAll'})
+                await self._do_web_request(acturl, {'ResetType': 'ResetAll'})
                 return
         raise exc.UnsupportedFunctionality(
             'Clear BMC configuration not supported on this platform')
@@ -1130,11 +1130,11 @@ class Command(object):
         return retval
 
     async def get_hostname(self):
-        netcfg = await self._do_web_request(self._bmcnicurl)
+        netcfg = await self._do_web_request(await self.get_bmcnicurl())
         return netcfg['HostName']
 
     async def set_hostname(self, hostname):
-        await self._do_web_request(self._bmcnicurl,
+        await self._do_web_request(await self.get_bmcnicurl(),
                              {'HostName': hostname}, 'PATCH')
 
     async def get_firmware(self, components=(), category=None):
@@ -1491,7 +1491,7 @@ class Command(object):
         sysinfo = await self.sysinfo()
         vmcoll = sysinfo.get('VirtualMedia', {}).get('@odata.id', None)
         if not vmcoll:
-            bmcinfo = await self._do_web_request(await self._bmcurl())
+            bmcinfo = await self._do_web_request(await self.get_bmcurl())
             vmcoll = bmcinfo.get('VirtualMedia', {}).get('@odata.id', None)
         if vmcoll:
             vmlist = await self._do_web_request(vmcoll)
