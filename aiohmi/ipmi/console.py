@@ -174,7 +174,7 @@ class Console(object):
         if currowner[0] != self.ipmi_session.sessionid:
             # the session is deactivated or active for something else
             self.activated = False
-            self._print_error('SOL deactivated')
+            await self._print_error('SOL deactivated')
             return
         # ok, still here, that means session is alive, but another
         # common issue is firmware messing with mux on reboot
