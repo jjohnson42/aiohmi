@@ -934,7 +934,7 @@ class OEMHandler(generic.OEMHandler):
         super().update_firmware(filename, data=data, progress=progress, bank=bank, otherfields=otherfields)
 
 
-    def get_bmc_configuration(self):
+    async def get_bmc_configuration(self):
         settings = {}
         acctsrv = self._do_web_request('/redfish/v1/AccountService')
         for oemstg in self.oemacctmap:
