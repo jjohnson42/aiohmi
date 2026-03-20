@@ -668,7 +668,7 @@ class Command(object):
         oem = await self.oem()
         return await oem.set_bootdev(bootdev, persist, uefiboot, self)
 
-    async def _biosurl(self):
+    async def get_biosurl(self):
         if not self._varbiosurl:
             sysinfo = await self.sysinfo()
             self._varbiosurl = sysinfo.get('Bios', {}).get('@odata.id',
@@ -680,7 +680,7 @@ class Command(object):
 
     async def _setbiosurl(self):
         if self._varsetbiosurl is None:
-            biosinfo = await self._do_web_request(await self._biosurl())
+            biosinfo = await self._do_web_request(await self.get_biosurl())
             self._varsetbiosurl = biosinfo.get(
                 '@Redfish.Settings', {}).get('SettingsObject', {}).get(
                     '@odata.id', None)
@@ -988,17 +988,17 @@ class Command(object):
         oem = await self.oem()
         return await oem.get_system_configuration(hideadvanced, self)
 
-    def clear_system_configuration(self):
+    async def clear_system_configuration(self):
         """Clear the BIOS/UEFI configuration
 
         """
-        biosinfo = self._do_web_request(self._biosurl)
+        biosinfo = await self._do_web_request(await self.get_biosurl())
         rb = biosinfo.get('Actions', {}).get('#Bios.ResetBios', {})
         actinf = rb.get('@Redfish.ActionInfo', None)
         rb = rb.get('target', '')
         parms = {}
         if actinf:
-            actinf = self._do_web_request(
+            actinf = await self._do_web_request(
                 '/redfish/v1/Systems/Self/Bios/ResetBiosActionInfo')
             for parm in actinf.get('Parameters', ()):
                 if parm.get('Required', False):
@@ -1013,9 +1013,9 @@ class Command(object):
             raise Exception('BIOS reset not detected on this system')
         if not parms:
             parms = {'Action': 'Bios.ResetBios'}
-        self._do_web_request(rb, parms)
+        await self._do_web_request(rb, parms)
 
-    def set_net6_configuration(self, static_addresses=None, static_gateway=None, name=None):
+    async def set_net6_configuration(self, static_addresses=None, static_gateway=None, name=None):
         patch = {}
         if static_addresses is not None:
             sa = []
@@ -1035,9 +1035,9 @@ class Command(object):
             }]
         if patch:
             nicurl = self._get_bmc_nic_url(name)
-            self._do_web_request(nicurl, patch, 'PATCH')
+            await self._do_web_request(nicurl, patch, 'PATCH')
 
-    def set_net_configuration(self, ipv4_address=None, ipv4_configuration=None,
+    async def set_net_configuration(self, ipv4_address=None, ipv4_configuration=None,
                               ipv4_gateway=None, vlan_id=None, name=None):
         patch = {}
         ipinfo = {}
@@ -1071,20 +1071,20 @@ class Command(object):
         elif vlan_id:
             patch['VLAN'] = {'VLANEnable': True, 'VLANId': int(vlan_id)}        
         if patch:
-            nicurl = self._get_bmc_nic_url(name)
+            nicurl = await self._get_bmc_nic_url(name)
             try:
-                self._do_web_request(nicurl, patch, 'PATCH')
+                await self._do_web_request(nicurl, patch, 'PATCH')
             except exc.RedfishError:
                 patch = {'IPv4Addresses': [ipinfo]}
                 if dodhcp:
                     ipinfo['AddressOrigin'] = 'DHCP'
                 elif dodhcp is not None:
                     ipinfo['AddressOrigin'] = 'Static'
-                self._do_web_request(nicurl, patch, 'PATCH')
+                await self._do_web_request(nicurl, patch, 'PATCH')
 
-    def get_net6_configuration(self, name=None):
-        nicurl = self._get_bmc_nic_url(name)
-        netcfg = self._do_web_request(nicurl, cache=False)
+    async def get_net6_configuration(self, name=None):
+        nicurl = await self._get_bmc_nic_url(name)
+        netcfg = await self._do_web_request(nicurl, cache=False)
         retdata = {}
         saddrs = netcfg.get('IPv6StaticAddresses', ())
         retdata['static_addrs'] = []
@@ -1102,9 +1102,9 @@ class Command(object):
             retdata['vlan_id'] = 'off'
         return retdata
 
-    def get_net_configuration(self, name=None):
-        nicurl = self._get_bmc_nic_url(name)
-        netcfg = self._do_web_request(nicurl, cache=False)
+    async def get_net_configuration(self, name=None):
+        nicurl = await self._get_bmc_nic_url(name)
+        netcfg = await self._do_web_request(nicurl, cache=False)
         ipv4 = netcfg.get('IPv4Addresses', {})
         if not ipv4:
             raise exc.PyghmiException('Unable to locate network information')

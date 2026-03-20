@@ -936,14 +936,14 @@ class OEMHandler(generic.OEMHandler):
 
     async def get_bmc_configuration(self):
         settings = {}
-        acctsrv = self._do_web_request('/redfish/v1/AccountService')
+        acctsrv = await self._do_web_request('/redfish/v1/AccountService')
         for oemstg in self.oemacctmap:
             settings[oemstg] = {
                 'value': acctsrv['Oem']['Lenovo'][self.oemacctmap[oemstg]]}
         for stg in self.acctmap:
             settings[stg] = {
                 'value': acctsrv[self.acctmap[stg]]}
-        bmcstgs = self._do_web_request('/redfish/v1/Managers/1/Oem/Lenovo/BMCSettings')
+        bmcstgs = await self._do_web_request('/redfish/v1/Managers/1/Oem/Lenovo/BMCSettings')
         bmcattrs = bmcstgs['Attributes']
         self.ethoverusb = True if 'EthOverUSBEnabled' in bmcattrs else False
         usbcfg = bmcattrs.get('NetMgrUsb0Enabled', bmcattrs.get('EthOverUSBEnabled', 'False'))

@@ -852,7 +852,8 @@ class OEMHandler(object):
 
 
     async def _getsyscfg(self, fishclient):
-        biosinfo = self._do_web_request(fishclient._biosurl, cache=False)
+        biosurl = await fishclient.get_bios_url()
+        biosinfo = await self._do_web_request(biosurl, cache=False)
         reginfo = ({}, {}, {}, {})
         extrainfo = {}
         valtodisplay = {}
