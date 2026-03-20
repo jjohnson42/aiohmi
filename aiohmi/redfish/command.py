@@ -678,7 +678,7 @@ class Command(object):
                 'Bios management not detected on this platform')
         return self._varbiosurl
 
-    async def _setbiosurl(self):
+    async def get_setbiosurl(self):
         if self._varsetbiosurl is None:
             biosinfo = await self._do_web_request(await self.get_biosurl())
             self._varsetbiosurl = biosinfo.get(

@@ -852,7 +852,7 @@ class OEMHandler(object):
 
 
     async def _getsyscfg(self, fishclient):
-        biosurl = await fishclient.get_bios_url()
+        biosurl = await fishclient.get_biosurl()
         biosinfo = await self._do_web_request(biosurl, cache=False)
         reginfo = ({}, {}, {}, {})
         extrainfo = {}
@@ -864,8 +864,8 @@ class OEMHandler(object):
                 extrainfo, valtodisplay, _, self.attrdeps = reginfo
         currsettings = {}
         try:
-            pendingsettings = fishclient._do_web_request(
-                fishclient._setbiosurl)
+            pendingsettings = await fishclient._do_web_request(
+                await fishclient.get_setbiosurl())
         except exc.UnsupportedFunctionality:
             pendingsettings = {}
         pendingsettings = pendingsettings.get('Attributes', {})
