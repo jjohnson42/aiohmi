@@ -1272,7 +1272,8 @@ class Command(object):
 
     async def get_event_log(self, clear=False):
         oem = await self.oem()
-        return await oem.get_event_log(clear, self)
+        async for logent in oem.get_event_log(clear, self):
+            yield logent
     
     async def _get_chassis_env(self, chassis):
         chassisurl = chassis['@odata.id']

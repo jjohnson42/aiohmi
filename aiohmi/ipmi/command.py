@@ -617,7 +617,8 @@ class Command(object):
         :param clear:  Whether to remove the SEL entries from the target BMC
         """
         await self.oem_init()
-        return await sel.EventHandler(await self.init_sdr(), self).fetch_sel(self, clear)
+        async for logent in sel.EventHandler(await self.init_sdr(), self).fetch_sel(self, clear):
+            yield logent
 
     async def decode_pet(self, specifictrap, petdata):
         """Decode PET to an event
@@ -1803,7 +1804,7 @@ class Command(object):
             raise Exception(response['error'])
         # Set KVM and VMedia Allowed if is administrator
         if privilege_level == 'administrator':
-            self.set_extended_privilleges(uid)
+            await self.set_extended_privilleges(uid)
         return True
 
     async def get_user_access(self, uid, channel=None):
