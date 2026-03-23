@@ -1096,19 +1096,19 @@ class Command(object):
         async for reading in self._oem.get_sensor_data():
             yield reading
 
-    def get_sensor_descriptions(self):
+    async def get_sensor_descriptions(self):
         """Get available sensor names
 
         Iterates over the available sensor descriptions
 
         :returns: Iterator of dicts describing each sensor
         """
-        self.init_sdr()
+        await self.init_sdr()
         for sensor in self._sdr.get_sensor_numbers():
             yield {'name': self._sdr.sensors[sensor].name,
                    'type': self._sdr.sensors[sensor].sensor_type}
-        self.oem_init()
-        for sensor in self._oem.get_sensor_descriptions():
+        await self.oem_init()
+        async for sensor in self._oem.get_sensor_descriptions():
             yield sensor
 
     async def get_network_channel(self):

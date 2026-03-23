@@ -406,7 +406,7 @@ class EventHandler(object):
         self = cls()
         self._sdr = sdr
         self._ipmicmd = ipmicmd
-        self.event_consts = ipmicmd.get_event_constants()
+        self.event_consts = await ipmicmd.get_event_constants()
         return self
 
     def _populate_event(self, deassertion, event, event_data, event_type,
@@ -515,7 +515,7 @@ class EventHandler(object):
         self._populate_event(deassertion, event, event_data, event_type,
                              sensor_type, sensorid)
 
-    def _sel_decode(self, origselentry):
+    async def _sel_decode(self, origselentry):
         selentry = bytearray(origselentry)
         event = {}
         event['record_id'] = struct.unpack_from('<H', origselentry[:2])[0]
@@ -532,7 +532,7 @@ class EventHandler(object):
             # In this class of OEM message, all bytes are OEM, interpretation
             # is wholly left up to the OEM layer, using the OEM ID of the BMC
             event['oemdata'] = selentry[3:]
-        self._ipmicmd._oem.process_event(event, self._ipmicmd, selentry)
+        await self._ipmicmd._oem.process_event(event, self._ipmicmd, selentry)
         if 'event_type_byte' in event:
             del event['event_type_byte']
         if 'event_data_bytes' in event:
@@ -554,7 +554,7 @@ class EventHandler(object):
                 else:
                     raise
             curr = struct.unpack_from('<H', buffer(rsp['data'][:2]))[0]
-            targetlist.append(self._sel_decode(rsp['data'][2:]))
+            targetlist.append(await self._sel_decode(rsp['data'][2:]))
         return endat
 
     async def fetch_sel(self, ipmicmd, clear=False):
