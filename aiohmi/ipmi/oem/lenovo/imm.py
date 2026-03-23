@@ -703,13 +703,11 @@ class IMMClient(object):
             return
 
     async def get_oem_sensor_descriptions(self, ipmicmd):
-        desc = []
         async for x in self.get_oem_sensor_names(ipmicmd):
-            desc.append({
+            yield {
                 'name': x,
                 'type': 'Power' if 'Power' in x else 'Energy'
-            })
-        return desc
+            }
 
     async def get_oem_sensor_reading(self, name, ipmicmd):
         if self._energymanager is None:

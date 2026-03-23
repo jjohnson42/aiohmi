@@ -534,13 +534,17 @@ class OEMHandler(generic.OEMHandler):
 
     async def get_sensor_descriptions(self):
         if await self.has_imm():
-            return self.immhandler.get_oem_sensor_descriptions(self.ipmicmd)
+            async for desc in self.immhandler.get_oem_sensor_descriptions(self.ipmicmd):
+                yield desc
         elif await self.is_fpc():
-            return nextscale.get_sensor_descriptions(
-                self.ipmicmd, self._fpc_variant)
+            async for desc in nextscale.get_sensor_descriptions(
+                self.ipmicmd, self._fpc_variant):
+                yield desc
         elif await self.has_ami():
-            self.get_ami_sensor_descriptions()
-        return ()
+            async for desc in self.get_ami_sensor_descriptions():
+                yield desc
+        if False:
+            yield None
 
     async def get_sensor_reading(self, sensorname):
         if await self.has_imm():
