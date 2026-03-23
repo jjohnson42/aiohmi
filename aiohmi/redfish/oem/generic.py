@@ -546,7 +546,7 @@ class OEMHandler(object):
                     yield certdesc
 
     async def get_event_log(self, clear=False, fishclient=None, extraurls=[]):
-        bmcinfo = await self._do_web_request(fishclient._bmcurl)
+        bmcinfo = await self._do_web_request(await fishclient.get_bmcurl())
         lsurl = bmcinfo.get('LogServices', {}).get('@odata.id', None)
         if not lsurl:
             return

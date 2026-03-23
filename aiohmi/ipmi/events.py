@@ -401,10 +401,13 @@ class EventHandler(object):
     :param sdr: An SDR object (per aiohmi.ipmi.sdr) matching the target BMC SDR
     :param ipmicmd: An ipmi command object to fetch data live
     """
-    def __init__(self, sdr, ipmicmd):
+    @classmethod
+    async def create(cls, sdr, ipmicmd):
+        self = cls()
         self._sdr = sdr
         self._ipmicmd = ipmicmd
         self.event_consts = ipmicmd.get_event_constants()
+        return self
 
     def _populate_event(self, deassertion, event, event_data, event_type,
                         sensor_type, sensorid):
@@ -582,4 +585,5 @@ class EventHandler(object):
         # Now to fixup the record timestamps... first we need to get the BMC
         # opinion of current time
         await _fix_sel_time(records, ipmicmd)
-        return records
+        for rec in records:
+            yield rec

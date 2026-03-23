@@ -617,7 +617,8 @@ class Command(object):
         :param clear:  Whether to remove the SEL entries from the target BMC
         """
         await self.oem_init()
-        async for logent in sel.EventHandler(await self.init_sdr(), self).fetch_sel(self, clear):
+        evthdlr = await sel.EventHandler.create(await self.init_sdr(), self)
+        async for logent in evthdlr.fetch_sel(self, clear):
             yield logent
 
     async def decode_pet(self, specifictrap, petdata):
@@ -635,8 +636,8 @@ class Command(object):
         :returns: A dict event similar to one iteration of get_event_log
         """
         await self.oem_init()
-        return await sel.EventHandler(await self.init_sdr(), self).decode_pet(specifictrap,
-                                                                  petdata)
+        evthdlr = await sel.EventHandler.create(await self.init_sdr(), self)
+        return await evthdlr.decode_pet(specifictrap, petdata)
 
     async def get_ikvm_methods(self):
         await self.oem_init()
