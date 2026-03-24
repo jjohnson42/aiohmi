@@ -699,7 +699,7 @@ class Command(object):
         # then it is expected that a manufacturer matches SMBIOS to IPMI
         # get system uuid return data.
         if 'UUID' not in zerofru:
-            guiddata = self.raw_command(netfn=6, command=0x37)
+            guiddata = await self.raw_command(netfn=6, command=0x37)
             zerofru['UUID'] = util.\
                 decode_wireformat_uuid(guiddata['data'])
         return zerofru
@@ -802,7 +802,7 @@ class Command(object):
         for sensor in self._sdr.get_sensor_numbers():
             if self._sdr.sensors[sensor].name == sensorname:
                 currsensor = self._sdr.sensors[sensor]
-                rsp = self.raw_command(command=0x2d, netfn=4,
+                rsp = await self.raw_command(command=0x2d, netfn=4,
                                        rslun=currsensor.sensor_lun,
                                        data=(currsensor.sensor_number,))
                 return self._sdr.sensors[sensor].decode_sensor_reading(
@@ -1292,14 +1292,13 @@ class Command(object):
         rsp = await self.raw_command(netfn=0xc, command=2, data=(channel, 16, 0, 0))
         return rsp['data'][1:].partition('\x00')[0]
 
-    @property
-    def _supports_standard_ipv6(self):
+    async def _supports_standard_ipv6(self):
         # Supports the *standard* ipv6 commands for various things
         # used to internally steer some commands to standard or OEM
         # handler of commands
-        lanchan = self.get_network_channel()
+        lanchan = await self.get_network_channel()
         if self._ipv6support is None:
-            rsp = self.raw_command(netfn=0xc, command=0x2, data=(2, lanchan,
+            rsp = await self.raw_command(netfn=0xc, command=0x2, data=(2, lanchan,
                                                                  0x32, 0, 0))
             self._ipv6support = rsp['code'] == 0
         return self._ipv6support

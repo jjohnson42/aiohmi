@@ -32,7 +32,7 @@ class EnergyManager(object):
         self._usefapm = False
         self._mypowermeters = ()
         try:
-            rsp = ipmicmd.xraw_command(netfn=0x3a, command=0x32, data=[4, 2, 0, 0, 0])
+            rsp = await ipmicmd.raw_command(netfn=0x3a, command=0x32, data=[4, 2, 0, 0, 0])
             if len(rsp['data']) >= 8:
                 self.supportedmeters = ('DC Energy', 'GPU Power',
                                         'Node Power', 'Total Power')
@@ -43,12 +43,12 @@ class EnergyManager(object):
             pass
 
         try:
-            rsp = await ipmicmd.xraw_command(netfn=0x2e, command=0x82,
+            rsp = await ipmicmd.raw_command(netfn=0x2e, command=0x82,
                                        data=self.iana + b'\x00\x00\x01')
         except pygexc.IpmiException as ie:
             if ie.ipmicode == 193:  # try again with IBM IANA
                 self.iana = bytearray(b'\x4d\x4f\x00')
-                rsp = await ipmicmd.xraw_command(netfn=0x2e, command=0x82,
+                rsp = await ipmicmd.raw_command(netfn=0x2e, command=0x82,
                                            data=self.iana + b'\x00\x00\x01')
             else:
                 raise
