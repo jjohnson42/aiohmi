@@ -28,6 +28,7 @@ import ssl
 import threading
 import traceback
 
+from yarl import URL
 import aiohmi.exceptions as pygexc
 
 
@@ -229,7 +230,7 @@ def get_upload_form(filename, data, formname, otherfields, boundary=None):
 class WebConnection:
     def __init__(self, host, port, verifycallback=None, timeout=None):
         self.port = port
-        if ':' in host:
+        if ':' in host and '[' not in host:
             self.host = f'[{host}]'
         else:
             self.host = host
@@ -255,7 +256,7 @@ class WebConnection:
         newwc.cookies = CookieJar(quote_cookie=False, unsafe=True)
         for cookie in self.cookies:
             newwc.cookies.update_cookies(
-                {cookie.key: cookie.value}, response_url=f'https://{self.host}:{self.port}/')
+                {cookie.key: cookie.value}, response_url=URL(f'https://{self.host}:{self.port}/'))
         return newwc
 
     async def request(
