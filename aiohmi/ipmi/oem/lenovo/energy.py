@@ -21,11 +21,13 @@ import aiohmi.ipmi.sdr as sdr
 
 class EnergyManager(object):
 
-    def __init__(self, ipmicmd):
+    @classmethod
+    async def create(cls, ipmicmd):
         # there are two IANA possible for the command set, start with
         # the Lenovo, then fallback to IBM
         # We start with a 'find firmware instance' to test the water and
         # get the handle (which has always been the same, but just in case
+        self = cls()
         self.iana = bytearray(b'\x66\x4a\x00')
         self._usefapm = False
         self._mypowermeters = ()
@@ -41,12 +43,12 @@ class EnergyManager(object):
             pass
 
         try:
-            rsp = ipmicmd.xraw_command(netfn=0x2e, command=0x82,
+            rsp = await ipmicmd.xraw_command(netfn=0x2e, command=0x82,
                                        data=self.iana + b'\x00\x00\x01')
         except pygexc.IpmiException as ie:
             if ie.ipmicode == 193:  # try again with IBM IANA
                 self.iana = bytearray(b'\x4d\x4f\x00')
-                rsp = ipmicmd.xraw_command(netfn=0x2e, command=0x82,
+                rsp = await ipmicmd.xraw_command(netfn=0x2e, command=0x82,
                                            data=self.iana + b'\x00\x00\x01')
             else:
                 raise
@@ -55,10 +57,11 @@ class EnergyManager(object):
                 "Energy Control {0}.{1} not recognized".format(rsp['data'][4],
                                                                rsp['data'][5]))
         self.modhandle = bytearray(rsp['data'][6:7])
-        if self.get_ac_energy(ipmicmd):
+        if await self.get_ac_energy(ipmicmd):
             self.supportedmeters = ('AC Energy', 'DC Energy')
         else:
             self.supportedmeters = ('DC Energy',)
+        return self
 
     def supports(self, name):
         if name.lower() in self._mypowermeters:

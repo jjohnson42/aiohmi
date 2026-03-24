@@ -696,7 +696,7 @@ class IMMClient(object):
     async def get_oem_sensor_names(self, ipmicmd):
         try:
             if self._energymanager is None:
-                self._energymanager = energy.EnergyManager(ipmicmd)
+                self._energymanager = await energy.EnergyManager.create(ipmicmd)
             for meter in self._energymanager.supportedmeters:
                 yield meter
         except pygexc.UnsupportedFunctionality:
@@ -711,7 +711,7 @@ class IMMClient(object):
 
     async def get_oem_sensor_reading(self, name, ipmicmd):
         if self._energymanager is None:
-            self._energymanager = energy.EnergyManager(ipmicmd)
+            self._energymanager = await energy.EnergyManager.create(ipmicmd)
         if name == 'AC Energy':
             kwh = await self._energymanager.get_ac_energy(ipmicmd)
         elif name == 'DC Energy':
