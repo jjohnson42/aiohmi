@@ -865,20 +865,24 @@ class OEMHandler(generic.OEMHandler):
                     bios_versions = bios_rsp['data']
                 else:
                     bios_versions = bios_command["parser"](bios_rsp['data'])
-
             # pass bios versions to firmware parser
-            return command["parser"](rsp["data"],
+            for x in command["parser"](rsp["data"],
                                      bios_versions,
-                                     await self.has_asrock())
+                                     await self.has_asrock()):
+                yield x
         elif await self.has_imm():
-            return await self.immhandler.get_firmware_inventory(bmcver, components, category)
+            async for x in self.immhandler.get_firmware_inventory(bmcver, components, category):
+                yield x
         elif await self.is_fpc():
-            return await nextscale.get_fpc_firmware(bmcver, self.ipmicmd,
-                                                     self._fpc_variant)
+            async for x in nextscale.get_fpc_firmware(bmcver, self.ipmicmd,
+                                                     self._fpc_variant):
+                yield x
         elif self.has_tsma:
-            return self.tsmahandler.get_firmware_inventory(
-                components, raisebypass=False, ipmicmd=self.ipmicmd)
-        return super(OEMHandler, self).get_oem_firmware(bmcver, components, category)
+            async for x in self.tsmahandler.get_firmware_inventory(
+                components, raisebypass=False, ipmicmd=self.ipmicmd):
+                yield x
+        async for x in super(OEMHandler, self).get_oem_firmware(bmcver, components, category):
+            yield x
 
     async def get_diagnostic_data(self, savefile, progress, autosuffix=False):
         if await self.has_xcc():

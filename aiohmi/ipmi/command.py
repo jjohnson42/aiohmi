@@ -2168,7 +2168,8 @@ class Command(object):
         mcinfo = await self.raw_command(netfn=6, command=1)
         major, minor = struct.unpack('BB', mcinfo['data'][2:4])
         bmcver = '{0}.{1}'.format(major, hex(minor)[2:])
-        return await self._oem.get_oem_firmware(bmcver, components, category)
+        async for x in self._oem.get_oem_firmware(bmcver, components, category):
+            yield x
 
     async def get_capping_enabled(self):
         """Get PSU based power capping status
