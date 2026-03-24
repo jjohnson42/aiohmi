@@ -492,6 +492,7 @@ class OEMHandler(object):
 
     async def get_licenses(self):
         raise exc.UnsupportedFunctionality()
+        yield None
 
     async def delete_license(self, name):
         raise exc.UnsupportedFunctionality()

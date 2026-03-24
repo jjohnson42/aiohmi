@@ -1310,6 +1310,7 @@ class OEMHandler(generic.OEMHandler):
         if await self.has_xcc():
             async for x in self.immhandler.get_licenses():
                 yield x
+            return
         async for x in super(OEMHandler, self).get_licenses():
             yield x
 
