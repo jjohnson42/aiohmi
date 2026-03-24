@@ -643,7 +643,7 @@ class IMMClient(object):
         if needdisk:
             async for disk in self.disk_inventory():
                 yield disk
-        self.weblogout()
+        await self.weblogout()
 
     async def disk_inventory(self, mode=0):
         if mode == 1:
@@ -855,19 +855,19 @@ class IMMClient(object):
                 'version': bmcver, 'build': immverdata[0],
                 'date': immverdata[1]}
             yield (self.bmcname, bdata)
-            bdata = self.fetch_grouped_properties({
+            bdata = await self.fetch_grouped_properties({
                 'build': '/v2/ibmc/dm/fw/imm2/backup_build_id',
                 'version': '/v2/ibmc/dm/fw/imm2/backup_build_version',
                 'date': '/v2/ibmc/dm/fw/imm2/backup_build_date'})
             if bdata:
                 yield ('{0} Backup'.format(self.bmcname), bdata)
-                bdata = self.fetch_grouped_properties({
+                bdata = await self.fetch_grouped_properties({
                     'build': '/v2/ibmc/trusted_buildid',
                 })
             if bdata:
                 yield ('{0} Trusted Image'.format(self.bmcname), bdata)
         if not components or set(('uefi', 'bios', 'core')) & components:
-            bdata = self.fetch_grouped_properties({
+            bdata = await self.fetch_grouped_properties({
                 'build': '/v2/bios/build_id',
                 'version': '/v2/bios/build_version',
                 'date': '/v2/bios/build_date'})
@@ -875,14 +875,14 @@ class IMMClient(object):
                 yield ('UEFI', bdata)
             else:
                 yield ('UEFI', {'version': 'unknown'})
-            bdata = self.fetch_grouped_properties({
+            bdata = await self.fetch_grouped_properties({
                 'build': '/v2/ibmc/dm/fw/bios/backup_build_id',
                 'version': '/v2/ibmc/dm/fw/bios/backup_build_version'})
             if bdata:
                 yield ('UEFI Backup', bdata)
             # Note that the next pending could be pending for either primary
             # or backup, so can't promise where it will go
-            bdata = self.fetch_grouped_properties({
+            bdata = await self.fetch_grouped_properties({
                 'build': '/v2/bios/pending_build_id'})
             if bdata:
                 yield ('UEFI Pending Update', bdata)
@@ -898,7 +898,7 @@ class IMMClient(object):
         if (not components or (components - set((
                 'core', 'uefi', 'bios', 'bmc', 'xcc', 'imm', 'fpga',
                 'lxpm')))):
-            for firm in self.fetch_agentless_firmware():
+            async for firm in self.fetch_agentless_firmware():
                 yield firm
 
 
@@ -1836,7 +1836,7 @@ class XCCClient(IMMClient):
                    {'model': psu['model'],
                     'version': psu['version']})
 
-    async def get_firmware_inventory(self, bmcver, components):
+    async def get_firmware_inventory(self, bmcver, components, category):
         # First we fetch the system firmware found in imm properties
         # then check for agentless, if agentless, get adapter info using
         # https, using the caller TLS verification scheme
@@ -1855,36 +1855,36 @@ class XCCClient(IMMClient):
                      'build': immverdata[0],
                      'date': immverdata[1]}
             yield self.bmcname, bdata
-            bdata = self.fetch_grouped_properties({
+            bdata = await self.fetch_grouped_properties({
                 'build': '/v2/ibmc/dm/fw/imm3/backup_pending_build_id',
                 'version': '/v2/ibmc/dm/fw/imm3/backup_pending_build_version',
                 'date': '/v2/ibmc/dm/fw/imm3/backup_pending_build_date'})
             if bdata:
                 yield '{0} Backup'.format(self.bmcname), bdata
             else:
-                bdata = self.fetch_grouped_properties({
+                bdata = await self.fetch_grouped_properties({
                     'build': '/v2/ibmc/dm/fw/imm3/backup_build_id',
                     'version': '/v2/ibmc/dm/fw/imm3/backup_build_version',
                     'date': '/v2/ibmc/dm/fw/imm3/backup_build_date'})
                 if bdata:
                     yield '{0} Backup'.format(self.bmcname), bdata
-                    bdata = self.fetch_grouped_properties({
+                    bdata = await self.fetch_grouped_properties({
                         'build': '/v2/ibmc/trusted_buildid',
                     })
             if bdata:
-                bdata = self.fetch_grouped_properties({
+                bdata = await self.fetch_grouped_properties({
                     'build': '/v2/ibmc/trusted_buildid',
                 })
             if bdata:
                 yield '{0} Trusted Image'.format(self.bmcname), bdata
-            bdata = self.fetch_grouped_properties({
+            bdata = await self.fetch_grouped_properties({
                 'build': '/v2/ibmc/dm/fw/imm3/primary_pending_build_id',
                 'version': '/v2/ibmc/dm/fw/imm3/primary_pending_build_version',
                 'date': '/v2/ibmc/dm/fw/imm3/primary_pending_build_date'})
             if bdata:
                 yield '{0} Pending Update'.format(self.bmcname), bdata
         if category in ('all', 'core') and not components or set(('core', 'uefi', 'bios')) & components:
-            bdata = self.fetch_grouped_properties({
+            bdata = await self.fetch_grouped_properties({
                 'build': '/v2/bios/build_id',
                 'version': '/v2/bios/build_version',
                 'date': '/v2/bios/build_date'})
@@ -1892,25 +1892,25 @@ class XCCClient(IMMClient):
                 yield 'UEFI', bdata
             # Note that the next pending could be pending for either primary
             # or backup, so can't promise where it will go
-            bdata = self.fetch_grouped_properties({
+            bdata = await self.fetch_grouped_properties({
                 'build': '/v2/bios/pending_build_id'})
             if bdata:
                 yield 'UEFI Pending Update', bdata
         if category in ('all', 'core') and not components or set(('lxpm', 'core')) & components:
-            bdata = self.fetch_grouped_properties({
+            bdata = await self.fetch_grouped_properties({
                 'build': '/v2/tdm/build_id',
                 'version': '/v2/tdm/build_version',
                 'date': '/v2/tdm/build_date'})
             if bdata:
                 yield 'LXPM', bdata
-            bdata = self.fetch_grouped_properties({
+            bdata = await self.fetch_grouped_properties({
                 'build': '/v2/drvwn/build_id',
                 'version': '/v2/drvwn/build_version',
                 'date': '/v2/drvwn/build_date',
             })
             if bdata:
                 yield 'LXPM Windows Driver Bundle', bdata
-            bdata = self.fetch_grouped_properties({
+            bdata = await self.fetch_grouped_properties({
                 'build': '/v2/drvln/build_id',
                 'version': '/v2/drvln/build_version',
                 'date': '/v2/drvln/build_date',
