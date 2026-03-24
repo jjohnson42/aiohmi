@@ -470,7 +470,7 @@ class Command(object):
                                             data=data,
                                             retry=retry, timeout=timeout,
                                             rslun=rslun)
-        if 'error' in rsp:
+        if rsp and 'error' in rsp:
             raise exc.IpmiException(rsp['error'], rsp['code'])
         rsp['data'] = buffer(rsp['data'])
         return rsp
