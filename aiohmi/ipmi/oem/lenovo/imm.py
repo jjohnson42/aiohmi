@@ -1706,9 +1706,9 @@ class XCCClient(IMMClient):
             drives.append(drive)
         return controller
 
-    async def get_oem_sensor_names(self, ipmicmd):
-        oemsensornames = await super(XCCClient, self).get_oem_sensor_names(ipmicmd)
-        return oemsensornames
+    #async def get_oem_sensor_names(self, ipmicmd):
+    #    async for x in super(XCCClient, self).get_oem_sensor_names(ipmicmd):
+    #        yield x
         # therminfo = self.grab_cacheable_json(
         #     '/api/dataset/pwrmgmt?params=GetThermalRealTimeData', 1)
         # if therminfo:
