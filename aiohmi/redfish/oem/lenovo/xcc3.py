@@ -756,7 +756,7 @@ class OEMHandler(generic.OEMHandler):
     async def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
         tsk = await self._do_web_request(
             '/redfish/v1/Systems/1/LogServices/DiagnosticLog/Actions/LogService.CollectDiagnosticData',
-            {"DiagnosticDataType": "Manager", "SelectDataTypes": []})
+            {"DiagnosticDataType": "Manager", "SelectDataTypes": ["adapter","worknote","thermal"]})
         taskrunning = True
         taskurl = tsk.get('TaskMonitor', None)
         pct = 0 if taskurl else 100
