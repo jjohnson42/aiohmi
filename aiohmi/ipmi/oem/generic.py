@@ -503,6 +503,7 @@ class OEMHandler(object):
 
     async def apply_license(self, filename, progress=None, data=None):
         raise exc.UnsupportedFunctionality()
+        yield None
 
     async def get_user_expiration(self, uid):
         return None

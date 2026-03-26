@@ -1334,8 +1334,11 @@ class OEMHandler(generic.OEMHandler):
 
     async def apply_license(self, filename, progress=None, data=None):
         if await self.has_xcc():
-            return await self.immhandler.apply_license(filename, progress, data)
-        return await super(OEMHandler, self).apply_license(filename, progress, data)
+            async for x in self.immhandler.apply_license(filename, progress, data):
+                yield x
+            return
+        async for x in super(OEMHandler, self).apply_license(filename, progress, data):
+            yield x
 
     async def set_oem_extended_privilleges(self, uid):
         """Set user extended privillege as 'KVM & VMedia Allowed'

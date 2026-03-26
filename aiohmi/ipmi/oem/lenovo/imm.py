@@ -2252,7 +2252,7 @@ class XCCClient(IMMClient):
 
     async def _refresh_token(self):
         wc = await self.wc()
-        await self._refresh_token_wc(c)
+        await self._refresh_token_wc(wc)
 
     async def _refresh_token_wc(self, wc):
         await wc.grab_json_response('/api/providers/identity')

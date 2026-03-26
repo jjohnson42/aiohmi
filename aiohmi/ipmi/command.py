@@ -2302,7 +2302,8 @@ class Command(object):
 
     async def apply_license(self, filename, progress=None, data=None):
         await self.oem_init()
-        return await self._oem.apply_license(filename, progress, data)
+        async for x in self._oem.apply_license(filename, progress, data):
+            yield x
 
     async def set_extended_privilleges(self, uid):
         """Set user extended privillege as 'KVM & VMedia Allowed'
