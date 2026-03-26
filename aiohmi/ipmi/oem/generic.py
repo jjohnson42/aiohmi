@@ -499,6 +499,7 @@ class OEMHandler(object):
 
     async def save_licenses(self, directory):
         raise exc.UnsupportedFunctionality()
+        yield None
 
     async def apply_license(self, filename, progress=None, data=None):
         raise exc.UnsupportedFunctionality()

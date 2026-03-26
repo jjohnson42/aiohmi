@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import base64
 import binascii
 from datetime import datetime
@@ -1347,12 +1348,15 @@ class XCCClient(IMMClient):
         if autosuffix and not savefile.endswith('.tzz'):
             savefile += '-{0}'.format(result['FileName'])
         fd = webclient.FileDownloader(wc, url, savefile)
-        fd.start()
-        while fd.isAlive():
-            fd.join(1)
-            if progress and wc.get_download_progress():
+        fd = webclient.make_downloader(wc, url, savefile)
+        while not fd.completed():
+            try:
+                await fd.join(1)
+            except asyncio.TimeoutError:
+                pass
+            if progress and fd.get_progress():
                 progress({'phase': 'download',
-                          'progress': 100 * wc.get_download_progress()})
+                          'progress': 100 * fd.get_progress()})
             self._refresh_token()
         if fd.exc:
             raise fd.exc
@@ -2581,10 +2585,12 @@ class XCCClient(IMMClient):
             if filename:
                 url = '/download/' + filename
                 savefile = os.path.join(directory, filename)
-                fd = webclient.FileDownloader(self.wc, url, savefile)
-                fd.start()
-                while fd.isAlive():
-                    fd.join(1)
+                fd = webclient.make_downloader(self.wc, url, savefile)
+                while not fd.completed():
+                    try:
+                        await fd.join(1)
+                    except asyncio.TimeoutError:
+                        pass
                     self._refresh_token()
                 yield savefile
 

@@ -1326,8 +1326,10 @@ class OEMHandler(generic.OEMHandler):
 
     async def save_licenses(self, directory):
         if await self.has_xcc():
-            return await self.immhandler.save_licenses(directory)
-        return await super(OEMHandler, self).save_licenses(directory)
+            async for x in self.immhandler.save_licenses(directory):
+                yield x
+        async for x in super(OEMHandler, self).save_licenses(directory):
+            yield x
 
     async def apply_license(self, filename, progress=None, data=None):
         if await self.has_xcc():
