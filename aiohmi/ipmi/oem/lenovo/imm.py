@@ -1334,7 +1334,7 @@ class XCCClient(IMMClient):
                                               'thermal_log': 0})        
         percent = 0
         while percent != 100:
-            ipmisession.Session.pause(3)
+            await ipmisession.Session.pause(3)
             result = await wc.grab_json_response('/api/providers/ffdc',
                                                 {'Generate_FFDC_status': 1})
             self._refresh_token()
@@ -1695,7 +1695,7 @@ class XCCClient(IMMClient):
         rsp = {'items': [{'status': 0}]}
         wc = await self.wc()
         while rsp['items'][0]['status'] == 0:
-            ipmisession.Session.pause(1)
+            await ipmisession.Session.pause(1)
             rsp = await wc.grab_json_response(
                 '/api/function/raid_conf?params=raidlink_QueryAsyncStatus')
 
@@ -2066,7 +2066,7 @@ class XCCClient(IMMClient):
             raise Exception('Unrecognized return: ' + errmsg)
         ready = False
         while not ready:
-            ipmisession.Session.pause(3)
+            await ipmisession.Session.pause(3)
             rsp = await wc.grab_json_response('/api/providers/rp_rdoc_getfiles')
             if 'items' not in rsp or len(rsp['items']) == 0:
                 raise Exception(
@@ -2176,7 +2176,7 @@ class XCCClient(IMMClient):
                     raise Exception(pgress)
                 if not pgress:
                     retry -= 1
-                    ipmisession.Session.pause(3)
+                    await ipmisession.Session.pause(3)
                     continue
                 retry = 3
                 for msg in pgress.get('Messages', []):
@@ -2196,9 +2196,9 @@ class XCCClient(IMMClient):
                         phase = 'validating'
                         statetype = 'JobState'
                         complete = False
-                        ipmisession.Session.pause(3)
+                        await ipmisession.Session.pause(3)
                 else:
-                    ipmisession.Session.pause(3)
+                    await ipmisession.Session.pause(3)
             if not retry:
                 raise Exception('Falied to monitor update progress due to excessive timeouts')            
             if bank == 'backup':
@@ -2251,7 +2251,8 @@ class XCCClient(IMMClient):
         return result
 
     async def _refresh_token(self):
-        await self._refresh_token_wc(self.wc)
+        wc = await self.wc()
+        await self._refresh_token_wc(c)
 
     async def _refresh_token_wc(self, wc):
         await wc.grab_json_response('/api/providers/identity')
@@ -2283,12 +2284,14 @@ class XCCClient(IMMClient):
         if rsv['return'] != 0:
             raise Exception('Unexpected return to reservation: ' + repr(rsv))
         xid = random.randint(0, 1000000000)
-        uploadthread = webclient.FileUploader(
+        uploadthread = webclient.make_uploader(
             wc, '/upload?X-Progress-ID={0}'.format(xid), filename, data)
-        uploadthread.start()
         uploadstate = None
-        while uploadthread.isAlive():
-            uploadthread.join(3)
+        while not uploadthread.completed():
+            try:
+                await uploadthread.join(3)
+            except asyncio.TimeoutError:
+                pass
             rsp = await wc.grab_json_response(
                 '/upload/progress?X-Progress-ID={0}'.format(xid))
             if rsp['state'] == 'uploading':
@@ -2311,7 +2314,7 @@ class XCCClient(IMMClient):
             raise Exception('Unexpected response: ' + repr(rsp))
         progress({'phase': 'validating',
                   'progress': 0.0})
-        ipmisession.Session.pause(3)
+        await ipmisession.Session.pause(3)
         # aggressive timing can cause the next call to occasionally
         # return 25 and fail
         await self._refresh_token()
@@ -2585,13 +2588,14 @@ class XCCClient(IMMClient):
             if filename:
                 url = '/download/' + filename
                 savefile = os.path.join(directory, filename)
-                fd = webclient.make_downloader(self.wc, url, savefile)
+                wc = await self.wc()
+                fd = webclient.make_downloader(wc, url, savefile)
                 while not fd.completed():
                     try:
                         await fd.join(1)
                     except asyncio.TimeoutError:
                         pass
-                    self._refresh_token()
+                    await self._refresh_token()
                 yield savefile
 
     async def delete_license(self, name):
@@ -2612,11 +2616,11 @@ class XCCClient(IMMClient):
             313: "License is expired",
             314: "License usage limit reached",
         }
-        uploadthread = webclient.FileUploader(self.wc, '/upload', filename,
+        wc = await self.wc()
+        uploadthread = webclient.make_uploader(wc, '/upload', filename,
                                               data=data)
-        uploadthread.start()
-        uploadthread.join()
-        rsp = json.loads(uploadthread.rsp)
+        await uploadthread.join()
+        rspstatus, rsp, headers = uploadthread.get_response()
         licpath = rsp.get('items', [{}])[0].get('path', None)
         if licpath:
             wc = await self.wc()
@@ -2625,7 +2629,8 @@ class XCCClient(IMMClient):
             if rsp.get('return', 0) in license_errors:
                 raise pygexc.InvalidParameterValue(
                     license_errors[rsp['return']])
-        return self.get_licenses()
+        async for x in self.get_licenses():
+            yield x
 
     async def get_user_expiration(self, uid):
         uid = uid - 1

@@ -1328,6 +1328,7 @@ class OEMHandler(generic.OEMHandler):
         if await self.has_xcc():
             async for x in self.immhandler.save_licenses(directory):
                 yield x
+            return
         async for x in super(OEMHandler, self).save_licenses(directory):
             yield x
 
