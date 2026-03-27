@@ -424,7 +424,7 @@ class Command(object):
         # first, we disable timer by way of set system boot options,
         # then move on to set chassis capabilities
         # Set System Boot Options is netfn=0, command=8, data
-        response = self.raw_command(netfn=0, command=8, data=(3, 8))
+        response = await self.raw_command(netfn=0, command=8, data=(3, 8))
         if 'error' in response:
             raise exc.IpmiException(response['error'])
         bootflags = 0x80
