@@ -1295,9 +1295,11 @@ class OEMHandler(generic.OEMHandler):
         if await self.has_xcc() or await self.has_imm():
             async for x in self.immhandler.list_media():
                 yield x
+            return
         if self.has_tsma():
             async for x in self.tsmahandler.list_media():
                 yield x
+            return
         async for x in super(OEMHandler, self).list_media():
             yield x
 
