@@ -472,7 +472,8 @@ class Command(object):
                                             rslun=rslun)
         if rsp and 'error' in rsp:
             raise exc.IpmiException(rsp['error'], rsp['code'])
-        rsp['data'] = buffer(rsp['data'])
+        if rsp and 'data' in rsp:
+            rsp['data'] = buffer(rsp['data'])
         return rsp
 
     async def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
