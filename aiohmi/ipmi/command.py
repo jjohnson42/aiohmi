@@ -481,7 +481,7 @@ class Command(object):
                 'Not allowed to overwrite existing file: {0}'.format(
                     savefile))
         await self.oem_init()
-        return self._oem.get_diagnostic_data(savefile, progress, autosuffix)
+        return await self._oem.get_diagnostic_data(savefile, progress, autosuffix)
 
     async def get_description(self):
         """Get physical attributes for the system, e.g. for GUI use

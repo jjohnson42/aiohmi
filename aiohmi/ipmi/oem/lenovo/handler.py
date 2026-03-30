@@ -886,14 +886,14 @@ class OEMHandler(generic.OEMHandler):
 
     async def get_diagnostic_data(self, savefile, progress, autosuffix=False):
         if await self.has_xcc():
-            return self.immhandler.get_diagnostic_data(savefile, progress,
+            return await self.immhandler.get_diagnostic_data(savefile, progress,
                                                        autosuffix)
         if await self.is_fpc():
-            return self.smmhandler.get_diagnostic_data(savefile, progress,
+            return await self.smmhandler.get_diagnostic_data(savefile, progress,
                                                        autosuffix,
                                                        self._fpc_variant)
         if self.has_tsma:
-            return self.tsmahandler.get_diagnostic_data(savefile, progress,
+            return await self.tsmahandler.get_diagnostic_data(savefile, progress,
                                                         autosuffix)
 
     async def get_oem_capping_enabled(self):
