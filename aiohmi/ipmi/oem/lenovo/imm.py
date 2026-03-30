@@ -1337,7 +1337,7 @@ class XCCClient(IMMClient):
             await ipmisession.Session.pause(3)
             result = await wc.grab_json_response('/api/providers/ffdc',
                                                 {'Generate_FFDC_status': 1})
-            self._refresh_token()
+            await self._refresh_token_wc(wc)
             if progress:
                 progress({'phase': 'initializing', 'progress': float(percent)})
             percent = result['progress']
@@ -1347,7 +1347,6 @@ class XCCClient(IMMClient):
         url = '/ffdc/{0}'.format(result['FileName'])
         if autosuffix and not savefile.endswith('.tzz'):
             savefile += '-{0}'.format(result['FileName'])
-        fd = webclient.FileDownloader(wc, url, savefile)
         fd = webclient.make_downloader(wc, url, savefile)
         while not fd.completed():
             try:
@@ -1357,7 +1356,7 @@ class XCCClient(IMMClient):
             if progress and fd.get_progress():
                 progress({'phase': 'download',
                           'progress': 100 * fd.get_progress()})
-            self._refresh_token()
+            await self._refresh_token()
         if fd.exc:
             raise fd.exc
         if progress:
@@ -2256,9 +2255,12 @@ class XCCClient(IMMClient):
 
     async def _refresh_token_wc(self, wc):
         await wc.grab_json_response('/api/providers/identity')
-        if '_csrf_token' in wc.cookies:
-            wc.set_header('X-XSRF-TOKEN', wc.cookies['_csrf_token'])
-            wc.vintage = util._monotonic_time()
+        for cky in wc.cookies:
+                if cky.key == '_csrf_token':
+                    wc.set_header('X-XSRF-TOKEN', cky.value)
+                    wc.vintage = util._monotonic_time()
+                    break
+
 
     async def set_hostname(self, hostname):
         wc = await self.wc()

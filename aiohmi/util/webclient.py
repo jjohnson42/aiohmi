@@ -64,6 +64,7 @@ class Downloader:
         self._completed = False
         self._filehandle = filehandle
         self._xfertask = None
+        self.exc = None
 
     def get_progress(self):
         if self._completed:
