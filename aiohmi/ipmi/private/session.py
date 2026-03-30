@@ -1947,7 +1947,7 @@ class Session(object):
                 # last one to take ownership
                 if self._customkeepalives[ka][1] is None:
                     continue
-                self._customkeepalives[ka][1](
+                await self._customkeepalives[ka][1](
                     {'error': 'Session Disconnected'})
         self._customkeepalives = None
         if not self.broken:
