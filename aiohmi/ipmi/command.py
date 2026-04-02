@@ -1940,8 +1940,8 @@ class Command(object):
                 password = password.ljust(16, b'\x00')
             data.extend(bytearray(password))
 
-        self.oem_init()
-        data = self._oem.process_password(password, data)
+        await self.oem_init()
+        data = await self._oem.process_password(password, data)
         try:
             await self.raw_command(netfn=0x06, command=0x47, data=data)
         except exc.IpmiException as ie:
@@ -2033,7 +2033,7 @@ class Command(object):
         max_ids = await self.get_channel_max_user_count(channel)
         for uid in range(1, max_ids + 1):
             name = await self.get_user_name(uid=uid)
-            if self._oem.is_valid(name):
+            if await self._oem.is_valid(name):
                 names[uid] = await self.get_user(uid=uid, channel=channel)
         return names
 
