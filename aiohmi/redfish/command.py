@@ -18,6 +18,7 @@ The command module for redfish systems.  Provides https-only support
 for redfish compliant endpoints
 """
 
+import asyncio
 import base64
 from datetime import datetime
 from datetime import timedelta
@@ -528,16 +529,15 @@ class Command(object):
             raise exc.InvalidParameterValue(
                 "Unknown power state %s requested" % powerstate)
         powerstate = powerstates[powerstate]
-        self._do_web_request(
+        await self._do_web_request(
             self.powerurl, {'ResetType': powerstate})
         if wait and reqpowerstate in ('on', 'off', 'softoff', 'shutdown'):
             if reqpowerstate in ('softoff', 'shutdown'):
                 reqpowerstate = 'off'
             timeout = os.times()[4] + 300
-            while (self.get_power()['powerstate'] != reqpowerstate
-                   and os.times()[4] < timeout):
-                time.sleep(1)
-            if self.get_power()['powerstate'] != reqpowerstate:
+            while (await self.get_power())['powerstate'] != reqpowerstate and os.times()[4] < timeout:
+                await asyncio.sleep(1)
+            if (await self.get_power())['powerstate'] != reqpowerstate:
                 raise exc.PyghmiException(
                     "System did not accomplish power state change")
             return {'powerstate': reqpowerstate}
