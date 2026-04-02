@@ -223,18 +223,16 @@ class Command(object):
             wc.stdheaders['X-Auth-Token'] = self.xauthtoken
             self.wc.stdheaders['X-Auth-Token'] = self.xauthtoken
 
-    @property
-    def _accountserviceurl(self):
-        sroot = self._do_web_request('/redfish/v1/')
+    async def _accountserviceurl(self):
+        sroot = await self._do_web_request('/redfish/v1/')
         return sroot.get('AccountService', {}).get('@odata.id', None)
 
-    @property
-    def _validroles(self):
-        okroles = set([])
-        roleurl = self._do_web_request(self._accountserviceurl).get(
+    async def _validroles(self):
+        okroles = set()
+        roleurl = (await self._do_web_request(await self._accountserviceurl())).get(
             'Roles', {}).get('@odata.id', None)
         if roleurl:
-            roles = self._do_web_request(roleurl).get('Members', [])
+            roles = (await self._do_web_request(roleurl)).get('Members', [])
             for role in roles:
                 role = role.get('@odata.id', '')
                 if not role:
@@ -285,17 +283,17 @@ class Command(object):
                 privilege_level: (str)[callback, user, operatorm administrator,
                                        proprietary, no_access]
         """
-        srvurl = self._accountserviceurl
+        srvurl = await self._accountserviceurl()
         names = {}
         if srvurl:
-            srvinfo = self._do_web_request(srvurl)
+            srvinfo = await self._do_web_request(srvurl)
             srvurl = srvinfo.get('Accounts', {}).get('@odata.id', None)
             if srvurl:
-                srvinfo = self._do_web_request(srvurl)
+                srvinfo = await self._do_web_request(srvurl)
                 accounts = srvinfo.get('Members', [])
                 oem = await self.oem()
                 for account in accounts:
-                    accinfo = self._do_web_request(account['@odata.id'])
+                    accinfo = await self._do_web_request(account['@odata.id'])
                     currname = accinfo.get('UserName', '')
                     currid = accinfo.get('Id', None)
                     if currname:
@@ -311,16 +309,16 @@ class Command(object):
         return names
 
     async def _account_url_info_by_id(self, uid):
-        srvurl = self._accountserviceurl
+        srvurl = await self._accountserviceurl()
         oem = await self.oem()
         if srvurl:
-            srvinfo = self._do_web_request(srvurl)
+            srvinfo = await self._do_web_request(srvurl)
             srvurl = srvinfo.get('Accounts', {}).get('@odata.id', None)
             if srvurl:
-                srvinfo = self._do_web_request(srvurl)
+                srvinfo = await self._do_web_request(srvurl)
                 accounts = srvinfo.get('Members', [])
                 for account in accounts:
-                    accinfo = self._do_web_request(account['@odata.id'])
+                    accinfo = await self._do_web_request(account['@odata.id'])
                     currid = accinfo.get('Id', None)
                     if str(currid) == str(uid):
                         accinfo['expiration'] = await oem.get_user_expiration(
@@ -328,16 +326,16 @@ class Command(object):
                         return account['@odata.id'], accinfo
 
     async def get_user(self, uid):
-        srvurl = self._accountserviceurl
+        srvurl = await self._accountserviceurl()
         oem = await self.oem()
         if srvurl:
-            srvinfo = self._do_web_request(srvurl)
+            srvinfo = await self._do_web_request(srvurl)
             srvurl = srvinfo.get('Accounts', {}).get('@odata.id', None)
             if srvurl:
-                srvinfo = self._do_web_request(srvurl)
+                srvinfo = await self._do_web_request(srvurl)
                 accounts = srvinfo.get('Members', [])
                 for account in accounts:
-                    accinfo = self._do_web_request(account['@odata.id'])
+                    accinfo = await self._do_web_request(account['@odata.id'])
                     currname = accinfo.get('UserName', '')
                     currid = accinfo.get('Id', None)
                     if str(currid) == str(uid):
@@ -371,13 +369,13 @@ class Command(object):
             raise Exception("No such account found")
         etag = accinfo[1].get('@odata.etag', None)
         if mode == 'set_password':
-            self._do_web_request(accinfo[0], {'Password': password},
+            await self._do_web_request(accinfo[0], {'Password': password},
                                  method='PATCH', etag=etag)
         elif mode == 'disable':
-            self._do_web_request(accinfo[0], {'Enabled': False},
+            await self._do_web_request(accinfo[0], {'Enabled': False},
                                  method='PATCH', etag=etag)
         elif mode == 'enable':
-            self._do_web_request(accinfo[0], {'Enabled': True},
+            await self._do_web_request(accinfo[0], {'Enabled': True},
                                  method='PATCH', etag=etag)
         return True
 
@@ -402,10 +400,10 @@ class Command(object):
         if accinfo:
             method = 'PATCH'
         else:
-            accinfo = (self._accountserviceurl + '/Accounts', {})
+            accinfo = ((await self._accountserviceurl()) + '/Accounts', {})
             method = 'POST'
         etag = accinfo[1].get('@odata.etag', None)
-        for role in self._validroles:
+        for role in await self._validroles():
             if role.lower() == privilege_level.lower():
                 privilege_level = role
                 break
@@ -424,7 +422,7 @@ class Command(object):
             raise Exception("Unable to find indicated uid")
         if privilege_level.startswith('custom.'):
             privilege_level = privilege_level.replace('custom.', '')
-        for role in self._validroles:
+        for role in await self._validroles():
             if role.lower() == privilege_level.lower():
                 privilege_level = role
                 break
@@ -434,7 +432,7 @@ class Command(object):
             "Password": password,
             "RoleId": privilege_level,
         }
-        self._do_web_request(accinfo[0], userinfo, method='PATCH', etag=etag)
+        await self._do_web_request(accinfo[0], userinfo, method='PATCH', etag=etag)
         return True
 
     async def get_screenshot(self, outfile):
