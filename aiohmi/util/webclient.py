@@ -51,12 +51,13 @@ class CustomVerifier(aiohttp.Fingerprint):
     def check(self, transport):
         sslobj = transport.get_extra_info("ssl_object")
         cert = sslobj.getpeercert(binary_form=True)
-        if not self._certverify(cert):
+        try:
+            if not self._certverify(cert):
+                raise pygexc.UnrecognizedCertificate('Unknown certificate',
+                                                     cert)
+        except Exception:
             transport.close()
-            raise pygexc.UnrecognizedCertificate('Unknown certificate',
-                                                 cert)
-
-
+            raise
 
 class Downloader:
     def __init__(self, filehandle):
