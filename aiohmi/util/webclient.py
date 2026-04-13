@@ -232,6 +232,7 @@ def get_upload_form(filename, data, formname, otherfields, boundary=None):
 class WebConnection:
     def __init__(self, host, port, verifycallback=None, timeout=None):
         self.port = port
+        self.thehost = host
         if ':' in host and '[' not in host:
             self.host = f'[{host}]'
         else:
