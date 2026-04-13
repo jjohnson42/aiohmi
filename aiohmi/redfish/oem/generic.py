@@ -334,10 +334,10 @@ class OEMHandler(object):
                 cputemps.append(temp)
         return cputemps
 
-    @property
-    def _bmcurl(self):
+    
+    async def get_bmcurl(self):
         if not self._varbmcurl:
-            self._varbmcurl = self.sysinfo.get('Links', {}).get(
+            self._varbmcurl = (await self.sysinfo()).get('Links', {}).get(
                 'ManagedBy', [{}])[0].get('@odata.id', None)
         return self._varbmcurl
 
@@ -493,7 +493,7 @@ class OEMHandler(object):
         await self._do_web_request(replacecerturl, certpayload)
 
     async def add_trusted_ca(self, pemdata):
-        mgrinfo = await self._do_web_request(self._bmcurl)
+        mgrinfo = await self._do_web_request(await self.get_bmcurl())
         secpolicy = mgrinfo.get('SecurityPolicy', {}).get('@odata.id', None)
         if secpolicy:
             secinfo = await self._do_web_request(secpolicy)
@@ -507,7 +507,7 @@ class OEMHandler(object):
         raise exc.PyghmiException('Platform does not support adding trusted CAs')
 
     async def del_trusted_ca(self, certid):
-        mgrinfo = await self._do_web_request(self._bmcurl)
+        mgrinfo = await self._do_web_request(await self.get_bmcurl())
         secpolicy = mgrinfo.get('SecurityPolicy', {}).get('@odata.id', None)
         if secpolicy:
             secinfo = await self._do_web_request(secpolicy)
@@ -524,7 +524,7 @@ class OEMHandler(object):
         raise exc.PyghmiException(f'No such certificate found: {certid}')
 
     async def get_trusted_cas(self):
-        mgrinfo = await self._do_web_request(self._bmcurl)
+        mgrinfo = await self._do_web_request(await self.get_bmcurl())
         secpolicy = mgrinfo.get('SecurityPolicy', {}).get('@odata.id', None)
         if secpolicy:
             secinfo = await self._do_web_request(secpolicy)
@@ -1004,7 +1004,8 @@ class OEMHandler(object):
             self.password = password
 
     async def list_media(self, fishclient, cache=True):
-        bmcinfo = await fishclient._do_web_request(fishclient._bmcurl, cache=cache)
+        bmcurl = await fishclient.get_bmcurl()
+        bmcinfo = await fishclient._do_web_request(bmcurl, cache=cache)
         vmcoll = bmcinfo.get('VirtualMedia', {}).get('@odata.id', None)
         if vmcoll:
             vmlist = await fishclient._do_web_request(vmcoll, cache=cache)
