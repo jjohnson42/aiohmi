@@ -403,7 +403,7 @@ class OEMHandler(object):
                     raise exc.PyghmiException('Requested key length {0} not supported'.format(keylength))
                 selectedkeylen = keylength
         gencsrtarg = gencsractinfo.get('target', None)
-        certcoll = self.get_certificate_collection(certservice)
+        certcoll = await self.get_certificate_collection(certservice)
         payload = {
             'CertificateCollection': {"@odata.id": certcoll},
             'City': city or 'Unspecified',
