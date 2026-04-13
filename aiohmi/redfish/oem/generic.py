@@ -343,7 +343,7 @@ class OEMHandler(object):
 
     
     async def sysinfo(self):
-        sysurl = self.get_default_sysurl()
+        sysurl = await self.get_default_sysurl()
         return await self._do_web_request(sysurl)
     
     async def get_bmc_csr(self, keytype=None, keylength=None, cn=None, city=None,
