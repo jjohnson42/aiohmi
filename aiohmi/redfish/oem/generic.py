@@ -346,7 +346,7 @@ class OEMHandler(object):
         sysurl = self.get_default_sysurl()
         return await self._do_web_request(sysurl)
     
-    def get_bmc_csr(self, keytype=None, keylength=None, cn=None, city=None,
+    async def get_bmc_csr(self, keytype=None, keylength=None, cn=None, city=None,
                     state=None, country=None, org=None, orgunit=None):
         # A fun time here, the redfish specification is weird about this.
         # We have a certificateservice, sounds good, and an action to generate a CSR,
@@ -355,11 +355,11 @@ class OEMHandler(object):
         # is perhaps odd, but a relatively safe bet.
         # However, the purpose of the certificates is opaque, so we can only guess
         # based on strings in the url if there is ambiguity.
-        rootinfo = self._do_web_request('/redfish/v1/')
+        rootinfo = await self._do_web_request('/redfish/v1/')
         certserviceurl = rootinfo.get('CertificateService', {}).get('@odata.id', None)
         if not certserviceurl:
             raise exc.PyghmiException('No CertificateService found on platform')
-        certservice = self._do_web_request(certserviceurl)
+        certservice = await self._do_web_request(certserviceurl)
         gencsractinfo = certservice.get('Actions', {}).get("#CertificateService.GenerateCSR", {})
         curveids = gencsractinfo.get('KeyCurveId@Redfish.AllowableValues', [])
         keylens = gencsractinfo.get('KeyBitLength@Redfish.AllowableValues', [])
@@ -420,15 +420,15 @@ class OEMHandler(object):
             payload['KeyLength'] = selectedkeylen
         if selectedkpa:
             payload['KeyPairAlgorithm'] = selectedkpa
-        rsp = self._do_web_request(gencsrtarg, payload)
+        rsp = await self._do_web_request(gencsrtarg, payload)
         csr = rsp.get('CSRString', None)
         return csr
 
-    def get_certificate_collection(self, certservice):
+    async def get_certificate_collection(self, certservice):
         certcollections = set([])
         certlocs = certservice.get('CertificateLocations', {}).get('@odata.id', None)
         if certlocs:
-            certlocdata = self._do_web_request(certlocs)
+            certlocdata = await self._do_web_request(certlocs)
             for cert in certlocdata.get('Links', {}).get('Certificates', []):
                 certurl = cert.get('@odata.id', None)
                 if not certurl:
@@ -453,16 +453,16 @@ class OEMHandler(object):
         certcoll = list(certcollections)[0]
         return certcoll
 
-    def install_bmc_certificate(self, certdata):
-        rootinfo = self._do_web_request('/redfish/v1/')
+    async def install_bmc_certificate(self, certdata):
+        rootinfo = await self._do_web_request('/redfish/v1/')
         certserviceurl = rootinfo.get('CertificateService', {}).get('@odata.id', None)
         if not certserviceurl:
             raise exc.PyghmiException('No CertificateService found on platform')
-        certservice = self._do_web_request(certserviceurl)
+        certservice = await self._do_web_request(certserviceurl)
         certlocs = certservice.get('CertificateLocations', {}).get('@odata.id', None)
         if not certlocs:
             raise exc.PyghmiException('No CertificateLocations found on platform')
-        certlocdata = self._do_web_request(certlocs)
+        certlocdata = await self._do_web_request(certlocs)
         allcerts = set([])
         for certloc in certlocdata.get('Links', {}).get('Certificates', []):
             certurl = certloc.get('@odata.id', None)
@@ -490,47 +490,47 @@ class OEMHandler(object):
         certpayload = _pem_to_dict(certdata)
         certpayload['CertificateUri'] = {'@odata.id': targcerturl}
         #/redfish/v1/CertificateService/Actions/CertificateService.ReplaceCertificate
-        self._do_web_request(replacecerturl, certpayload)
+        await self._do_web_request(replacecerturl, certpayload)
 
-    def add_trusted_ca(self, pemdata):
-        mgrinfo = self._do_web_request(self._bmcurl)
+    async def add_trusted_ca(self, pemdata):
+        mgrinfo = await self._do_web_request(self._bmcurl)
         secpolicy = mgrinfo.get('SecurityPolicy', {}).get('@odata.id', None)
         if secpolicy:
-            secinfo = self._do_web_request(secpolicy)
+            secinfo = await self._do_web_request(secpolicy)
             certcoll = secinfo.get('TLS', {}).get('Client', {}).get('TrustedCertificates', {}).get('@odata.id', None)
             self._invalidate_url_cache(certcoll)
             if certcoll:
                 certpayload = _pem_to_dict(pemdata)
-                self._do_web_request(certcoll, certpayload)
+                await self._do_web_request(certcoll, certpayload)
                 self._invalidate_url_cache(certcoll)
                 return True
         raise exc.PyghmiException('Platform does not support adding trusted CAs')
 
-    def del_trusted_ca(self, certid):
-        mgrinfo = self._do_web_request(self._bmcurl)
+    async def del_trusted_ca(self, certid):
+        mgrinfo = await self._do_web_request(self._bmcurl)
         secpolicy = mgrinfo.get('SecurityPolicy', {}).get('@odata.id', None)
         if secpolicy:
-            secinfo = self._do_web_request(secpolicy)
+            secinfo = await self._do_web_request(secpolicy)
             certcoll = secinfo.get('TLS', {}).get('Client', {}).get('TrustedCertificates', {}).get('@odata.id', None)
             self._invalidate_url_cache(certcoll)
             if certcoll:
-                certs = self._get_expanded_data(certcoll)
+                certs = await self._get_expanded_data(certcoll)
                 certs = certs.get('Members', [])
                 for cert in certs:
                     if cert.get('Id', '') == certid:
-                        self._do_web_request(cert['@odata.id'], method='DELETE')
+                        await self._do_web_request(cert['@odata.id'], method='DELETE')
                         self._invalidate_url_cache(certcoll)
                         return True
         raise exc.PyghmiException(f'No such certificate found: {certid}')
 
-    def get_trusted_cas(self):
-        mgrinfo = self._do_web_request(self._bmcurl)
+    async def get_trusted_cas(self):
+        mgrinfo = await self._do_web_request(self._bmcurl)
         secpolicy = mgrinfo.get('SecurityPolicy', {}).get('@odata.id', None)
         if secpolicy:
-            secinfo = self._do_web_request(secpolicy)
+            secinfo = await self._do_web_request(secpolicy)
             certcoll = secinfo.get('TLS', {}).get('Client', {}).get('TrustedCertificates', {}).get('@odata.id', None)
             if certcoll:
-                certs = self._get_expanded_data(certcoll)
+                certs = await self._get_expanded_data(certcoll)
                 certs = certs.get('Members', [])
                 for cert in certs:
                     certdesc = {

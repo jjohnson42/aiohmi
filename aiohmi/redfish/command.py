@@ -246,7 +246,7 @@ class Command(object):
 
     async def get_trusted_cas(self):
         oem = await self.oem()
-        for ca in await oem.get_trusted_cas():
+        async for ca in oem.get_trusted_cas():
             yield ca
     
     async def get_bmc_csr(self, keytype=None, keylength=None, cn=None, city=None,
