@@ -1714,11 +1714,10 @@ class OEMHandler(generic.OEMHandler):
             314: "License usage limit reached",
         }
         wc = await self.wc()
-        uploadthread = webclient.FileUploader(wc, '/upload', filename,
+        uploadthread = webclient.make_uploader(wc, '/upload', filename,
                                               data=data)
-        uploadthread.start()
-        uploadthread.join()
-        rsp = json.loads(uploadthread.rsp)
+        await uploadthread.join()
+        rspstatus, rsp, headers = uploadthread.get_response()
         licpath = rsp.get('items', [{}])[0].get('path', None)
         if licpath:
             rsp = await wc.grab_json_response(
@@ -1730,7 +1729,8 @@ class OEMHandler(generic.OEMHandler):
             if rsp.get('return', 0) in license_errors:
                 raise pygexc.InvalidParameterValue(
                     license_errors[rsp['return']])
-        return await self.get_licenses(fishclient)
+        async for x in self.get_licenses(fishclient):
+            yield x
 
     async def user_delete(self, uid, fishclient=None):
         wc = await self.wc()
