@@ -1154,7 +1154,8 @@ class OEMHandler(generic.OEMHandler):
             pendingscm = None
         if pendinghpm == '*':
             pendinghpm = None    
-        fwlist = await fishclient._do_web_request(fishclient._fwinventory + '?$expand=.')
+        fwinv = await fishclient.get_fwinventory()
+        fwlist = await fishclient._do_web_request(fwinv + '?$expand=.')
         fwlist = copy.deepcopy(fwlist.get('Members', []))
         self._fwnamemap = {}
         for redres in fwlist:

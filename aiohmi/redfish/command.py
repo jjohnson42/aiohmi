@@ -475,7 +475,7 @@ class Command(object):
             self._varupdateservice = us
         return self._varupdateservice
 
-    async def _fwinventory(self):
+    async def get_fwinventory(self):
         if not self._varfwinventory:
             usi = await self._do_web_request(await self._updateservice())
             self._varfwinventory = usi.get('FirmwareInventory', {}).get(
@@ -1143,7 +1143,7 @@ class Command(object):
                 yield firminfo
         except exc.BypassGenericBehavior:
             return
-        fwlist = await self._do_web_request(self._fwinventory)
+        fwlist = await self._do_web_request(await self.get_fwinventory())
         fwurls = [x['@odata.id'] for x in fwlist.get('Members', [])]
         async for res in self._do_bulk_requests(fwurls):
             res = self._extract_fwinfo(res)
