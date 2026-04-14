@@ -2031,7 +2031,7 @@ class XCCClient(IMMClient):
             if newmode:
                 if progress:
                     progress({'phase': 'upload',
-                          'progress': 100 * wc.get_upload_progress()})
+                          'progress': 100 * uploadthread.get_progress()})
             else:
                 rsp = await wc.grab_json_response(
                     '/upload/progress?X-Progress-ID={0}'.format(xid))
