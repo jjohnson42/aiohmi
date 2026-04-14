@@ -471,15 +471,14 @@ class IMMClient(object):
         uploadfields['uploadType'] = 'iframe'
         uploadfields['available'] = alloc['available']
         uploadfields['checksum'] = xid
-        ut = webclient.FileUploader(
+        ut = webclient.make_uploader(
             wc, '/designs/imm/upload/rp_image_upload.esp', filename, data,
             otherfields=uploadfields)
-        ut.start()
-        while ut.isAlive():
-            ut.join(3)
+        while not ut.completed():
+            await ut.join(3)
             if progress:
                 progress({'phase': 'upload',
-                          'progress': 100 * wc.get_upload_progress()})
+                          'progress': 100 * ut.get_progress()})
         status = await wc.grab_json_response(
             '/designs/imm/upload/rp_image_upload_status.esp',
             'filePath={0}'.format(alloc['filePath']))
@@ -2141,7 +2140,7 @@ class XCCClient(IMMClient):
                 uploadthread.join(3)
                 if progress:
                     progress({'phase': 'upload',
-                              'progress': 100 * wc.get_upload_progress()})
+                              'progress': 100 * uploadthread.get_progress()})
             if uploadthread.rspstatus >= 300 or uploadthread.rspstatus < 200:
                 rsp = uploadthread.rsp
                 errmsg = f'Upload failed with HTTP status {uploadthread.rspstatus}'

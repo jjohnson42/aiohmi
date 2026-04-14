@@ -1130,7 +1130,7 @@ class OEMHandler(generic.OEMHandler):
             await uploadthread.join(3)
             if progress:
                 progress({'phase': 'upload',
-                          'progress': 100 * wc.get_upload_progress()})
+                          'progress': 100 * uploadthread.get_progress()})
         rspstatus, rsp, headers = uploadthread.get_response()
         if rsp['return'] != 0:
             raise Exception('Issue uploading file')

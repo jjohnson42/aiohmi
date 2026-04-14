@@ -1352,7 +1352,7 @@ class OEMHandler(generic.OEMHandler):
                 if progress:
                     progress(
                         {'phase': 'upload',
-                         'progress': 100 * wc.get_upload_progress()})
+                         'progress': 100 * uploadtask.get_progress()})
             rspstatus, rsp, headers = uploadtask.get_response()
             if not isinstance(rsp, dict):
                 rsp = json.loads(rsp)
