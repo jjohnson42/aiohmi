@@ -1729,8 +1729,6 @@ class OEMHandler(generic.OEMHandler):
             if rsp.get('return', 0) in license_errors:
                 raise pygexc.InvalidParameterValue(
                     license_errors[rsp['return']])
-        async for x in self.get_licenses(fishclient):
-            yield x
 
     async def user_delete(self, uid, fishclient=None):
         wc = await self.wc()
