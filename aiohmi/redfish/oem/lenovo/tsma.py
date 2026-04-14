@@ -684,20 +684,20 @@ class TsmHandler(generic.OEMHandler):
         self._wc = None
         return 'complete'
 
-    def _detach_all_media(self, wc, slots):
+    async def _detach_all_media(self, wc, slots):
         for slot in slots:  # Stop all active redirections to reconfigure
             if slot['redirection_status'] != 0:
-                wc.grab_json_response(
+                await wc.grab_json_response(
                     '/api/settings/media/remote/stop-media',
                     {'image_name': slot['image_name'],
                      'image_type': slot['media_type'],
                      'image_index': slot['media_index']})
 
-    def detach_remote_media(self):
+    async def detach_remote_media(self):
         wc = self.wc
-        slots = wc.grab_json_response(
+        slots = await wc.grab_json_response(
             '/api/settings/media/remote/configurations')
-        self._detach_all_media(wc, slots)
+        await self._detach_all_media(wc, slots)
         if not self.isipmi:
             raise exc.BypassGenericBehavior()
 

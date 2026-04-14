@@ -548,14 +548,14 @@ class Command(object):
             return cachent['contents']
         return None
 
-    def _do_bulk_requests(self, urls, cache=True):
+    async def _do_bulk_requests(self, urls, cache=True):
         if self._gpool:
             urls = [(x, None, None, cache) for x in urls]
             for res in self._gpool.starmap(self._do_web_request_withurl, urls):
                 yield res
         else:
             for url in urls:
-                yield self._do_web_request_withurl(url, cache=cache)
+                yield await self._do_web_request_withurl(url, cache=cache)
 
     async def _do_web_request_withurl(self, url, payload=None, method=None,
                                 cache=True):
@@ -1495,23 +1495,23 @@ class Command(object):
         if vmcoll:
             vmlist = await self._do_web_request(vmcoll)
             vmurls = [x['@odata.id'] for x in vmlist.get('Members', [])]
-            for vminfo in await self._do_bulk_requests(vmurls):
+            async for vminfo in self._do_bulk_requests(vmurls):
                 vminfo, currl = vminfo
                 if vminfo['Image']:
                     ejurl = vminfo.get(
                         'Actions', {}).get(
                             '#VirtualMedia.EjectMedia', {}).get('target', None)
                     if ejurl:
-                        self._do_web_request(ejurl, {})
+                        await self._do_web_request(ejurl, {})
                     else:
                         try:
-                            self._do_web_request(currl,
-                                                 {'Image': None,
-                                                  'Inserted': False},
-                                                 method='PATCH')
+                            await self._do_web_request(currl,
+                                                       {'Image': None,
+                                                        'Inserted': False},
+                                                       method='PATCH')
                         except exc.RedfishError as re:
                             if re.msgid.endswith(u'PropertyUnknown'):
-                                self._do_web_request(currl, {'Image': None},
+                                await self._do_web_request(currl, {'Image': None},
                                                      method='PATCH')
                             else:
                                 raise

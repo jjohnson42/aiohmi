@@ -972,10 +972,10 @@ class OEMHandler(object):
         await fishclient._do_web_request(
            seturl, redfishsettings, 'PATCH', etag=etag)
 
-    def attach_remote_media(self, url, username, password, vmurls):
+    async def attach_remote_media(self, url, username, password, vmurls):
         return None
 
-    def detach_remote_media(self):
+    async def detach_remote_media(self):
         return None
 
     async def get_description(self):
