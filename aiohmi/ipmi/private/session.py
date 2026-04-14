@@ -1285,7 +1285,6 @@ class Session(object):
         finally:
             KEEPALIVE_SESSIONS.release()
         for session in sessionstokeepalive:
-            print("time to keep alive")
             await session._keepalive()
         await WAITING_SESSIONS.acquire()
         try:
@@ -1376,7 +1375,6 @@ class Session(object):
                     keptalive = True
                     cmd['callback'] = self._keepalive_wrapper(callback)
                     await self.raw_command(**cmd)
-            print(repr(keptalive))
             if not keptalive:
                 if self.incommand:
                     # if currently in command, no cause to keepalive
