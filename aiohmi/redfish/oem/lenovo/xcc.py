@@ -1453,12 +1453,10 @@ class OEMHandler(generic.OEMHandler):
         if rsv['return'] != 0:
             raise Exception('Unexpected return to reservation: ' + repr(rsv))
         xid = random.randint(0, 1000000000)
-        uploadthread = webclient.FileUploader(
+        uploadthread = webclient.make_uploader(
             wc, '/upload?X-Progress-ID={0}'.format(xid), filename, data)
-        uploadthread.start()
-        uploadstate = None
-        while uploadthread.isAlive():
-            uploadthread.join(3)
+        while not uploadthread.completed():
+            await uploadthread.join(3)
             rsp = await wc.grab_json_response(
                 '/upload/progress?X-Progress-ID={0}'.format(xid))
             if rsp['state'] == 'uploading':
@@ -1475,8 +1473,8 @@ class OEMHandler(generic.OEMHandler):
             rsp = await wc.grab_json_response(
                 '/upload/progress?X-Progress-ID={0}'.format(xid))
             uploadstate = rsp['state']
-            self._refresh_token()
-        rsp = json.loads(uploadthread.rsp)
+            await self._refresh_token()
+        rspstatus, rsp, headers = uploadthread.get_response()
         if rsp['items'][0]['name'] != os.path.basename(filename):
             raise Exception('Unexpected response: ' + repr(rsp))
         progress({'phase': 'validating',

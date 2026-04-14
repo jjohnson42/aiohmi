@@ -1122,17 +1122,16 @@ class OEMHandler(generic.OEMHandler):
 
     async def upload_media(self, filename, progress=None, data=None):
         wc = self.webclient
-        uploadthread = webclient.FileUploader(
+        uploadthread = webclient.make_uploader(
             wc, '/rdoc_upload', filename, data,
             formname='file',
             formwrap=True)
-        uploadthread.start()
-        while uploadthread.isAlive():
-            uploadthread.join(3)
+        while not uploadthread.completed():
+            await uploadthread.join(3)
             if progress:
                 progress({'phase': 'upload',
                           'progress': 100 * wc.get_upload_progress()})
-        rsp = json.loads(uploadthread.rsp)
+        rspstatus, rsp, headers = uploadthread.get_response()
         if rsp['return'] != 0:
             raise Exception('Issue uploading file')
         remfilename = rsp['upload_filename']

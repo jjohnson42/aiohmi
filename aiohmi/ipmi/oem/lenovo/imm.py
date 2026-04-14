@@ -2007,7 +2007,7 @@ class XCCClient(IMMClient):
 
     async def upload_media(self, filename, progress=None, data=None):
         wc = await self.wc()
-        self._refresh_token()
+        await self._refresh_token()
         numrdocs = 0
         async for rdoc in self._list_rdoc():
             numrdocs += 1
@@ -2025,11 +2025,10 @@ class XCCClient(IMMClient):
                 wc, '/upload?X-Progress-ID={0}'.format(xid), filename, data)
         else:
             newmode = True
-            uploadthread = webclient.FileUploader(
+            uploadthread = webclient.make_uploader(
                 wc, '/rdocupload', filename, data)
-        uploadthread.start()
-        while uploadthread.isAlive():
-            uploadthread.join(3)
+        while not uploadthread.completed():
+            await uploadthread.join(3)
             if newmode:
                 if progress:
                     progress({'phase': 'upload',
@@ -2040,11 +2039,8 @@ class XCCClient(IMMClient):
                 if progress and rsp['state'] == 'uploading':
                     progress({'phase': 'upload',
                             'progress': 100.0 * rsp['received'] / rsp['size']})
-            self._refresh_token()
-        if uploadthread.rsp:
-            rsp = json.loads(uploadthread.rsp)
-        else:
-            rsp = {}
+            await self._refresh_token()
+        rspstatus, rsp, headers = uploadthread.get_response()    
         if progress:
             progress({'phase': 'upload',
                       'progress': 100.0})
@@ -2059,7 +2055,7 @@ class XCCClient(IMMClient):
                    "WebUploadName": thename}
         rsp = await wc.grab_json_response('/api/providers/rp_rdoc_addfile',
                                          addfile)
-        self._refresh_token()
+        await self._refresh_token()
         if rsp.get('return', -1) != 0:
             errmsg = repr(rsp) if rsp else wc.lastjsonerror
             raise Exception('Unrecognized return: ' + errmsg)
@@ -2071,10 +2067,10 @@ class XCCClient(IMMClient):
                 raise Exception(
                     'Image upload was not accepted, it may be too large')
             ready = rsp['items'][0]['size'] != 0
-        self._refresh_token()
+        await self._refresh_token()
         rsp = await wc.grab_json_response('/api/providers/rp_rdoc_mountall',
                                          {})
-        self._refresh_token()
+        await self._refresh_token()
         if rsp.get('return', -1) != 0:
             errmsg = repr(rsp) if rsp else wc.lastjsonerror
             raise Exception('Unrecognized return: ' + errmsg)
