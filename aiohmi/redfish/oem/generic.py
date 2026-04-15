@@ -1405,7 +1405,7 @@ class OEMHandler(object):
         # disable cache to make sure we trigger the token renewal logic if needed
         usd, upurl, ismultipart = await self.retrieve_firmware_upload_url()
         try:
-            uploadthread = webclient.make_uploader(
+            uploadthread = await webclient.make_uploader(
                 self.webclient, upurl, filename, data, formwrap=ismultipart,
                 otherfields=otherfields)
             wc = self.webclient

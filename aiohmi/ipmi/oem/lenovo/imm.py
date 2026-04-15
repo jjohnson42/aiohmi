@@ -471,7 +471,7 @@ class IMMClient(object):
         uploadfields['uploadType'] = 'iframe'
         uploadfields['available'] = alloc['available']
         uploadfields['checksum'] = xid
-        ut = webclient.make_uploader(
+        ut = await webclient.make_uploader(
             wc, '/designs/imm/upload/rp_image_upload.esp', filename, data,
             otherfields=uploadfields)
         while not ut.completed():
@@ -2024,7 +2024,7 @@ class XCCClient(IMMClient):
                 wc, '/upload?X-Progress-ID={0}'.format(xid), filename, data)
         else:
             newmode = True
-            uploadthread = webclient.make_uploader(
+            uploadthread = await webclient.make_uploader(
                 wc, '/rdocupload', filename, data)
         while not uploadthread.completed():
             await uploadthread.join(3)
@@ -2280,7 +2280,7 @@ class XCCClient(IMMClient):
         if rsv['return'] != 0:
             raise Exception('Unexpected return to reservation: ' + repr(rsv))
         xid = random.randint(0, 1000000000)
-        uploadthread = webclient.make_uploader(
+        uploadthread = await webclient.make_uploader(
             wc, '/upload?X-Progress-ID={0}'.format(xid), filename, data)
         uploadstate = None
         while not uploadthread.completed():
@@ -2613,7 +2613,7 @@ class XCCClient(IMMClient):
             314: "License usage limit reached",
         }
         wc = await self.wc()
-        uploadthread = webclient.make_uploader(wc, '/upload', filename,
+        uploadthread = await webclient.make_uploader(wc, '/upload', filename,
                                               data=data)
         await uploadthread.join()
         rspstatus, rsp, headers = uploadthread.get_response()

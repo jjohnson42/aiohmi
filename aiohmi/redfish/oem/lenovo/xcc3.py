@@ -1124,7 +1124,7 @@ class OEMHandler(generic.OEMHandler):
 
     async def upload_media(self, filename, progress=None, data=None):
         wc = self.webclient
-        uploadthread = webclient.make_uploader(
+        uploadthread = await webclient.make_uploader(
             wc, '/rdoc_upload', filename, data,
             formname='file',
             formwrap=True)

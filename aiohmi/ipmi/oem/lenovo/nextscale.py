@@ -1016,7 +1016,7 @@ class SMMClient(object):
         rsp = wc.getresponse()
         rsp.read()
         url = '/fwupload/fwupload.esp?ST1={0}'.format(wc.st1)
-        fu = webclient.make_uploader(
+        fu = await webclient.make_uploader(
             wc, url, filename, data, formname='fileUpload',
             otherfields={'preConfig': 'on'})
         while not fu.completed():

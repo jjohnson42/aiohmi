@@ -60,12 +60,15 @@ class CustomVerifier(aiohttp.Fingerprint):
             raise
 
 class Downloader:
-    def __init__(self, filehandle):
+    @classmethod
+    def create(cls, filehandle):
+        self = cls()
         self.contentlen = None
         self._completed = False
         self._filehandle = filehandle
         self._xfertask = None
         self.exc = None
+        return self
 
     def get_progress(self):
         if self._completed:
@@ -92,8 +95,10 @@ class Downloader:
             await asyncio.wait_for(asyncio.shield(self._xfertask), timeout=timeout)
 
 class Uploader(Downloader):
-    def __init__(self, filename, data=None, formname=None,
+    @classmethod
+    async def create(cls, filename, data=None, formname=None,
                  otherfields=(), formwrap=True):
+        self = cls()
         self._response = None
         self._statuscode = None
         self._xfertask = None
@@ -110,7 +115,7 @@ class Uploader(Downloader):
         self.otherfields = otherfields
         self.ulheaders = {}
         if formwrap:
-            guf = get_upload_form(
+            guf = await get_upload_form(
                 filename, self.data, formname, otherfields)
             self._upbuffer = io.BytesIO(guf[0])
             self._boundary = guf[1]
@@ -124,9 +129,14 @@ class Uploader(Downloader):
                 curroff = self.data.tell()
             except Exception:
                 canseek = False
-                databtyes = self.data.read()
-                self.ulsize = len(databtyes)
-                self._upbuffer = io.BytesIO(databtyes)
+                databytes = b''
+                datachunk = self.data.read(8192)
+                while datachunk:
+                    databytes += datachunk
+                    await asyncio.sleep(0)
+                    datachunk = self.data.read(8192)
+                self.ulsize = len(databytes)
+                self._upbuffer = io.BytesIO(databytes)
             if canseek:
                 self.data.seek(0, 2)
                 self.ulsize = self.data.tell() - curroff
@@ -134,6 +144,7 @@ class Uploader(Downloader):
                 self._upbuffer = self.data
             self.ulheaders['Content-Length'] = str(self.ulsize)
             self.ulheaders['Content-Type'] = 'application/octet-stream'
+        return self
     
     def set_response(self, statuscode, response, headers):
         self._statuscode = statuscode
@@ -177,15 +188,15 @@ class Uploader(Downloader):
 def make_downloader(webconn, url, dlfile):
     if isinstance(dlfile, str):
         dlfile = open(dlfile, 'wb')
-    dler = Downloader(dlfile)
+    dler = Downloader.create(dlfile)
     tsk = asyncio.create_task(webconn.download(url, dlfile, dler))
     dler.set_task(tsk)
     tsk.add_done_callback(dler.mark_completed)
     return dler
 
-def make_uploader(webconn, url, filename, data=None, formname=None,
+async def make_uploader(webconn, url, filename, data=None, formname=None,
                  otherfields=(), formwrap=True):
-    uler = Uploader(filename, data, formname, otherfields, formwrap)
+    uler = await Uploader.create(filename, data, formname, otherfields, formwrap)
     tsk = asyncio.create_task(webconn.upload(
         url, filename, uler.get_buffer(), uploader=uler))
     uler.set_task(tsk)
@@ -195,7 +206,7 @@ def make_uploader(webconn, url, filename, data=None, formname=None,
 
     
 
-def get_upload_form(filename, data, formname, otherfields, boundary=None):
+async def get_upload_form(filename, data, formname, otherfields, boundary=None):
     if not boundary:
         boundary = base64.urlsafe_b64encode(os.urandom(54))[:66] 
     ffilename = filename.split('/')[-1]
@@ -205,7 +216,13 @@ def get_upload_form(filename, data, formname, otherfields, boundary=None):
         return uploadforms[filename]
     except KeyError:
         try:
-            data = data.read()
+            rawdata = b''
+            datachunk = data.read(8192)
+            while datachunk:
+                rawdata += datachunk
+                await asyncio.sleep(0)
+                datachunk = data.read(8192)
+            data = rawdata
         except AttributeError:
             pass
         form = b''

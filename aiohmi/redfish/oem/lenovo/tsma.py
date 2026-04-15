@@ -465,7 +465,7 @@ class TsmHandler(generic.OEMHandler):
             '/api/maintenance/LXPMUploadMode',
             method='PUT', headers=hdrs)
         # name fwimage filname filename application/x-raw-disk-image...
-        fu = webclient.make_uploader(
+        fu = await webclient.make_uploader(
             wc, '/api/maintenance/LXPMUpload',
             filename, data, formname='fwimage')
         while not fu.completed():
@@ -514,7 +514,7 @@ class TsmHandler(generic.OEMHandler):
         rsp = await wc.grab_json_response_with_status(
             '/api/maintenance/{0}'.format(updatemode),
             method='PUT', headers=hdrs)
-        fu = webclient.make_uploader(
+        fu = await webclient.make_uploader(
             wc, '/api/maintenance/{0}'.format(fileupload), filename, data,
             formname='fwimage')
         while not fu.completed():
@@ -594,7 +594,7 @@ class TsmHandler(generic.OEMHandler):
                 '/api/maintenance/hpm/exitupdatemode', {'FWUPDATEID': uid},
                 method='PUT')
             raise Exception(rsp)
-        fu = webclient.make_uploader(
+        fu = await webclient.make_uploader(
             wc, '/api/maintenance/hpm/mmcfw', 'blob', hpminfo[0].data, 'mmc')
         if progress:
             progress({'phase': 'upload', 'progress': 0.0})
@@ -643,8 +643,8 @@ class TsmHandler(generic.OEMHandler):
         rsp, status = await wc.grab_json_response_with_status(
             '/api/maintenance/hpm/exitupdatemode', {'FWUPDATEID': uid},
             method='PUT')
-        fu = webclient.make_uploader(wc, '/api/maintenance/firmware/firmware',
-                                     'blob', hpminfo[1].combo_image, 'fwimage')
+        fu = await webclient.make_uploader(wc, '/api/maintenance/firmware/firmware',
+                                          'blob', hpminfo[1].combo_image, 'fwimage')
         fu.start()
         while not fu.completed():
             await fu.join(3)
