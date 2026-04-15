@@ -1410,7 +1410,10 @@ class OEMHandler(object):
                 otherfields=otherfields)
             wc = self.webclient
             while not uploadthread.completed():
-                await uploadthread.join(3)
+                try:
+                    await uploadthread.join(3)
+                except asyncio.TimeoutError:
+                    pass
                 if progress:
                     progress(
                         {'phase': 'upload',

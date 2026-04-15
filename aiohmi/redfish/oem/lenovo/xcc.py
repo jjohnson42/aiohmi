@@ -1340,7 +1340,7 @@ class OEMHandler(generic.OEMHandler):
                     {'HttpPushUriTargets':
                         ['/redfish/v1/UpdateService'
                          '/FirmwareInventory/BMC-Backup']}, method='PATCH')
-            uploadtask = webclient.Uploader(
+            uploadtask = webclient.make_uploader(
                 self.webclient, upurl, filename, data, formwrap=False)
             wc = self.webclient
             while not uploadtask.completed():

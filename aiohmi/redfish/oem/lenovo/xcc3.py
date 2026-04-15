@@ -777,7 +777,10 @@ class OEMHandler(generic.OEMHandler):
             savefile += '-{0}'.format(fname)
         fd = webclient.make_downloader(self.webclient, durl, savefile)
         while not fd.completed():
-            await fd.join(1)
+            try:
+                await fd.join(1)
+            except asyncio.TimeoutError:
+                pass
             if progress and self.webclient.get_download_progress():
                 progress({'phase': 'download',
                           'progress': 100 * self.webclient.get_download_progress()})
@@ -1126,7 +1129,10 @@ class OEMHandler(generic.OEMHandler):
             formname='file',
             formwrap=True)
         while not uploadthread.completed():
-            await uploadthread.join(3)
+            try:
+                await uploadthread.join(3)
+            except asyncio.TimeoutError:
+                pass
             if progress:
                 progress({'phase': 'upload',
                           'progress': 100 * uploadthread.get_progress()})
