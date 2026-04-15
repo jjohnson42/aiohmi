@@ -118,9 +118,9 @@ class TsmHandler(generic.OEMHandler):
         self._certverify = webclient._certverify
         return self
 
-    def clear_bmc_configuration(self):
-        wc = self.wc
-        rsp, status = wc.grab_json_response_with_status(
+    async def clear_bmc_configuration(self):
+        wc = await self.get_wc()
+        rsp, status = await wc.grab_json_response_with_status(
                 '/api/maintenance/restore_defaults',
                 {"id": 1,
                  "sdr": 0,
@@ -139,9 +139,9 @@ class TsmHandler(generic.OEMHandler):
                  "redfish": 1},
                 method='PUT')
 
-    def get_bmc_configuration(self):
-        wc = self.wc
-        rsp, status = wc.grab_json_response_with_status(
+    async def get_bmc_configuration(self):
+        wc = await self.get_wc()
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/settings/dns-info')
         if status != 200:
             raise Exception(repr(rsp))
@@ -155,7 +155,7 @@ class TsmHandler(generic.OEMHandler):
             if currsrv and currsrv != '::':
                 dnssrvs.append(currsrv)
         settings['dns_servers'] = {'value': ','.join(dnssrvs)}
-        rsp, status = wc.grab_json_response_with_status(
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/LockoutPolicystatus')
         if status == 200:
             isenabled = rsp.get('Status', 0) == 1
@@ -164,16 +164,16 @@ class TsmHandler(generic.OEMHandler):
                     'Attemptstimes', 0)}
             else:
                 settings['password_login_failures'] = {'value': 0}
-        rsp, status = wc.grab_json_response_with_status(
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/GetPWComplex')
         if status == 200:
             settings['password_complexity'] = {'value': rsp.get(
                 'pw_complex', 0)}
         return settings
 
-    def set_bmc_configuration(self, changeset):
+    async def set_bmc_configuration(self, changeset):
         dnschgs = {}
-        wc = self.wc
+        wc = await self.get_wc()
         for key in changeset:
             if isinstance(changeset[key], str):
                 changeset[key] = {'value': changeset[key]}
@@ -190,18 +190,18 @@ class TsmHandler(generic.OEMHandler):
             if 'password_complexity'.startswith(key.lower()):
                 self._set_pass_complexity(currval, wc)
             if 'password_login_failures'.startswith(key.lower()):
-                self._set_pass_lockout(currval, wc)
+                await self._set_pass_lockout(currval, wc)
         if dnschgs:
-            self._set_dns_config(dnschgs, wc)
+            await self._set_dns_config(dnschgs, wc)
 
-    def _set_pass_complexity(self, currval, wc):
-        rsp, status = wc.grab_json_response_with_status(
+    async def _set_pass_complexity(self, currval, wc):
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/SetPWComplex', {'Enable': currval})
         if status != 200:
             raise Exception(repr(rsp))
 
-    def _set_pass_lockout(self, currval, wc):
-        rsp, status = wc.grab_json_response_with_status(
+    async def _set_pass_lockout(self, currval, wc):
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/LockoutPolicystatus')
         if status != 200:
             raise Exception(repr(rsp))
@@ -216,13 +216,13 @@ class TsmHandler(generic.OEMHandler):
         else:
             request['Enable'] = 1
             request['Attemptstimes'] = currval
-        rsp, status = wc.grab_json_response_with_status(
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/SetLockoutPolicy', request)
         if status != 200:
             raise Exception(repr(rsp))
 
-    def _set_dns_config(self, dnschgs, wc):
-        rsp, status = wc.grab_json_response_with_status(
+    async def _set_dns_config(self, dnschgs, wc):
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/settings/dns-info')
         if status != 200:
             raise Exception(repr(rsp))
@@ -233,38 +233,38 @@ class TsmHandler(generic.OEMHandler):
                 rsp[keyn] = ''
         for chg in dnschgs:
             rsp[chg] = dnschgs[chg]
-        rsp, status = wc.grab_json_response_with_status(
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/settings/dns-info', rsp, method='PUT')
         if status != 200:
             raise Exception(repr(rsp))
-        rsp, status = wc.grab_json_response_with_status(
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/settings/dns/restart', {'dns_status': 1}, method='PUT')
         if status != 200:
             raise Exception(repr(rsp))
 
-    def clear_uefi_configuration(self):
+    async def clear_uefi_configuration(self):
         if not self.fishclient:
-            self.init_redfish()
-        return self.fishclient.clear_system_configuration()
+            await self.init_redfish()
+        return await self.fishclient.clear_system_configuration()
 
-    def get_uefi_configuration(self, hideadvanced=True):
+    async def get_uefi_configuration(self, hideadvanced=True):
         if not self.fishclient:
-            self.init_redfish()
-        return self.fishclient.get_system_configuration(hideadvanced)
+            await self.init_redfish()
+        return await self.fishclient.get_system_configuration(hideadvanced)
 
-    def set_uefi_configuration(self, changeset):
+    async def set_uefi_configuration(self, changeset):
         if not self.fishclient:
-            self.init_redfish()
-        return self.fishclient.set_system_configuration(changeset)
+            await self.init_redfish()
+        return await self.fishclient.set_system_configuration(changeset)
 
     async def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
-        wc = self.wc
-        wc.grab_json_response('/api/mini_ffdc', {'action': 'trigger'})
+        wc = await self.get_wc()
+        await wc.grab_json_response('/api/mini_ffdc', {'action': 'trigger'})
         status = 1
         percent = 0
         while status == 1:
             await asyncio.sleep(5)
-            check = wc.grab_json_response('/api/mini_ffdc',
+            check = await wc.grab_json_response('/api/mini_ffdc',
                                           {'action': 'check'})
             status = check.get('status', -1)
             if progress:
@@ -289,34 +289,34 @@ class TsmHandler(generic.OEMHandler):
             progress({'phase': 'complete'})
         return savefile
 
-    def init_redfish(self):
-        self.fishclient = self.fish.Command(
+    async def init_redfish(self):
+        self.fishclient = await self.fish.Command(
             self.tsm, self.username, self.password,
             verifycallback=self._certverify)
 
-    def get_ntp_enabled(self):
-        wc = self.wc
-        rsp, status = wc.grab_json_response_with_status(
+    async def get_ntp_enabled(self):
+        wc = await self.get_wc()
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/settings/date-time')
         if status != 200:
             raise Exception(repr(rsp))
         return rsp.get('ntp_auto_date', 0) > 0
 
-    def set_ntp_enabled(self, enabled):
-        wc = self.wc
-        rsp, status = wc.grab_json_response_with_status(
+    async def set_ntp_enabled(self, enabled):
+        wc = await self.get_wc()
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/settings/date-time')
         if status != 200:
             raise Exception(repr(rsp))
         rsp['ntp_auto_date'] = 1 if enabled else 0
-        rsp, status = wc.grab_json_response_with_status(
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/settings/date-time', rsp, method='PUT')
         if status != 200:
             raise Exception(repr(rsp))
 
-    def get_ntp_servers(self):
-        wc = self.wc
-        rsp, status = wc.grab_json_response_with_status(
+    async def get_ntp_servers(self):
+        wc = await self.get_wc()
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/settings/date-time')
         if status != 200:
             raise Exception(repr(rsp))
@@ -329,9 +329,9 @@ class TsmHandler(generic.OEMHandler):
             srvs.append(pntp)
         return srvs
 
-    def set_ntp_server(self, server, index=0):
-        wc = self.wc
-        rsp, status = wc.grab_json_response_with_status(
+    async def set_ntp_server(self, server, index=0):
+        wc = await self.get_wc()
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/settings/date-time')
         if status != 200:
             raise Exception(repr(rsp))
@@ -340,15 +340,15 @@ class TsmHandler(generic.OEMHandler):
         elif index == 1:
             rsp['secondary_ntp'] = server
         rsp['ntp_auto_date'] = 1
-        rsp, status = wc.grab_json_response_with_status(
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/settings/date-time', rsp, method='PUT')
         if status != 200:
             raise Exception(repr(rsp))
 
     async def get_firmware_inventory(self, components, raisebypass=True,
                                ipmicmd=None):
-        wc = self.wc
-        fwinf, status = wc.grab_json_response_with_status(
+        wc = await self.get_wc()
+        fwinf, status = await wc.grab_json_response_with_status(
             '/api/DeviceVersion')
         gotinfo = False
         if status < 200 or status >= 300:
@@ -388,7 +388,7 @@ class TsmHandler(generic.OEMHandler):
             buildid = cstr_to_str(bytes(rsp['data']))
             yield ('LXPM Linux Driver Bundle', {'build': buildid})
         name = 'TSM'
-        fwinf, status = wc.grab_json_response_with_status('/api/get-sysfwinfo')
+        fwinf, status = await wc.grab_json_response_with_status('/api/get-sysfwinfo')
         if status != 200:
             raise Exception('Error {0} retrieving TSM version: {1}'.format(
                 status, fwinf))
@@ -412,11 +412,10 @@ class TsmHandler(generic.OEMHandler):
         if raisebypass:
             raise exc.BypassGenericBehavior()
 
-    @property
-    def wc(self):
+    async def get_wc(self):
         self.fwid = None
         if self._wc:
-            rsp, status = self._wc.grab_json_response_with_status(
+            rsp, status = await self._wc.grab_json_response_with_status(
                 '/api/chassis-status')
             if status == 200:
                 return self._wc
@@ -424,15 +423,15 @@ class TsmHandler(generic.OEMHandler):
             'username': self.username,
             'password': self.password,
         }
-        wc = webclient.SecureHTTPConnection(self.tsm, 443,
+        wc = webclient.WebConnection(self.tsm, 443,
                                             verifycallback=self._certverify,
                                             timeout=180)
         wc.set_header('Content-Type', 'application/json')
-        rsp, status = wc.grab_json_response_with_status('/api/session',
+        rsp, status = await wc.grab_json_response_with_status('/api/session',
                                                         authdata)
         if status == 403:
             wc.set_header('Content-Type', 'application/x-www-form-urlencoded')
-            rsp, status = wc.grab_json_response_with_status(
+            rsp, status = await wc.grab_json_response_with_status(
                 '/api/session', urlencode(authdata))
 
         if status < 200 or status >= 300:
@@ -442,27 +441,27 @@ class TsmHandler(generic.OEMHandler):
         self._wc = wc
         return wc
 
-    def update_firmware(self, filename, data=None, progress=None, bank=None):
-        wc = self.wc
+    async def update_firmware(self, filename, data=None, progress=None, bank=None):
+        wc = await self.get_wc()
         wc.set_header('Content-Type', 'application/json')
         basefilename = os.path.basename(filename)
         if filename.endswith('.hpm'):
-            return self.update_hpm_firmware(filename, progress, wc, data)
+            return await self.update_hpm_firmware(filename, progress, wc, data)
         elif 'uefi' in basefilename and filename.endswith('.rom'):
-            return self.update_sys_firmware(filename, progress, wc, data=data)
+            return await self.update_sys_firmware(filename, progress, wc, data=data)
         elif 'amd-sas' in basefilename and filename.endswith('.bin'):
-            return self.update_sys_firmware(filename, progress, wc, data=data,
+            return await self.update_sys_firmware(filename, progress, wc, data=data,
                                             type='bp')
         elif (('lxpm' in basefilename or 'fw_drv' in basefilename)
                 and filename.endswith('.img')):
-            return self.update_lxpm_firmware(filename, progress, wc, data)
+            return await self.update_lxpm_firmware(filename, progress, wc, data)
         else:
             raise Exception('Unsupported filename {0}'.format(filename))
 
     async def update_lxpm_firmware(self, filename, progress, wc, data):
         hdrs = wc.stdheaders.copy()
         hdrs['Content-Length'] = 0
-        rsp = wc.grab_json_response_with_status(
+        rsp = await wc.grab_json_response_with_status(
             '/api/maintenance/LXPMUploadMode',
             method='PUT', headers=hdrs)
         # name fwimage filname filename application/x-raw-disk-image...
@@ -502,7 +501,7 @@ class TsmHandler(generic.OEMHandler):
             statusname = 'BPstatus'
         else:
             updatemode = 'flash'
-            rsp = wc.grab_json_response_with_status(
+            rsp = await wc.grab_json_response_with_status(
                 '/api/maintenance/BIOSremoteSave',
                 {"tftpip": "",
                  "tftpfile": ""}
@@ -512,7 +511,7 @@ class TsmHandler(generic.OEMHandler):
             statusname = 'BIOSstatus'
         hdrs = wc.stdheaders.copy()
         hdrs['Content-Length'] = 0
-        rsp = wc.grab_json_response_with_status(
+        rsp = await wc.grab_json_response_with_status(
             '/api/maintenance/{0}'.format(updatemode),
             method='PUT', headers=hdrs)
         fu = webclient.make_uploader(
@@ -535,7 +534,7 @@ class TsmHandler(generic.OEMHandler):
         if rsp[1] >= 200 and rsp[1] < 300 and rsp[0]['wRet'] == 0:
             updone = False
             while not updone:
-                rsp = wc.grab_json_response(
+                rsp = await wc.grab_json_response(
                     '/api/maintenance/{0}'.format(statusname))
                 if rsp.get('state', 0) == 9:
                     break
@@ -622,7 +621,7 @@ class TsmHandler(generic.OEMHandler):
                     'phase': 'apply',
                     'progress': .5 * percent})
             if percent < 100:
-                time.sleep(3)
+                await asyncio.sleep(3)
         if progress:
             progress({'phase': 'validating', 'progress': 0.0})
         del payload['SECTION_FLASH']
@@ -692,7 +691,7 @@ class TsmHandler(generic.OEMHandler):
                      'image_index': slot['media_index']})
 
     async def detach_remote_media(self):
-        wc = self.wc
+        wc = await self.get_wc()
         slots = await wc.grab_json_response(
             '/api/settings/media/remote/configurations')
         await self._detach_all_media(wc, slots)
@@ -777,32 +776,32 @@ class TsmHandler(generic.OEMHandler):
         tries = 20
         while tries and not images:
             tries -= 1
-            time.sleep(1)
-            images = wc.grab_json_response('/api/settings/media/remote/images')
+            await asyncio.sleep(1)
+            images = await wc.grab_json_response('/api/settings/media/remote/images')
         for iso in currisos:
-            self._exec_mount(iso, images, wc)
+            await self._exec_mount(iso, images, wc)
         for iso in currhdds:
-            self._exec_mount(iso, images, wc)
+            await self._exec_mount(iso, images, wc)
 
-    def _exec_mount(self, name, images, wc):
+    async def _exec_mount(self, name, images, wc):
         for img in images:
             if img['image_name'] == name:
                 break
         else:
             raise exc.InvalidParameterValue(
                 'Unable to locate image {0}'.format(name))
-        wc.grab_json_response(
+        await wc.grab_json_response(
             '/api/settings/media/remote/start-media',
             {'image_name': name, 'image_type': img['image_type'],
              'image_index': img['image_index']})
 
-    def upload_media(self, filename, progress=None, data=None):
+    async def upload_media(self, filename, progress=None, data=None):
         raise exc.UnsupportedFunctionality(
             'Remote media upload not supported on this system')
 
-    def list_media(self, fishclient=None, cache=True):
-        wc = self.wc
-        rsp = wc.grab_json_response('/api/settings/media/general')
+    async def list_media(self, fishclient=None, cache=True):
+        wc = await self.get_wc()
+        rsp = await wc.grab_json_response('/api/settings/media/general')
         cds = rsp['cd_remote_server_address']
         cdpath = rsp['cd_remote_source_path']
         cdproto = rsp['cd_remote_share_type']
@@ -814,7 +813,7 @@ class TsmHandler(generic.OEMHandler):
             hds = rsp['hd_remote_server_address']
             hdpath = rsp['hd_remote_source_path']
             hdproto = rsp['hd_remote_share_type']
-        slots = wc.grab_json_response(
+        slots = await wc.grab_json_response(
             '/api/settings/media/remote/configurations')
         for slot in slots:
             if slot['redirection_status'] == 1:
@@ -828,7 +827,7 @@ class TsmHandler(generic.OEMHandler):
                 if url:
                     yield media.Media(slot['image_name'], url)
 
-    def attach_remote_media(self, url, user, password, vmurls):
+    async def attach_remote_media(self, url, user, password, vmurls):
         if not url.startswith('nfs://'):
             raise exc.UnsupportedFunctionality(
                 'Only nfs:// urls are supported by this system')
@@ -844,10 +843,10 @@ class TsmHandler(generic.OEMHandler):
         else:
             raise exc.UnsupportedFunctionality(
                 'Only iso and img files supported')
-        wc = self.wc
-        mountslots = wc.grab_json_response(
+        wc = await self.get_wc()
+        mountslots = await wc.grab_json_response(
             '/api/settings/media/remote/configurations')
-        images = wc.grab_json_response('/api/settings/media/remote/images')
+        images = await wc.grab_json_response('/api/settings/media/remote/images')
         currtypeenabled = False
         for slot in mountslots:
             if slot['image_name'] == filename:
@@ -870,7 +869,7 @@ class TsmHandler(generic.OEMHandler):
                 break
         else:
             self._allocate_slot(mountslots, filetype, wc, server, path)
-        images = wc.grab_json_response('/api/settings/media/remote/images')
-        self._exec_mount(filename, images, wc)
+        images = await wc.grab_json_response('/api/settings/media/remote/images')
+        await self._exec_mount(filename, images, wc)
         if not self.isipmi:
             raise exc.BypassGenericBehavior()

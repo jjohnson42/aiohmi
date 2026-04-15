@@ -1401,19 +1401,19 @@ class OEMHandler(generic.OEMHandler):
                         phase = 'validating'
                         statetype = 'JobState'
                         complete = False
-                        time.sleep(3)
+                        await asyncio.sleep(3)
                 else:
-                    time.sleep(3)
+                    await asyncio.sleep(3)
             if not retry:
                 raise Exception('Falied to monitor update progress due to excessive timeouts')
             if bank == 'backup':
                 return 'complete'
             return 'pending'
         finally:
-            self._do_web_request(
+            await self._do_web_request(
                 '/redfish/v1/UpdateService',
                 {'HttpPushUriTargetsBusy': False}, method='PATCH')
-            self._do_web_request(
+            await self._do_web_request(
                 '/redfish/v1/UpdateService',
                 {'HttpPushUriTargets': []}, method='PATCH')
 

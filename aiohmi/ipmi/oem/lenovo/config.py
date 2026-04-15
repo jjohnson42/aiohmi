@@ -18,6 +18,7 @@ This contains functions to manage the firmware configuration of Lenovo servers
 """
 
 import ast
+import asyncio
 import base64
 import random
 import struct
@@ -301,10 +302,10 @@ class LenovoFirmwareConfig(object):
                 if len(data) != 0:
                     break
                 if self.connection:
-                    self.connection.ipmi_session.pause(2)
+                    await self.connection.ipmi_session.pause(2)
                 else:
-                    time.sleep(2)
-                rsp = self.xc.grab_redfish_response_with_status(
+                    await asyncio.sleep(2)
+                rsp = await self.xc.grab_redfish_response_with_status(
                     '/redfish/v1/Systems/1/Actions/Oem/LenovoComputerSystem.DSReadFile',
                     {'Action': 'DSReadFile', 'FileName': cfgfilename})
         else:
