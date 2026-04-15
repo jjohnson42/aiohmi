@@ -698,7 +698,7 @@ class TsmHandler(generic.OEMHandler):
         if not self.isipmi:
             raise exc.BypassGenericBehavior()
 
-    def _allocate_slot(self, slots, filetype, wc, server, path):
+    async def _allocate_slot(self, slots, filetype, wc, server, path):
         currhdds = []
         currisos = []
         for slot in slots:
@@ -744,7 +744,7 @@ class TsmHandler(generic.OEMHandler):
                 raise exc.UnsupportedFunctionality(
                     'Cannot mount IMG images from muliple directories at a '
                     'time')
-        self._detach_all_media(wc, slots)
+        await self._detach_all_media(wc, slots)
         if filetype == 1 or (samesettings and currhdds):
             gensettings['cd_remote_server_address'] = server
             gensettings['cd_remote_source_path'] = path
@@ -868,7 +868,7 @@ class TsmHandler(generic.OEMHandler):
             if slot['redirection_status'] == 0:
                 break
         else:
-            self._allocate_slot(mountslots, filetype, wc, server, path)
+            await self._allocate_slot(mountslots, filetype, wc, server, path)
         images = await wc.grab_json_response('/api/settings/media/remote/images')
         await self._exec_mount(filename, images, wc)
         if not self.isipmi:
