@@ -129,12 +129,8 @@ class Uploader(Downloader):
                 curroff = self.data.tell()
             except Exception:
                 canseek = False
-                databytes = b''
-                datachunk = self.data.read(8192)
-                while datachunk:
-                    databytes += datachunk
-                    await asyncio.sleep(0)
-                    datachunk = self.data.read(8192)
+                loop = asyncio.get_running_loop()
+                databytes = await loop.run_in_executor(None, self.data.read)
                 self.ulsize = len(databytes)
                 self._upbuffer = io.BytesIO(databytes)
             if canseek:
@@ -207,6 +203,7 @@ async def make_uploader(webconn, url, filename, data=None, formname=None,
     
 
 async def get_upload_form(filename, data, formname, otherfields, boundary=None):
+    loop = asyncio.get_running_loop()
     if not boundary:
         boundary = base64.urlsafe_b64encode(os.urandom(54))[:66] 
     ffilename = filename.split('/')[-1]
@@ -216,15 +213,12 @@ async def get_upload_form(filename, data, formname, otherfields, boundary=None):
         return uploadforms[filename]
     except KeyError:
         try:
-            rawdata = b''
-            datachunk = data.read(8192)
-            while datachunk:
-                rawdata += datachunk
-                await asyncio.sleep(0)
-                datachunk = data.read(8192)
-            data = rawdata
+            data = await loop.run_in_executor(None, data.read)
         except AttributeError:
             pass
+        return await loop.run_in_executor(None, assign_upload_form, filename, ffilename, data, formname, otherfields, boundary)
+
+def assign_upload_form(filename, ffilename, data, formname, otherfields, boundary=None):
         form = b''
         for ofield in otherfields:
             tfield = otherfields[ofield]
