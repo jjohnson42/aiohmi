@@ -179,7 +179,7 @@ class OEMHandler(generic.OEMHandler):
                 {'HttpPushUriTargetsBusy': True}, method='PATCH')
         return usd,upurl,False
 
-    async def continue_update(self, uploadthread, progress):
+    async def continue_update(self, rsp, progress):
         # SMMv3 does not provide a response, must hardcode the continuation
         # /redfish/v1/UpdateService/FirmwareInventory/fwuimage
         rsp = self._do_web_request('/redfish/v1/UpdateService/FirmwareInventory/fwuimage')

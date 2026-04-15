@@ -775,10 +775,9 @@ class OEMHandler(generic.OEMHandler):
         fname = os.path.basename(durl)
         if autosuffix and not savefile.endswith('.tar.zst'):
             savefile += '-{0}'.format(fname)
-        fd = webclient.FileDownloader(self.webclient, durl, savefile)
-        fd.start()
-        while fd.isAlive():
-            fd.join(1)
+        fd = webclient.make_downloader(self.webclient, durl, savefile)
+        while not fd.completed():
+            await fd.join(1)
             if progress and self.webclient.get_download_progress():
                 progress({'phase': 'download',
                           'progress': 100 * self.webclient.get_download_progress()})
@@ -907,7 +906,7 @@ class OEMHandler(generic.OEMHandler):
         'password_lockout_period': 'AccountLockoutDuration',
         }
 
-    def update_firmware(self, filename, data=None, progress=None, bank=None, otherfields=()):
+    async def update_firmware(self, filename, data=None, progress=None, bank=None, otherfields=()):
         if not otherfields and bank == 'backup':
             uxzcount = 0
             otherfields = {'UpdateParameters': {"Targets": ["/redfish/v1/UpdateService/FirmwareInventory/BMC-Backup"]}}
@@ -931,7 +930,7 @@ class OEMHandler(generic.OEMHandler):
                 data = z.open(wrappedfilename)
             elif needseek:
                 data.seek(0)
-        super().update_firmware(filename, data=data, progress=progress, bank=bank, otherfields=otherfields)
+        await super().update_firmware(filename, data=data, progress=progress, bank=bank, otherfields=otherfields)
 
 
     async def get_bmc_configuration(self):

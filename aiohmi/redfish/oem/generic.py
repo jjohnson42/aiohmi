@@ -1405,21 +1405,20 @@ class OEMHandler(object):
         # disable cache to make sure we trigger the token renewal logic if needed
         usd, upurl, ismultipart = await self.retrieve_firmware_upload_url()
         try:
-            uploadthread = webclient.FileUploader(
+            uploadthread = webclient.make_uploader(
                 self.webclient, upurl, filename, data, formwrap=ismultipart,
                 excepterror=False, otherfields=otherfields)
-            uploadthread.start()
             wc = self.webclient
-            while uploadthread.isAlive():
-                uploadthread.join(3)
+            while not uploadthread.completed():
+                await uploadthread.join(3)
                 if progress:
                     progress(
                         {'phase': 'upload',
-                         'progress': 100 * wc.get_upload_progress()})
-            if (uploadthread.rspstatus >= 300
-                    or uploadthread.rspstatus < 200):
-                rsp = uploadthread.rsp
-                errmsg = f'Update attempt resulted in response status {uploadthread.rspstatus}'
+                         'progress': 100 * uploadthread.get_progress()})
+            rspstatus, rsp, headers = uploadthread.get_response()
+            if (rspstatus >= 300
+                    or rspstatus < 200):
+                errmsg = f'Update attempt resulted in response status {rspstatus}'
                 try:
                     rsp = json.loads(rsp)
                     errmsg = (
@@ -1429,15 +1428,14 @@ class OEMHandler(object):
                     errmsg = errmsg + ': ' + repr(rsp)
                     raise Exception(errmsg)
                 raise Exception(errmsg)
-            return self.continue_update(uploadthread, progress)
+            return await self.continue_update(rsp, progress)
         finally:
             if 'HttpPushUriTargetsBusy' in usd:
                 await self._do_web_request(
                     '/redfish/v1/UpdateService',
                     {'HttpPushUriTargetsBusy': False}, method='PATCH')
 
-    async def continue_update(self, uploadthread, progress):
-            rsp = json.loads(uploadthread.rsp)
+    async def continue_update(self, rsp, progress):
             monitorurl = rsp['@odata.id']
             return await self.monitor_update_progress(monitorurl, progress)
 
