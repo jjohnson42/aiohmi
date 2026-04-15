@@ -279,7 +279,7 @@ class TsmHandler(generic.OEMHandler):
         while not fd.completed():
             await fd.join(1)
             if progress:
-                currprog = fd.get_progress()
+                currprog = await fd.get_progress()
                 if currprog:
                     progress({'phase': 'download',
                               'progress': 100 * currprog})
@@ -473,7 +473,7 @@ class TsmHandler(generic.OEMHandler):
             if progress:
                 progress({
                     'phase': 'upload',
-                    'progress': 100 * fu.get_progress()})
+                    'progress': 100 * await fu.get_progress()})
         if progress:
             progress({
                 'phase': 'apply',
@@ -522,7 +522,7 @@ class TsmHandler(generic.OEMHandler):
             if progress:
                 progress({
                     'phase': 'upload',
-                    'progress': 100 * fu.get_progress()})
+                    'progress': 100 * await fu.get_progress()})
         if progress:
             progress({
                 'phase': 'apply',
@@ -604,7 +604,7 @@ class TsmHandler(generic.OEMHandler):
             if progress:
                 progress({
                     'phase': 'upload',
-                    'progress': 50 * fu.get_progress()})
+                    'progress': 50 * await fu.get_progress()})
         del payload['IS_MMC']
         payload['SECTION_FLASH'] = hpminfo[0].section_flash
         rsp, status = await wc.grab_json_response_with_status(
@@ -651,7 +651,7 @@ class TsmHandler(generic.OEMHandler):
             if progress:
                 progress({
                     'phase': 'upload',
-                    'progress': 50 * fu.get_progress() + 50})
+                    'progress': 50 * await fu.get_progress() + 50})
         rsp = await wc.grab_json_response('/api/maintenance/firmware/verification')
         upgradeparms = {
             'preserve_config': 1,

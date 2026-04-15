@@ -1256,7 +1256,7 @@ class OEMHandler(generic.OEMHandler):
             if newmode:
                 if progress:
                     progress({'phase': 'upload',
-                          'progress': 100 * uploadtask.get_progress()})
+                          'progress': 100 * await uploadtask.get_progress()})
             else:
                 rsp = await wc.grab_json_response(
                     '/upload/progress?X-Progress-ID={0}'.format(xid))
@@ -1351,7 +1351,7 @@ class OEMHandler(generic.OEMHandler):
                 if progress:
                     progress(
                         {'phase': 'upload',
-                         'progress': 100 * uploadtask.get_progress()})
+                         'progress': 100 * await uploadtask.get_progress()})
             rspstatus, rsp, headers = uploadtask.get_response()
             if not isinstance(rsp, dict):
                 rsp = json.loads(rsp)
@@ -1648,9 +1648,9 @@ class OEMHandler(generic.OEMHandler):
                 await fd.join(1)
             except asyncio.TimeoutError:
                 pass
-            if progress and fd.get_progress() > 0:
+            if progress and await fd.get_progress() > 0:
                 progress({'phase': 'download',
-                            'progress': 100 * fd.get_progress()})
+                            'progress': 100 * await fd.get_progress()})
             await self._refresh_token()
         if progress:
             progress({'phase': 'complete'})

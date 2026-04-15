@@ -70,12 +70,22 @@ class Downloader:
         self.exc = None
         return self
 
-    def get_progress(self):
-        if self._completed:
-            return 1.0
+    async def get_progress(self):
         if self.contentlen is None:
             return -0.5
-        return float(self._filehandle.tell()) / float(self.contentlen)
+        offset = None
+        retries = 100
+        while offset is None:
+            if self._completed:
+                return 1.0
+            try:
+                offset = self._filehandle.tell()
+            except ValueError:
+                retries -= 1
+                if retries <= 0:
+                    return -0.5
+                await asyncio.sleep(0.01)
+        return float(offset) / float(self.contentlen)
     
     def mark_completed(self, fut):
         self._completed = True
@@ -170,7 +180,7 @@ class Uploader(Downloader):
         except Exception:
             pass
 
-    def get_progress(self):
+    async def get_progress(self):
         if self._completed:
             return 1.0
         if self._xfertask is None:
@@ -179,7 +189,21 @@ class Uploader(Downloader):
         totalen = self.get_size()
         if totalen is None:
             return -0.5
-        return float(self._upbuffer.tell()) / float(totalen)
+        offset = None
+        tries = 100
+        while offset is None:
+            if self._completed:
+                return 1.0
+            if self._xfertask is None:
+                return 0.0
+            try:
+                offset = self._upbuffer.tell()
+            except ValueError:
+                await asyncio.sleep(0.01)
+                tries -= 1
+                if tries <= 0:
+                    return -0.5
+        return float(offset) / float(totalen)
 
 def make_downloader(webconn, url, dlfile):
     if isinstance(dlfile, str):

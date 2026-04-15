@@ -478,7 +478,7 @@ class IMMClient(object):
             await ut.join(3)
             if progress:
                 progress({'phase': 'upload',
-                          'progress': 100 * ut.get_progress()})
+                          'progress': 100 * await ut.get_progress()})
         status = await wc.grab_json_response(
             '/designs/imm/upload/rp_image_upload_status.esp',
             'filePath={0}'.format(alloc['filePath']))
@@ -1352,9 +1352,9 @@ class XCCClient(IMMClient):
                 await fd.join(1)
             except asyncio.TimeoutError:
                 pass
-            if progress and fd.get_progress():
+            if progress and await fd.get_progress():
                 progress({'phase': 'download',
-                          'progress': 100 * fd.get_progress()})
+                          'progress': 100 * await fd.get_progress()})
             await self._refresh_token()
         if fd.exc:
             raise fd.exc
@@ -2031,7 +2031,7 @@ class XCCClient(IMMClient):
             if newmode:
                 if progress:
                     progress({'phase': 'upload',
-                          'progress': 100 * uploadthread.get_progress()})
+                          'progress': 100 * await uploadthread.get_progress()})
             else:
                 rsp = await wc.grab_json_response(
                     '/upload/progress?X-Progress-ID={0}'.format(xid))
@@ -2132,17 +2132,16 @@ class XCCClient(IMMClient):
             owc = await self.wc()
             wc = owc.dupe()
             wc.set_basic_credentials(self.username, self.password)
-            uploadthread = webclient.FileUploader(wc, upurl, filename,
+            uploadthread = await webclient.make_uploader(wc, upurl, filename,
                                                   data, formwrap=False)
-            uploadthread.start()
-            while uploadthread.isAlive():
-                uploadthread.join(3)
+            while not uploadthread.completed():
+                await uploadthread.join(3)
                 if progress:
                     progress({'phase': 'upload',
-                              'progress': 100 * uploadthread.get_progress()})
-            if uploadthread.rspstatus >= 300 or uploadthread.rspstatus < 200:
-                rsp = uploadthread.rsp
-                errmsg = f'Upload failed with HTTP status {uploadthread.rspstatus}'
+                              'progress': 100 * await uploadthread.get_progress()})
+            rspstatus, rsp, headers = uploadthread.get_response()
+            if rspstatus >= 300 or rspstatus < 200:
+                errmsg = f'Upload failed with HTTP status {rspstatus}'
                 try:
                     rsp = json.loads(rsp)
                     errmsg = (
@@ -2151,7 +2150,6 @@ class XCCClient(IMMClient):
                     errmsg = errmsg + ': ' + str(rsp)
                     raise Exception(errmsg)                
                 raise Exception(errmsg)
-            rsp = json.loads(uploadthread.rsp)
             monitorurl = rsp['@odata.id']
             complete = False
             phase = "apply"

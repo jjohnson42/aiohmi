@@ -781,9 +781,9 @@ class OEMHandler(generic.OEMHandler):
                 await fd.join(1)
             except asyncio.TimeoutError:
                 pass
-            if progress and fd.get_progress():
+            if progress and await fd.get_progress():
                 progress({'phase': 'download',
-                          'progress': 100 * fd.get_progress()})
+                          'progress': 100 * await fd.get_progress()})
         if fd.exc:
             raise fd.exc
         if progress:
@@ -1135,7 +1135,7 @@ class OEMHandler(generic.OEMHandler):
                 pass
             if progress:
                 progress({'phase': 'upload',
-                          'progress': 100 * uploadthread.get_progress()})
+                          'progress': 100 * await uploadthread.get_progress()})
         rspstatus, rsp, headers = uploadthread.get_response()
         if rsp['return'] != 0:
             raise Exception('Issue uploading file')

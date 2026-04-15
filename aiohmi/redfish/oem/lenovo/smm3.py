@@ -227,9 +227,9 @@ class OEMHandler(generic.OEMHandler):
         fd = webclient.make_downloader(self.webclient, durl, savefile)
         while not fd.completed():
             await fd.join(1)
-            if progress and fd.get_progress():
+            if progress and await fd.get_progress():
                 progress({'phase': 'download',
-                          'progress': 100 * fd.get_progress()})
+                          'progress': 100 * await fd.get_progress()})
         if fd.exc:
             raise fd.exc
         if progress:

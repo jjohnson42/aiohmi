@@ -1417,7 +1417,7 @@ class OEMHandler(object):
                 if progress:
                     progress(
                         {'phase': 'upload',
-                         'progress': 100 * uploadthread.get_progress()})
+                         'progress': 100 * await uploadthread.get_progress()})
             rspstatus, rsp, headers = uploadthread.get_response()
             if (rspstatus >= 300
                     or rspstatus < 200):

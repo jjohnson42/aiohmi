@@ -810,9 +810,9 @@ class SMMClient(object):
         fd = webclient.make_downloader(wc, url, savefile)
         while not fd.completed():
             await fd.join(1)
-            if progress and fd.get_progress():
+            if progress and await fd.get_progress():
                 progress({'phase': 'download',
-                          'progress': 100 * fd.get_progress()})
+                          'progress': 100 * await fd.get_progress()})
         if progress:
             progress({'phase': 'complete'})
         return savefile
@@ -1023,7 +1023,7 @@ class SMMClient(object):
             await fu.join(3)
             if progress:
                 progress({'phase': 'upload',
-                          'progress': 100 * fu.get_progress()})
+                          'progress': 100 * await fu.get_progress()})
         progress({'phase': 'validating', 'progress': 0.0})
         url = '/data'
         wc.request('POST', url, 'get=fwVersion,spfwInfo')
