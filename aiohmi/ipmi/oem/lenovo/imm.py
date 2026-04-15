@@ -2133,8 +2133,7 @@ class XCCClient(IMMClient):
             wc = owc.dupe()
             wc.set_basic_credentials(self.username, self.password)
             uploadthread = webclient.FileUploader(wc, upurl, filename,
-                                                  data, formwrap=False,
-                                                  excepterror=False)
+                                                  data, formwrap=False)
             uploadthread.start()
             while uploadthread.isAlive():
                 uploadthread.join(3)

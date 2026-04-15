@@ -1341,8 +1341,7 @@ class OEMHandler(generic.OEMHandler):
                         ['/redfish/v1/UpdateService'
                          '/FirmwareInventory/BMC-Backup']}, method='PATCH')
             uploadtask = webclient.Uploader(
-                self.webclient, upurl, filename, data, formwrap=False,
-                excepterror=False)
+                self.webclient, upurl, filename, data, formwrap=False)
             wc = self.webclient
             while not uploadtask.completed():
                 try:

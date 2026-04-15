@@ -1407,7 +1407,7 @@ class OEMHandler(object):
         try:
             uploadthread = webclient.make_uploader(
                 self.webclient, upurl, filename, data, formwrap=ismultipart,
-                excepterror=False, otherfields=otherfields)
+                otherfields=otherfields)
             wc = self.webclient
             while not uploadthread.completed():
                 await uploadthread.join(3)
