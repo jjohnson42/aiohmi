@@ -781,9 +781,9 @@ class OEMHandler(generic.OEMHandler):
                 await fd.join(1)
             except asyncio.TimeoutError:
                 pass
-            if progress and self.webclient.get_download_progress():
+            if progress and fd.get_progress():
                 progress({'phase': 'download',
-                          'progress': 100 * self.webclient.get_download_progress()})
+                          'progress': 100 * fd.get_progress()})
         if fd.exc:
             raise fd.exc
         if progress:

@@ -182,7 +182,7 @@ class OEMHandler(generic.OEMHandler):
     async def continue_update(self, rsp, progress):
         # SMMv3 does not provide a response, must hardcode the continuation
         # /redfish/v1/UpdateService/FirmwareInventory/fwuimage
-        rsp = self._do_web_request('/redfish/v1/UpdateService/FirmwareInventory/fwuimage')
+        rsp = await self._do_web_request('/redfish/v1/UpdateService/FirmwareInventory/fwuimage')
         for ri in rsp.get('RelatedItem', []):
             targ = ri.get('@odata.id', None)
         parms = {'Oem': {'Lenovo': {'SecureRollBack': False}}}
@@ -190,7 +190,7 @@ class OEMHandler(generic.OEMHandler):
         targspec = {'target': targ}
         rsp = await self._do_web_request('/redfish/v1/UpdateService/Actions/UpdateService.StartUpdate', targspec)
         monitorurl = rsp.get('@odata.id', None)
-        return self.monitor_update_progress(monitorurl, progress)
+        return await self.monitor_update_progress(monitorurl, progress)
         
 
 
@@ -224,13 +224,12 @@ class OEMHandler(generic.OEMHandler):
         fname = os.path.basename(durl)
         if autosuffix and not savefile.endswith('.tar.xz'):
             savefile += time.strftime('-SMM3_%Y%m%d_%H%M%S.tar.xz')
-        fd = webclient.FileDownloader(self.webclient, durl, savefile)
-        fd.start()
-        while fd.isAlive():
-            fd.join(1)
-            if progress and self.webclient.get_download_progress():
+        fd = webclient.make_downloader(self.webclient, durl, savefile)
+        while not fd.completed():
+            await fd.join(1)
+            if progress and fd.get_progress():
                 progress({'phase': 'download',
-                          'progress': 100 * self.webclient.get_download_progress()})
+                          'progress': 100 * fd.get_progress()})
         if fd.exc:
             raise fd.exc
         if progress:
@@ -257,7 +256,7 @@ class OEMHandler(generic.OEMHandler):
             chassismembs = chassislist.get('Members', [])
             if len(chassismembs) == 1:
                 chassisurl = chassismembs[0]['@odata.id']
-                nodeinfo = self._do_web_request(chassisurl)
+                nodeinfo = await self._do_web_request(chassisurl)
         newnodeinfo = copy.deepcopy(nodeinfo)
         newnodeinfo['SKU'] = nodeinfo['Model']
         newnodeinfo['Model'] = 'N1380 Enclosure'

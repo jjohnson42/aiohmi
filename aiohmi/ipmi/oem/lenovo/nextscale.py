@@ -807,13 +807,12 @@ class SMMClient(object):
             url = '/preview/smm-ffdc.tgz?ST1={0}'.format(wc.st1)
         if autosuffix and not savefile.endswith('.tgz'):
             savefile += '-smm-ffdc.tgz'
-        fd = webclient.FileDownloader(wc, url, savefile)
-        fd.start()
-        while fd.isAlive():
-            fd.join(1)
-            if progress and wc.get_download_progress():
+        fd = webclient.make_downloader(wc, url, savefile)
+        while not fd.completed():
+            await fd.join(1)
+            if progress and fd.get_progress():
                 progress({'phase': 'download',
-                          'progress': 100 * wc.get_download_progress()})
+                          'progress': 100 * fd.get_progress()})
         if progress:
             progress({'phase': 'complete'})
         return savefile
@@ -993,7 +992,7 @@ class SMMClient(object):
         self.logout()
         return srvs
 
-    def update_firmware(self, filename, data=None, progress=None, bank=None):
+    async def update_firmware(self, filename, data=None, progress=None, bank=None):
         if progress is None:
             def progress(x):
                 return True
@@ -1017,15 +1016,14 @@ class SMMClient(object):
         rsp = wc.getresponse()
         rsp.read()
         url = '/fwupload/fwupload.esp?ST1={0}'.format(wc.st1)
-        fu = webclient.FileUploader(
+        fu = webclient.make_uploader(
             wc, url, filename, data, formname='fileUpload',
             otherfields={'preConfig': 'on'})
-        fu.start()
-        while fu.isAlive():
-            fu.join(3)
+        while not fu.completed():
+            await fu.join(3)
             if progress:
                 progress({'phase': 'upload',
-                          'progress': 100 * wc.get_upload_progress()})
+                          'progress': 100 * fu.get_progress()})
         progress({'phase': 'validating', 'progress': 0.0})
         url = '/data'
         wc.request('POST', url, 'get=fwVersion,spfwInfo')

@@ -392,11 +392,3 @@ class WebConnection:
             uploader.close()
             return uploader._statuscode
 
-    def get_download_progress(self):
-        if not self._currdl:
-            return None
-        totalen = self._currdl.headers.get('content-length', None)
-        if totalen is None:
-            return -0.5
-        return float(self._dlfile.tell()) / float(totalen)
-

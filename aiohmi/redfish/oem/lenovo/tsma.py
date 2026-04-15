@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import os
 import struct
 import time
@@ -256,13 +257,13 @@ class TsmHandler(generic.OEMHandler):
             self.init_redfish()
         return self.fishclient.set_system_configuration(changeset)
 
-    def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
+    async def get_diagnostic_data(self, savefile, progress=None, autosuffix=False):
         wc = self.wc
         wc.grab_json_response('/api/mini_ffdc', {'action': 'trigger'})
         status = 1
         percent = 0
         while status == 1:
-            time.sleep(5)
+            await asyncio.sleep(5)
             check = wc.grab_json_response('/api/mini_ffdc',
                                           {'action': 'check'})
             status = check.get('status', -1)
@@ -274,12 +275,11 @@ class TsmHandler(generic.OEMHandler):
                 "Unknown error generating service data: " + repr(check))
         if autosuffix and not savefile.endswith('.tar'):
             savefile += '.tar'
-        fd = webclient.FileDownloader(wc, '/api/mini_ffdc/package', savefile)
-        fd.start()
-        while fd.isAlive():
-            fd.join(1)
+        fd = webclient.make_downloader(wc, '/api/mini_ffdc/package', savefile)
+        while not fd.completed():
+            await fd.join(1)
             if progress:
-                currprog = self.wc.get_download_progress()
+                currprog = fd.get_progress()
                 if currprog:
                     progress({'phase': 'download',
                               'progress': 100 * currprog})
@@ -459,42 +459,41 @@ class TsmHandler(generic.OEMHandler):
         else:
             raise Exception('Unsupported filename {0}'.format(filename))
 
-    def update_lxpm_firmware(self, filename, progress, wc, data):
+    async def update_lxpm_firmware(self, filename, progress, wc, data):
         hdrs = wc.stdheaders.copy()
         hdrs['Content-Length'] = 0
         rsp = wc.grab_json_response_with_status(
             '/api/maintenance/LXPMUploadMode',
             method='PUT', headers=hdrs)
         # name fwimage filname filename application/x-raw-disk-image...
-        fu = webclient.FileUploader(
+        fu = webclient.make_uploader(
             wc, '/api/maintenance/LXPMUpload',
             filename, data, formname='fwimage')
-        fu.start()
-        while fu.isAlive():
-            fu.join(3)
+        while not fu.completed():
+            await fu.join(3)
             if progress:
                 progress({
                     'phase': 'upload',
-                    'progress': 100 * wc.get_upload_progress()})
+                    'progress': 100 * fu.get_progress()})
         if progress:
             progress({
                 'phase': 'apply',
                 'progress': 0.0}
             )
-        wc.grab_json_response('/api/maintenance/LXPMImageSplit', {'type': 3})
+        await wc.grab_json_response('/api/maintenance/LXPMImageSplit', {'type': 3})
         completion = False
         while not completion:
-            rsp = wc.grab_json_response('/api/maintenance/LXPMstatus')
+            rsp = await wc.grab_json_response('/api/maintenance/LXPMstatus')
             if rsp.get('state') == 0 and rsp.get('progress') == 4:
                 break
-        wc.grab_json_response_with_status(
+        await wc.grab_json_response_with_status(
             '/api/maintenance/Outofflash', method='PUT', headers=hdrs)
         return 'complete'
 
-    def update_sys_firmware(self, filename, progress, wc, type='uefi',
+    async def update_sys_firmware(self, filename, progress, wc, type='uefi',
                             data=None):
         if type == 'bp':
-            rsp = wc.grab_json_response_with_status('/api/chassis-status')
+            rsp = await wc.grab_json_response_with_status('/api/chassis-status')
             if rsp[0]['power_status'] == 1:
                 raise Exception("Cannot update BP firmware while system is on")
             updatemode = 'BPUploadMode'
@@ -516,22 +515,21 @@ class TsmHandler(generic.OEMHandler):
         rsp = wc.grab_json_response_with_status(
             '/api/maintenance/{0}'.format(updatemode),
             method='PUT', headers=hdrs)
-        fu = webclient.FileUploader(
+        fu = webclient.make_uploader(
             wc, '/api/maintenance/{0}'.format(fileupload), filename, data,
             formname='fwimage')
-        fu.start()
-        while fu.isAlive():
-            fu.join(3)
+        while not fu.completed():
+            await fu.join(3)
             if progress:
                 progress({
                     'phase': 'upload',
-                    'progress': 100 * wc.get_upload_progress()})
+                    'progress': 100 * fu.get_progress()})
         if progress:
             progress({
                 'phase': 'apply',
                 'progress': 0.0}
             )
-        rsp = wc.grab_json_response_with_status(
+        rsp = await wc.grab_json_response_with_status(
             '/api/maintenance/{0}'.format(startit))
         applypct = 0.0
         if rsp[1] >= 200 and rsp[1] < 300 and rsp[0]['wRet'] == 0:
@@ -555,17 +553,17 @@ class TsmHandler(generic.OEMHandler):
                     applypct += 1.4
                     progress({'phase': 'apply', 'progress': applypct})
             if type == 'bp':
-                rsp = wc.grab_json_response('/api/maintenance/BPfinish')
+                rsp = await wc.grab_json_response('/api/maintenance/BPfinish')
                 hdrs = wc.stdheaders.copy()
                 hdrs['Content-Length'] = 0
-                rsp = wc.grab_json_response_with_status(
+                rsp = await wc.grab_json_response_with_status(
                     '/api/maintenance/Outofflash', method='PUT', headers=hdrs)
                 return 'complete'
             return 'pending'
         raise Exception('Update Failure')
 
-    def update_hpm_firmware(self, filename, progress, wc, data):
-        rsp = wc.grab_json_response('/api/maintenance/hpm/freemem')
+    async def update_hpm_firmware(self, filename, progress, wc, data):
+        rsp = await wc.grab_json_response('/api/maintenance/hpm/freemem')
         if 'MemFree' not in rsp:
             raise Exception('System Not Ready for update')
         if filename not in hpm_by_filename:
@@ -576,7 +574,7 @@ class TsmHandler(generic.OEMHandler):
             hpm_by_filename[filename] = read_hpm(filename, data)
         else:
             hpminfo = hpm_by_filename[filename]
-        rsp, status = wc.grab_json_response_with_status(
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/maintenance/hpm/updatemode', method='PUT')
         # first segment, make sure it is mmc,
         # then do the preparecomponents with the following payload
@@ -590,31 +588,31 @@ class TsmHandler(generic.OEMHandler):
             'COMPONENT_DATA_LEN': len(hpminfo[0].data),
             'IS_MMC': 1,
         }
-        rsp, status = wc.grab_json_response_with_status(
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/maintenance/hpm/preparecomponents', payload, method='PUT')
         if status < 200 or status >= 300:
-            wc.grab_json_response_with_status(
+            await wc.grab_json_response_with_status(
                 '/api/maintenance/hpm/exitupdatemode', {'FWUPDATEID': uid},
                 method='PUT')
             raise Exception(rsp)
-        fu = webclient.FileUploader(
+        fu = webclient.make_uploader(
             wc, '/api/maintenance/hpm/mmcfw', 'blob', hpminfo[0].data, 'mmc')
         if progress:
             progress({'phase': 'upload', 'progress': 0.0})
         fu.start()
-        while fu.isAlive():
-            fu.join(3)
+        while not fu.completed():
+            await fu.join(3)
             if progress:
                 progress({
                     'phase': 'upload',
-                    'progress': 50 * wc.get_upload_progress()})
+                    'progress': 50 * fu.get_progress()})
         del payload['IS_MMC']
         payload['SECTION_FLASH'] = hpminfo[0].section_flash
-        rsp, status = wc.grab_json_response_with_status(
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/maintenance/hpm/flash', payload, method='PUT')
         percent = 0
         while percent < 100:
-            rsp, status = wc.grab_json_response_with_status(
+            rsp, status = await wc.grab_json_response_with_status(
                 '/api/maintenance/hpm/upgradestatus?COMPONENT_ID=1')
             if status < 200 or status >= 300:
                 raise Exception(rsp)
@@ -628,11 +626,11 @@ class TsmHandler(generic.OEMHandler):
         if progress:
             progress({'phase': 'validating', 'progress': 0.0})
         del payload['SECTION_FLASH']
-        rsp, status = wc.grab_json_response_with_status(
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/maintenance/hpm/verifyimage', payload, method='PUT')
         percent = 0
         while percent < 100:
-            rsp, status = wc.grab_json_response_with_status(
+            rsp, status = await wc.grab_json_response_with_status(
                 '/api/maintenance/hpm/verifyimagestatus?COMPONENT_ID=1')
             if status < 200 or status >= 300:
                 raise Exception(rsp)
@@ -642,32 +640,32 @@ class TsmHandler(generic.OEMHandler):
                     'phase': 'validating',
                     'progress': 0.5 * percent})
             if percent < 100:
-                time.sleep(3)
-        rsp, status = wc.grab_json_response_with_status(
+                await asyncio.sleep(3)
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/maintenance/hpm/exitupdatemode', {'FWUPDATEID': uid},
             method='PUT')
-        fu = webclient.FileUploader(wc, '/api/maintenance/firmware/firmware',
-                                    'blob', hpminfo[1].combo_image, 'fwimage')
+        fu = webclient.make_uploader(wc, '/api/maintenance/firmware/firmware',
+                                     'blob', hpminfo[1].combo_image, 'fwimage')
         fu.start()
-        while fu.isAlive():
-            fu.join(3)
+        while not fu.completed():
+            await fu.join(3)
             if progress:
                 progress({
                     'phase': 'upload',
-                    'progress': 50 * wc.get_upload_progress() + 50})
-        rsp = wc.grab_json_response('/api/maintenance/firmware/verification')
+                    'progress': 50 * fu.get_progress() + 50})
+        rsp = await wc.grab_json_response('/api/maintenance/firmware/verification')
         upgradeparms = {
             'preserve_config': 1,
             'flash_status': 1,
         }
-        rsp, status = wc.grab_json_response_with_status(
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/maintenance/firmware/upgrade',
             upgradeparms, method='PUT')
         if progress:
             progress({'phase': 'apply', 'progress': 50.0})
         applied = False
         while not applied:
-            rsp = wc.grab_json_response(
+            rsp = await wc.grab_json_response(
                 '/api/maintenance/firmware/flash-progress')
             percent = float(rsp['progress'].split('%')[0])
             percent = percent * 0.5 + 50
@@ -676,10 +674,10 @@ class TsmHandler(generic.OEMHandler):
             if rsp['progress'] == '100% done' and rsp['state'] == 0:
                 applied = True
                 break
-            time.sleep(3)
+            await asyncio.sleep(3)
         hdrs = wc.stdheaders.copy()
         hdrs['Content-Length'] = 0
-        rsp = wc.grab_json_response_with_status(
+        rsp, status = await wc.grab_json_response_with_status(
             '/api/maintenance/reset', method='POST', headers=hdrs)
         self._wc = None
         return 'complete'
