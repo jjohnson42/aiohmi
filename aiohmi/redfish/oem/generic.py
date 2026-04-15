@@ -1561,7 +1561,7 @@ class OEMHandler(object):
             await self._get_session_token(wc)
             if etag:
                 wc.stdheaders['If-Match'] = etag
-            res = wc.grab_json_response_with_status(url, payload,
+            res = await wc.grab_json_response_with_status(url, payload,
                                                     method=method)
         if res[1] < 200 or res[1] >= 300:
             try:
