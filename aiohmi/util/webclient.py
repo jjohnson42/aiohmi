@@ -288,9 +288,9 @@ class WebConnection:
     def set_header(self, key, value):
         self.stdheaders[key] = value
 
-    def dupe(self):
+    def dupe(self, timeout=None):
         newwc = WebConnection(self.host, self.port,
-                              verifycallback=self.verifycallback, timeout=self.timeout)
+                              verifycallback=self.verifycallback, timeout=timeout or self.timeout)
         newwc.stdheaders = self.stdheaders.copy()
         newwc.cookies = CookieJar(quote_cookie=False, unsafe=True)
         for cookie in self.cookies:
