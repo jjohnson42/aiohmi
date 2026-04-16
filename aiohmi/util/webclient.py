@@ -231,9 +231,12 @@ async def get_upload_form(filename, data, formname, otherfields, boundary=None):
     ffilename = filename.split('/')[-1]
     if not formname:
         formname = ffilename
+    while uploadforms.get(filename, None) == 'pending':
+        await asyncio.sleep(0.1)
     try:
         return uploadforms[filename]
     except KeyError:
+        uploadforms[filename] = 'pending'
         try:
             data = await asyncio.to_thread(data.read)
         except AttributeError:
