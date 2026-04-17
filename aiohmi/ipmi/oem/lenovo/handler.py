@@ -195,7 +195,7 @@ class OEMHandler(generic.OEMHandler):
             self.immhandler = imm.IMMClient(ipmicmd)
         elif await self.is_fpc():
             self.smmhandler = nextscale.SMMClient(ipmicmd, await self.is_fpc())
-        elif self.has_tsma():
+        elif self.has_tsma:
             conn = wc.WebConnection(
                 ipmicmd.bmc, 443,
                 verifycallback=self.ipmicmd.certverify)
@@ -377,7 +377,7 @@ class OEMHandler(generic.OEMHandler):
         if await self.is_fpc():
             await self.smmhandler.set_ntp_enabled(enabled)
             return True
-        if self.has_tsma():
+        if self.has_tsma:
             await self.tsmahandler.set_ntp_enabled(enabled)
         return None
 
@@ -395,7 +395,7 @@ class OEMHandler(generic.OEMHandler):
                     'SMM supports indexes 0 through 2')
             await self.smmhandler.set_ntp_server(server, index)
             return True
-        elif self.has_tsma():
+        elif self.has_tsma:
             if not (0 <= index <= 1):
                 raise pygexc.InvalidParameterValue("Index must be 0 or 1")
             return await self.tsmahandler.set_ntp_server(server, index)
@@ -1231,7 +1231,7 @@ class OEMHandler(generic.OEMHandler):
             return await self.immhandler.get_bmc_configuration()
         if await self.is_fpc():
             return await self.smmhandler.get_bmc_configuration(self._fpc_variant)
-        if self.has_tsma():
+        if self.has_tsma:
             return await self.tsmahandler.get_bmc_configuration()
         return await super(OEMHandler, self).get_bmc_configuration()
 
@@ -1241,7 +1241,7 @@ class OEMHandler(generic.OEMHandler):
         if await self.is_fpc():
             return await self.smmhandler.set_bmc_configuration(
                 changeset, self._fpc_variant)
-        if self.has_tsma():
+        if self.has_tsma:
             return await self.tsmahandler.set_bmc_configuration(
                 changeset)
         return await super(OEMHandler, self).set_bmc_configuration(changeset)
@@ -1249,14 +1249,14 @@ class OEMHandler(generic.OEMHandler):
     async def get_system_configuration(self, hideadvanced):
         if await self.has_imm() or await self.has_xcc():
             return await self.immhandler.get_system_configuration(hideadvanced)
-        if self.has_tsma():
+        if self.has_tsma:
             return await self.tsmahandler.get_uefi_configuration(hideadvanced)
         return await super(OEMHandler, self).get_system_configuration(hideadvanced)
 
     async def set_system_configuration(self, changeset):
         if await self.has_imm() or await self.has_xcc():
             return await self.immhandler.set_system_configuration(changeset)
-        if self.has_tsma():
+        if self.has_tsma:
             return await self.tsmahandler.set_uefi_configuration(changeset)
         return await super(OEMHandler, self).set_system_configuration(changeset)
 
@@ -1265,21 +1265,21 @@ class OEMHandler(generic.OEMHandler):
             return await self.immhandler.clear_bmc_configuration()
         elif await self.is_fpc():
             return await self.smmhandler.clear_bmc_configuration()
-        elif self.has_tsma():
+        elif self.has_tsma:
             return await self.tsmahandler.clear_bmc_configuration()
         return await super(OEMHandler, self).clear_system_configuration()
 
     async def clear_system_configuration(self):
         if await self.has_xcc():
             return await self.immhandler.clear_system_configuration()
-        if self.has_tsma():
+        if self.has_tsma:
             return await self.tsmahandler.clear_uefi_configuration()
         return await super(OEMHandler, self).clear_system_configuration()
 
     async def detach_remote_media(self):
         if await self.has_imm():
             await self.immhandler.detach_remote_media()
-        elif self.has_tsma():
+        elif self.has_tsma:
             await self.tsmahandler.detach_remote_media()
         elif await self.has_megarac():
             await self.ipmicmd.raw_command(
@@ -1296,7 +1296,7 @@ class OEMHandler(generic.OEMHandler):
             async for x in self.immhandler.list_media():
                 yield x
             return
-        if self.has_tsma():
+        if self.has_tsma:
             async for x in self.tsmahandler.list_media():
                 yield x
             return
