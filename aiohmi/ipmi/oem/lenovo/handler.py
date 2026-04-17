@@ -199,8 +199,8 @@ class OEMHandler(generic.OEMHandler):
             conn = wc.WebConnection(
                 ipmicmd.bmc, 443,
                 verifycallback=self.ipmicmd.certverify)
-            self.tsmahandler = tsma.TsmHandler(None, None, conn,
-                                               fish=redfishcmd)
+            self.tsmahandler = await tsma.TsmHandler.create(None, None, conn,
+                                                            fish=redfishcmd)
             self.tsmahandler.set_credentials(
                 ipmicmd.ipmi_session.userid.decode('utf-8'),
                 ipmicmd.ipmi_session.password.decode('utf-8'))

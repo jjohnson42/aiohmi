@@ -112,10 +112,8 @@ class TsmHandler(generic.OEMHandler):
         self.isipmi = bool(fish)
         self.fish = fish
         self.fishclient = None
-        super(TsmHandler, self).__init__(sysinfo, sysurl, webclient, cache,
-                                         gpool)
         self.tsm = webclient.thehost
-        self._certverify = webclient._certverify
+        self._certverify = webclient.verifycallback
         return self
 
     async def clear_bmc_configuration(self):
