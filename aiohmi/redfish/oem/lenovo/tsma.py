@@ -288,7 +288,7 @@ class TsmHandler(generic.OEMHandler):
         return savefile
 
     async def init_redfish(self):
-        self.fishclient = await self.fish.Command(
+        self.fishclient = await self.fish.Command.create(
             self.tsm, self.username, self.password,
             verifycallback=self._certverify)
 

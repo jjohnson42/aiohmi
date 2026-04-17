@@ -28,3 +28,4 @@ class OEMHandler(generic.OEMHandler):
                         sysurl = system['@odata.id']
                         break
             self._varsysurl = sysurl
+        return self
