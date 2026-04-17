@@ -1085,10 +1085,10 @@ class OEMHandler(object):
         sysinfo['UUID'] = sysinfo['UUID'].lower()
         yield ('System', sysinfo)
         self._hwnamemap = {}
-        adpurls = self._get_adp_urls()
-        diskurls = self._get_disk_urls()
+        adpurls = await self._get_adp_urls()
+        diskurls = await self._get_disk_urls()
         allurls = adpurls + diskurls
-        list(self._do_bulk_requests(allurls))
+        list([x async for x in self._do_bulk_requests(allurls)])
         async for cpu in self._get_cpu_inventory(withids=withids):
             yield cpu
         async for mem in self._get_mem_inventory(withids=withids):
