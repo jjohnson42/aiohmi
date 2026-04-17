@@ -283,6 +283,8 @@ class WebConnection:
         else:
             self.timeout = timeout 
         self.stdheaders = {}
+        if '[' not in host and '%' in host:
+            self.stdheaders['Host'] = '[' + host.split('%', 1)[0] + ']'
         self.cookies = CookieJar(quote_cookie=False, unsafe=True)
 
     def set_header(self, key, value):
