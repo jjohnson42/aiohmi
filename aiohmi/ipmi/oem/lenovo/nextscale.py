@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import fnmatch
 import struct
 import weakref
@@ -809,7 +810,10 @@ class SMMClient(object):
             savefile += '-smm-ffdc.tgz'
         fd = webclient.make_downloader(wc, url, savefile)
         while not fd.completed():
-            await fd.join(1)
+            try:
+                await fd.join(1)
+            except asyncio.TimeoutError:
+                pass
             if progress and await fd.get_progress():
                 progress({'phase': 'download',
                           'progress': 100 * await fd.get_progress()})
@@ -1020,7 +1024,10 @@ class SMMClient(object):
             wc, url, filename, data, formname='fileUpload',
             otherfields={'preConfig': 'on'})
         while not fu.completed():
-            await fu.join(3)
+            try:
+                await fu.join(3)
+            except asyncio.TimeoutError:
+                pass
             if progress:
                 progress({'phase': 'upload',
                           'progress': 100 * await fu.get_progress()})

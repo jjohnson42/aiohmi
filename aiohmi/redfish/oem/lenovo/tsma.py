@@ -275,7 +275,10 @@ class TsmHandler(generic.OEMHandler):
             savefile += '.tar'
         fd = webclient.make_downloader(wc, '/api/mini_ffdc/package', savefile)
         while not fd.completed():
-            await fd.join(1)
+            try:
+                await fd.join(1)
+            except asyncio.TimeoutError:
+                pass
             if progress:
                 currprog = await fd.get_progress()
                 if currprog:
@@ -467,7 +470,10 @@ class TsmHandler(generic.OEMHandler):
             wc, '/api/maintenance/LXPMUpload',
             filename, data, formname='fwimage')
         while not fu.completed():
-            await fu.join(3)
+            try:
+                await fu.join(3)
+            except asyncio.TimeoutError:
+                pass
             if progress:
                 progress({
                     'phase': 'upload',
@@ -516,7 +522,10 @@ class TsmHandler(generic.OEMHandler):
             wc, '/api/maintenance/{0}'.format(fileupload), filename, data,
             formname='fwimage')
         while not fu.completed():
-            await fu.join(3)
+            try:
+                await fu.join(3)
+            except asyncio.TimeoutError:
+                pass
             if progress:
                 progress({
                     'phase': 'upload',
@@ -598,7 +607,10 @@ class TsmHandler(generic.OEMHandler):
             progress({'phase': 'upload', 'progress': 0.0})
         fu.start()
         while not fu.completed():
-            await fu.join(3)
+            try:
+                await fu.join(3)
+            except asyncio.TimeoutError:
+                pass
             if progress:
                 progress({
                     'phase': 'upload',
@@ -645,7 +657,10 @@ class TsmHandler(generic.OEMHandler):
                                           'blob', hpminfo[1].combo_image, 'fwimage')
         fu.start()
         while not fu.completed():
-            await fu.join(3)
+            try:
+                await fu.join(3)
+            except asyncio.TimeoutError:
+                pass
             if progress:
                 progress({
                     'phase': 'upload',

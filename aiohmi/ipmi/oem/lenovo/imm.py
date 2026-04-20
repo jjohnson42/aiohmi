@@ -475,7 +475,10 @@ class IMMClient(object):
             wc, '/designs/imm/upload/rp_image_upload.esp', filename, data,
             otherfields=uploadfields)
         while not ut.completed():
-            await ut.join(3)
+            try:
+                await ut.join(3)
+            except asyncio.TimeoutError:
+                pass
             if progress:
                 progress({'phase': 'upload',
                           'progress': 100 * await ut.get_progress()})
@@ -2027,7 +2030,10 @@ class XCCClient(IMMClient):
             uploadthread = await webclient.make_uploader(
                 wc, '/rdocupload', filename, data)
         while not uploadthread.completed():
-            await uploadthread.join(3)
+            try:
+                await uploadthread.join(3)
+            except asyncio.TimeoutError:
+                pass
             if newmode:
                 if progress:
                     progress({'phase': 'upload',
@@ -2135,7 +2141,10 @@ class XCCClient(IMMClient):
             uploadthread = await webclient.make_uploader(wc, upurl, filename,
                                                   data, formwrap=False)
             while not uploadthread.completed():
-                await uploadthread.join(3)
+                try:
+                    await uploadthread.join(3)
+                except asyncio.TimeoutError:
+                    pass
                 if progress:
                     progress({'phase': 'upload',
                               'progress': 100 * await uploadthread.get_progress()})

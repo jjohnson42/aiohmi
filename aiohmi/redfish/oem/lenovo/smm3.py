@@ -226,7 +226,10 @@ class OEMHandler(generic.OEMHandler):
             savefile += time.strftime('-SMM3_%Y%m%d_%H%M%S.tar.xz')
         fd = webclient.make_downloader(self.webclient, durl, savefile)
         while not fd.completed():
-            await fd.join(1)
+            try:
+                await fd.join(1)
+            except asyncio.TimeoutError:
+                pass
             if progress and await fd.get_progress():
                 progress({'phase': 'download',
                           'progress': 100 * await fd.get_progress()})

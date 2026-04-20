@@ -1455,7 +1455,10 @@ class OEMHandler(generic.OEMHandler):
         uploadthread = await webclient.make_uploader(
             wc, '/upload?X-Progress-ID={0}'.format(xid), filename, data)
         while not uploadthread.completed():
-            await uploadthread.join(3)
+            try:
+                await uploadthread.join(3)
+            except asyncio.TimeoutError:
+                pass
             rsp = await wc.grab_json_response(
                 '/upload/progress?X-Progress-ID={0}'.format(xid))
             if rsp['state'] == 'uploading':
