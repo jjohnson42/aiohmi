@@ -287,6 +287,15 @@ class WebConnection:
             self.stdheaders['Host'] = '[' + host.split('%', 1)[0] + ']'
         self.cookies = CookieJar(quote_cookie=False, unsafe=True)
 
+    def set_timeout(self, timeout):
+        if isinstance(timeout, (int, float)):
+            self.timeout = aiohttp.ClientTimeout(total=timeout)
+        else:
+            self.timeout = timeout
+    
+    def get_timeout(self):
+        return self.timeout.total
+    
     def set_header(self, key, value):
         self.stdheaders[key] = value
 
