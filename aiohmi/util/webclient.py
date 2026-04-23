@@ -294,7 +294,7 @@ class WebConnection:
             self.timeout = timeout
     
     def get_timeout(self):
-        return self.timeout.total
+        return self.timeout
     
     def set_header(self, key, value):
         self.stdheaders[key] = value
