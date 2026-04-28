@@ -309,11 +309,12 @@ class OEMHandler(object):
         # nothing programattic to consume to know when to do or not do an expand..
         return False
 
-    def get_system_power_watts(self, fishclient):
+    async def get_system_power_watts(self, fishclient):
         totalwatts = 0
         gotpower = False
-        for chassis in fishclient.sysinfo.get('Links', {}).get('Chassis', []):
-            envinfo = fishclient._get_chassis_env(chassis)
+        sysinfo = await fishclient.sysinfo()
+        for chassis in sysinfo.get('Links', {}).get('Chassis', []):
+            envinfo = await fishclient._get_chassis_env(chassis)
             currwatts = envinfo.get('watts', None)
             if currwatts is not None:
                 gotpower = True
@@ -324,7 +325,8 @@ class OEMHandler(object):
 
     async def _get_cpu_temps(self, fishclient):
         cputemps = []
-        for chassis in fishclient.sysinfo.get('Links', {}).get('Chassis', []):
+        sysinfo = await fishclient.sysinfo()
+        for chassis in sysinfo.get('Links', {}).get('Chassis', []):
             thermals = await fishclient._get_thermals(chassis)
             for temp in thermals:
                 if temp.get('PhysicalContext', '') != 'CPU':
