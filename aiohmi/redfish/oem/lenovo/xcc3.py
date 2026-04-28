@@ -1164,11 +1164,11 @@ class OEMHandler(generic.OEMHandler):
             pendingscm = None
         if pendinghpm == '*':
             pendinghpm = None    
-        oldtimeout = fishclient.webclient.get_timeout()
-        fishclient.webclient.set_timeout(120)
+        oldtimeout = fishclient.wc.get_timeout()
+        fishclient.wc.set_timeout(120)
         fwinv = await fishclient.get_fwinventory()
         fwlist = await fishclient._do_web_request(fwinv + '?$expand=.')
-        fishclient.webclient.set_timeout(oldtimeout)
+        fishclient.wc.set_timeout(oldtimeout)
         fwlist = copy.deepcopy(fwlist.get('Members', []))
         self._fwnamemap = {}
         for redres in fwlist:
