@@ -895,15 +895,17 @@ class OEMHandler(object):
 
     async def _set_system_configuration(self, changeset, fishclient):
         currsettings, reginfo = await self._getsyscfg(fishclient)
-        rawsettings = await fishclient._do_web_request(fishclient._biosurl,
+        biosurl = await fishclient.get_biosurl()
+        rawsettings = await fishclient._do_web_request(biosurl,
                                                  cache=False)
         rawsettings = rawsettings.get('Attributes', {})
+        setbiosurl = await fishclient.get_setbiosurl()
         pendingsettings = await fishclient._do_web_request(
-            fishclient._setbiosurl)
+            setbiosurl)
         return await self._set_redfish_settings(
             changeset, fishclient, currsettings, rawsettings,
             pendingsettings, self.attrdeps, reginfo,
-            fishclient._setbiosurl)
+            setbiosurl)
 
     async def _set_redfish_settings(self, inchangeset, fishclient, currsettings,                      
                               rawsettings, pendingsettings, attrdeps, reginfo,
