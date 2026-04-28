@@ -807,8 +807,8 @@ class OEMHandler(generic.OEMHandler):
                 }
             return accessinfo
 
-    def get_system_power_watts(self, fishclient):
-        powerinfo = fishclient._do_web_request('/redfish/v1/Chassis/1/Sensors/power_Sys_Power')
+    async def get_system_power_watts(self, fishclient):
+        powerinfo = await fishclient._do_web_request('/redfish/v1/Chassis/1/Sensors/power_Sys_Power')
         return powerinfo['Reading']
     
     async def get_health(self, fishclient, verbose=True):
