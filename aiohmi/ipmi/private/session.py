@@ -1380,7 +1380,6 @@ class Session(object):
                     # if currently in command, no cause to keepalive
                     return
                 if self.autokeepalive:
-                    print("ok here")
                     await self.raw_command(netfn=6, command=1,
                                            callback=self._keepalive_wrapper(None))
                 else:
